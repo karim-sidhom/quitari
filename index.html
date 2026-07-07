@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0d1a6e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>قِطَاري - كاشف خطر السكة الحديدية</title>
+<link rel="manifest" href='data:application/manifest+json,{"name":"قطاري","short_name":"قطاري","start_url":".","display":"standalone","background_color":"%23020b2e","theme_color":"%230d1a6e","icons":[]}'>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&family=Amiri:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root{
+  --navy-deep:#020b2e; --navy:#0d1a6e;
+  --gold:#ffd700; --gold2:#ffcc00; --gold3:#ffe566;
+  --glass:rgba(255,255,255,.06); --glass-b:rgba(255,215,0,.25);
+  --danger:#ff2d2d;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{
+  font-family:'Tajawal',sans-serif;
+  background:radial-gradient(circle at 50% 0%,var(--navy) 0%,var(--navy-deep) 70%);
+  color:#fff;min-height:100vh;overflow-x:hidden;
+  padding-bottom:40px;
+}
+.wrap{max-width:500px;margin:0 auto;padding:14px;}
+.shimmer{height:3px;width:100%;background:linear-gradient(90deg,transparent,var(--gold),var(--gold3),var(--gold),transparent);
+  background-size:200% 100%;animation:shimmer 3s linear infinite;}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.header{text-align:center;padding:16px 8px;position:relative;}
+.bismillah{font-family:'Amiri',serif;font-size:15px;color:var(--gold3);opacity:.85;}
+.title{font-size:26px;font-weight:900;margin-top:6px;
+  background:linear-gradient(90deg,var(--gold),var(--gold3),var(--gold2));
+  -webkit-background-clip:text;background-clip:text;color:transparent;}
+.subtitle{font-size:12px;color:#c9d2ff;margin-top:4px;opacity:.8;}
+.verse{font-family:'Amiri',serif;font-size:13px;text-align:center;color:var(--gold3);
+  padding:8px 20px;opacity:.75;line-height:1.9;}
+.ornament{position:absolute;width:34px;height:34px;opacity:.5;animation:spin 20s linear infinite;}
+.ornament.tl{top:6px;right:6px}.ornament.tr{top:6px;left:6px;animation-direction:reverse}
+@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+
+.card{
+  background:var(--glass);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  border:1px solid var(--glass-b);border-radius:18px;padding:16px;margin-bottom:14px;
+  animation:fadeUp .6s cubic-bezier(.22,1,.36,1) both;
+}
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+.card h3{font-size:15px;color:var(--gold3);margin-bottom:10px;display:flex;align-items:center;gap:6px;}
+.row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;
+  border-bottom:1px solid rgba(255,255,255,.06);font-size:14px;}
+.row:last-child{border-bottom:none;}
+.row b{color:var(--gold);}
+.btn{
+  background:linear-gradient(135deg,var(--gold),var(--gold2));color:var(--navy-deep);
+  border:none;border-radius:12px;padding:11px 16px;font-weight:700;font-size:14px;
+  font-family:'Tajawal',sans-serif;cursor:pointer;width:100%;margin-top:6px;
+  transition:transform .15s;
+}
+.btn:active{transform:scale(.97);}
+.btn.secondary{background:transparent;border:1px solid var(--glass-b);color:var(--gold3);}
+.btn.danger{background:linear-gradient(135deg,#ff5555,#c62828);color:#fff;}
+
+.risk-gauge{width:100%;height:22px;border-radius:11px;background:rgba(255,255,255,.08);
+  overflow:hidden;position:relative;margin:10px 0;}
+.risk-fill{height:100%;border-radius:11px;transition:width .4s,background .4s;width:0%;
+  background:linear-gradient(90deg,#2ecc71,#f1c40f);}
+.risk-label{text-align:center;font-size:22px;font-weight:900;margin-top:4px;}
+
+#map{width:100%;height:230px;border-radius:14px;margin-top:8px;border:1px solid var(--glass-b);}
+
+.status-dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-left:6px;}
+.status-dot.on{background:#2ecc71;box-shadow:0 0 8px #2ecc71;}
+.status-dot.off{background:#888;}
+
+.line-item{background:rgba(255,255,255,.04);border-radius:10px;padding:10px;margin-bottom:8px;
+  border:1px solid rgba(255,215,0,.15);}
+.line-item input{
+  width:100%;background:rgba(0,0,0,.25);border:1px solid var(--glass-b);color:#fff;
+  border-radius:8px;padding:7px 9px;font-size:13px;margin-top:4px;font-family:'Tajawal',sans-serif;
+}
+.line-item label{font-size:11px;color:#9fb0ff;}
+.small-note{font-size:11px;color:#a9b3e0;line-height:1.7;padding:6px 2px;}
+
+#alertOverlay{
+  position:fixed;inset:0;background:rgba(180,0,0,.92);z-index:9999;
+  display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+  animation:pulse 0.6s infinite;padding:20px;
+}
+@keyframes pulse{0%,100%{background:rgba(180,0,0,.92)}50%{background:rgba(255,0,0,.97)}}
+#alertOverlay h1{font-size:34px;margin-bottom:14px;}
+#alertOverlay p{font-size:16px;margin-bottom:22px;line-height:1.8;}
+#alertOverlay .btn{max-width:280px;}
+
+.badge{display:inline-block;background:var(--gold);color:var(--navy-deep);font-size:11px;
+  font-weight:700;padding:2px 9px;border-radius:20px;margin-right:6px;}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="shimmer"></div>
+  <div class="header">
+    <svg class="ornament tl" viewBox="0 0 24 24" fill="none" stroke="#ffd700" stroke-width="1"><path d="M12 2l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/></svg>
+    <svg class="ornament tr" viewBox="0 0 24 24" fill="none" stroke="#ffd700" stroke-width="1"><path d="M12 2l2 5 5 2-5 2-2 5-2-5-5-2 5-2z"/></svg>
+    <div class="bismillah">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</div>
+    <div class="title">قِطَاري</div>
+    <div class="subtitle">كاشف خطر تقاطع السكة الحديدية · تونس</div>
+  </div>
+  <div class="verse">وَلَا تُلْقُوا بِأَيْدِيكُمْ إِلَى التَّهْلُكَةِ ﴿البقرة 195﴾</div>
+  <div class="shimmer"></div>
+
+  <div class="card" id="statusCard">
+    <h3>📡 الحالة</h3>
+    <div class="row"><span>GPS <span class="status-dot off" id="gpsDot"></span></span><b id="gpsAcc">--</b></div>
+    <div class="row"><span>أقرب سكة حديدية</span><b id="nearLine">--</b></div>
+    <div class="row"><span>المسافة إلى السكة</span><b id="distLine">--</b></div>
+    <div class="row"><span>السرعة الحالية</span><b id="speedNow">--</b></div>
+    <button class="btn" id="startBtn">▶️ تشغيل المراقبة</button>
+    <button class="btn secondary" id="stopBtn" style="display:none">⏸️ إيقاف المراقبة</button>
+  </div>
+
+  <div class="card" id="riskCard">
+    <h3>⚠️ نسبة الخطر</h3>
+    <div class="risk-gauge"><div class="risk-fill" id="riskFill"></div></div>
+    <div class="risk-label" id="riskLabel">0%</div>
+    <div class="small-note">التنبيه القوي ينطلق تلقائياً عند تجاوز <b style="color:var(--gold)">80%</b> — يُحسب من المسافة بينك وبين <b>الموقع الحقيقي المقدّر للقطار الآن</b> (استناداً لتوقيت SNCFT الفعلي بين محطتين)</div>
+  </div>
+
+  <div class="card">
+    <h3>🗺️ الخريطة</h3>
+    <div id="map"></div>
+    <button class="btn secondary" id="fetchLinesBtn">🔄 تحميل خطوط السكة القريبة (Overpass)</button>
+  </div>
+
+  <div class="card" id="linesCard">
+    <h3>🚆 خطوط وجداول القطارات <span class="badge" id="lineCount">0</span></h3>
+    <div id="linesList"></div>
+    <button class="btn secondary" id="addLineBtn">➕ إضافة خط يدوياً</button>
+  </div>
+
+  <div class="card">
+    <h3>ℹ️ ملاحظة هامة</h3>
+    <div class="small-note">
+      التنبيه مضمون فقط والتطبيق <b style="color:var(--gold)">مفتوح وشاشة الهاتف مضاءة</b>.
+      عند تصغير التطبيق، بعض هواتف Android تسمح بإشعار + اهتزاز لفترة محدودة.
+      عند <b style="color:#ff8888">قفل الشاشة تماماً</b>، أنظمة iOS تمنع أي نشاط GPS/صوت في الخلفية،
+      وAndroid يقيّده بشدة أيضاً. هذا قيد من نظام التشغيل نفسه وليس عيباً في التطبيق.
+      للحصول على حماية مضمونة 100% في الخلفية، يلزم تطبيق أصلي (native) وليس تطبيق ويب.
+    </div>
+  </div>
+</div>
+
+<div id="alertOverlay">
+  <h1>🚨 خطر! 🚨</h1>
+  <p id="alertText">أنت على مقربة من سكة حديدية وقطار متوقع بنفس التوقيت تقريباً!<br>ابتعد فوراً عن المسار.</p>
+  <button class="btn" onclick="dismissAlert()">فهمت، توقف عن الصوت</button>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+// ---------- state ----------
+let watchId=null, map=null, userMarker=null, trainMarkers={}, lineLayers={};
+let osmTracks = JSON.parse(localStorage.getItem('qitari_osm_tracks')||'[]'); // [{id,name,coords:[[lat,lon],...]}]
+let wakeLock=null, audioCtx=null, sirenOsc=null, alertActive=false, lastRisk=0, lastPos=null;
+let recalcTimer=null;
+
+// ---------- stations database (coordonnées approximatives, corrige si besoin) ----------
+const STATIONS = {
+  "Tozeur":[33.9197,8.1335], "Elouediane":[34.15,8.28], "Metlaoui":[34.3333,8.4000],
+  "Gafsa":[34.4250,8.7842], "Sened":[34.4833,9.1667], "Maknassy":[34.5833,9.6000],
+  "Gabes":[33.8815,10.0982], "Ghraiba":[33.99,10.15], "Maharès":[34.5333,10.5000],
+  "Sfax Arrivée":[34.7398,10.7600], "Sfax Départ":[34.7398,10.7600],
+  "Sakiet Ezzit":[34.79,10.72], "La Hencha":[34.86,10.53],
+  "El Jem":[35.2967,10.7150], "Kerker":[35.42,10.72], "Mahdia":[35.5047,11.0622],
+  "Monastir":[35.7780,10.8262], "Messadine":[35.73,10.63],
+  "Sousse Arrivée":[35.8256,10.6084], "Sousse Départ":[35.8256,10.6084],
+  "Kalaâ Seghira":[35.83,10.57], "Kalaâ Kebira":[35.87,10.53], "Enfidha":[36.13,10.38],
+  "Bouficha":[36.28,10.38], "Bir Bou Regba":[36.4167,10.5333], "Bouargoub":[36.50,10.52],
+  "Grombalia":[36.60,10.50], "Borj Cedria":[36.7167,10.3667], "Hammam Lif":[36.7333,10.3333],
+  "Tunis Ville":[36.7930,10.1846], "Tunis":[36.7930,10.1846],
+  "Nabeul":[36.4561,10.7376], "Hammamet":[36.4000,10.6167]
+};
+
+// ---------- horaires SNCFT été 2026 (transcription manuelle depuis l'affiche — VÉRIFIE et corrige via l'éditeur ci-dessous, surtout les gares intermédiaires proches de Sousse/Enfidha où plusieurs trains se chevauchent) ----------
+const DEFAULT_TRAINS = [
+ {id:'t5-90', name:'5/90 — Gabès → Tunis',
+  stopsText:"Gabes@00:05, Ghraiba@01:22, Maharès@01:42, Sfax Arrivée@02:16, Sfax Départ@02:25, El Jem@03:30, Sousse Arrivée@04:37, Sousse Départ@04:50, Kalaâ Seghira@05:03, Kalaâ Kebira@05:12, Enfidha@05:40, Bouficha@05:55, Bir Bou Regba@06:09, Bouargoub@06:21, Grombalia@06:30, Tunis Ville@07:22"},
+ {id:'t12-5-52', name:'12-5/52(B) — Sousse → Tunis (sauf dim. et fêtes)',
+  stopsText:"Sousse Départ@05:10, Kalaâ Seghira@05:23, Kalaâ Kebira@05:32, Enfidha@06:01, Bouficha@06:18, Bir Bou Regba@06:34, Bouargoub@06:46, Grombalia@06:54, Borj Cedria@07:08, Tunis Ville@07:44"},
+ {id:'t22-5-54', name:'22-5/54 — Mahdia → Tunis',
+  stopsText:"Mahdia@04:45, Monastir@06:00, Messadine@06:28, Kalaâ Seghira@06:36, Kalaâ Kebira@06:45, Enfidha@07:12, Bir Bou Regba@07:39, Bouargoub@07:50, Grombalia@07:59, Borj Cedria@08:13, Tunis Ville@08:51"},
+ {id:'t5-58', name:'5/58 — Sfax → Tunis',
+  stopsText:"Sfax Départ@05:15, Sakiet Ezzit@05:41, La Hencha@06:06, El Jem@06:22, Kerker@06:44, Messadine@07:12, Sousse Départ@07:45, Kalaâ Seghira@07:58, Kalaâ Kebira@08:06, Enfidha@08:33, Bir Bou Regba@09:01, Grombalia@09:19, Borj Cedria@09:33, Hammam Lif@09:43, Tunis Ville@10:09"},
+ {id:'t13-5-72', name:'13-5/72 — Tozeur → Tunis',
+  stopsText:"Tozeur@06:00, Elouediane@06:12, Metlaoui@07:20, Gafsa@08:00, Sened@08:47, Maknassy@09:20, Ghraiba@10:12, Maharès@10:32, Sfax Arrivée@11:05, Sfax Départ@11:30, Sakiet Ezzit@11:55, El Jem@12:35, Kerker@12:57, Messadine@13:25, Sousse Arrivée@13:45, Sousse Départ@14:00, Bir Bou Regba@15:18, Grombalia@15:38, Tunis Ville@16:31"},
+ {id:'t5-76', name:'5/76 — Gabès → Tunis',
+  stopsText:"Gabes@10:50, Ghraiba@12:08, Maharès@12:28, Sfax Arrivée@13:02, Sfax Départ@13:25, La Hencha@14:16, El Jem@14:32, Kerker@14:54, Messadine@15:22, Sousse Arrivée@15:40, Sousse Départ@15:55, Bir Bou Regba@17:08, Grombalia@17:28, Hammam Lif@17:51, Tunis Ville@18:20"},
+ {id:'t805', name:'805 — Banlieue Tunis → Nabeul', stopsText:"Tunis@06:15, Bir Bou Regba@06:53, Hammamet@07:05, Nabeul@07:14"},
+ {id:'t5-10-75', name:'5-10/75 — Banlieue Tunis → Nabeul', stopsText:"Tunis@13:50, Bir Bou Regba@14:51, Hammamet@15:21, Nabeul@15:34"},
+ {id:'t817', name:'817 — Banlieue Tunis → Nabeul', stopsText:"Tunis@18:20, Bir Bou Regba@18:44, Hammamet@19:07, Nabeul@19:19"},
+ {id:'t802', name:'802 — Banlieue Nabeul → Tunis', stopsText:"Nabeul@05:05, Hammamet@05:33, Bir Bou Regba@05:47, Tunis@06:08"},
+ {id:'t10-5-56', name:'10-5/56 — Banlieue Nabeul → Tunis', stopsText:"Nabeul@07:35, Hammamet@07:56, Bir Bou Regba@08:15, Tunis@09:19"},
+ {id:'t816', name:'816 — Banlieue Nabeul → Tunis', stopsText:"Nabeul@16:20, Hammamet@16:40, Bir Bou Regba@16:58, Tunis@17:23"}
+];
+
+let trains = JSON.parse(localStorage.getItem('qitari_trains')||'null') || DEFAULT_TRAINS.map(t=>({...t}));
+
+function saveTrains(){ localStorage.setItem('qitari_trains', JSON.stringify(trains)); }
+function saveTracks(){ localStorage.setItem('qitari_osm_tracks', JSON.stringify(osmTracks)); }
+
+function parseStops(stopsText){
+  return stopsText.split(',').map(s=>s.trim()).filter(Boolean).map(pair=>{
+    const idx = pair.lastIndexOf('@');
+    const name = pair.slice(0,idx).trim();
+    const time = pair.slice(idx+1).trim();
+    const coord = STATIONS[name];
+    return coord ? {name,time,lat:coord[0],lon:coord[1]} : {name,time,lat:null,lon:null,unknown:true};
+  });
+}
+
+// ---------- map init ----------
+function initMap(){
+  map = L.map('map',{zoomControl:false}).setView([36.8,10.18],7);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18}).addTo(map);
+  redrawTracks();
+}
+function redrawTracks(){
+  Object.values(lineLayers).forEach(l=>map.removeLayer(l));
+  lineLayers={};
+  osmTracks.forEach(t=>{
+    const poly = L.polyline(t.coords,{color:'#ffd700',weight:3,opacity:.8}).addTo(map);
+    lineLayers[t.id]=poly;
+  });
+}
+
+// ---------- Overpass fetch ----------
+document.getElementById('fetchLinesBtn').onclick = fetchNearbyRailways;
+function fetchNearbyRailways(){
+  const btn=document.getElementById('fetchLinesBtn');
+  navigator.geolocation.getCurrentPosition(async pos=>{
+    btn.textContent='⏳ جاري التحميل...';
+    const {latitude:lat, longitude:lon}=pos.coords;
+    const radius=15000; // 15km
+    const q=`[out:json][timeout:25];way["railway"="rail"](around:${radius},${lat},${lon});out geom;`;
+    try{
+      const res = await fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:q});
+      const data = await res.json();
+      osmTracks = data.elements.filter(e=>e.geometry).map(e=>({
+        id:'osm'+e.id,
+        name:(e.tags && (e.tags.name||e.tags['name:ar'])) || 'خط سكة حديدية',
+        coords: e.geometry.map(g=>[g.lat,g.lon])
+      }));
+      saveTracks();
+      redrawTracks();
+      if(map) map.setView([lat,lon],12);
+      btn.textContent='✅ تم تحميل '+osmTracks.length+' مقطع سكة';
+    }catch(err){
+      btn.textContent='❌ فشل التحميل، حاول مجدداً';
+      console.error(err);
+    }
+    setTimeout(()=>btn.textContent='🔄 تحميل خطوط السكة القريبة (Overpass)',3000);
+  }, ()=>{ alert('يرجى تفعيل الموقع الجغرافي أولاً'); });
+}
+
+// ---------- trains UI ----------
+function renderLines(){
+  const list=document.getElementById('linesList');
+  document.getElementById('lineCount').textContent=trains.length;
+  list.innerHTML = trains.map((t,i)=>{
+    const stops = parseStops(t.stopsText);
+    const unknown = stops.filter(s=>s.unknown).map(s=>s.name);
+    return `
+    <div class="line-item">
+      <label>اسم القطار</label>
+      <input data-i="${i}" data-f="name" value="${t.name}">
+      <label>محطات ⟶ توقيت (شكل: المحطة@الساعة، مفصولة بفاصلة)</label>
+      <textarea data-i="${i}" data-f="stopsText" rows="3" style="width:100%;background:rgba(0,0,0,.25);border:1px solid var(--glass-b);color:#fff;border-radius:8px;padding:7px 9px;font-size:12px;margin-top:4px;font-family:'Tajawal',sans-serif;direction:ltr;text-align:left;">${t.stopsText}</textarea>
+      ${unknown.length? `<div class="small-note" style="color:#ff8888">⚠️ محطة غير معروفة الإحداثيات: ${unknown.join(', ')} — أضفها في STATIONS بالكود أو غيّر الاسم لمحطة معروفة.</div>`:''}
+      <button class="btn secondary" style="margin-top:8px;background:rgba(255,0,0,.15);border-color:rgba(255,0,0,.4)" data-del="${i}">🗑️ حذف هذا القطار</button>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('textarea,input').forEach(inp=>{
+    inp.addEventListener('change',e=>{
+      const i=+e.target.dataset.i, f=e.target.dataset.f;
+      trains[i][f] = e.target.value;
+      saveTrains(); renderLines();
+    });
+  });
+  list.querySelectorAll('[data-del]').forEach(b=>{
+    b.addEventListener('click',e=>{
+      trains.splice(+e.target.dataset.del,1); saveTrains(); renderLines();
+    });
+  });
+}
+document.getElementById('addLineBtn').onclick=()=>{
+  trains.push({id:'t'+Date.now(),name:'قطار جديد',stopsText:"Tunis Ville@06:00, Sousse Départ@08:00"});
+  saveTrains(); renderLines();
+};
+
+// ---------- geometry helpers ----------
+function haversine(a,b){
+  const R=6371000, toRad=d=>d*Math.PI/180;
+  const dLat=toRad(b[0]-a[0]), dLon=toRad(b[1]-a[1]);
+  const s = Math.sin(dLat/2)**2 + Math.cos(toRad(a[0]))*Math.cos(toRad(b[0]))*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.sqrt(s));
+}
+// nearest point on a polyline + cumulative distance from start (trackKm) + total length
+function nearestOnTrack(pt, coords){
+  let best={dist:Infinity, trackDist:0};
+  let cum=0;
+  for(let i=0;i<coords.length-1;i++){
+    const A=coords[i], B=coords[i+1];
+    const segLen=haversine(A,B);
+    // project pt onto segment A-B (approx, planar since distances small)
+    const t = projectT(pt,A,B);
+    const px = A[0]+(B[0]-A[0])*t, py = A[1]+(B[1]-A[1])*t;
+    const d = haversine(pt,[px,py]);
+    if(d<best.dist){ best={dist:d, trackDist: cum + segLen*t}; }
+    cum+=segLen;
+  }
+  best.totalLen=cum;
+  return best;
+}
+function projectT(p,a,b){
+  const ax=a[1],ay=a[0], bx=b[1],by=b[0], px=p[1],py=p[0];
+  const dx=bx-ax, dy=by-ay;
+  const len2=dx*dx+dy*dy;
+  if(len2===0) return 0;
+  let t=((px-ax)*dx+(py-ay)*dy)/len2;
+  return Math.max(0,Math.min(1,t));
+}
+
+// ---------- risk computation (position + horaire réel, gare par gare) ----------
+const RISK_THRESHOLD_M = 150; // distance à laquelle le risque atteint 0%; 0m = 100%
+const INACTIVE_MARGIN_MIN = 20; // tolérance avant/après le service (retard/avance possible)
+
+function todayAt(hhmm){
+  const [h,m]=hhmm.split(':').map(Number);
+  const now=new Date();
+  return new Date(now.getFullYear(),now.getMonth(),now.getDate(),h,m,0);
+}
+// Position interpolée du train à l'instant présent, ou null s'il n'est pas en service
+function trainPositionNow(train){
+  const stops = parseStops(train.stopsText).filter(s=>!s.unknown && s.time);
+  if(stops.length<2) return null;
+  const now = new Date();
+  const times = stops.map(s=>todayAt(s.time));
+  const first = times[0].getTime() - INACTIVE_MARGIN_MIN*60000;
+  const last = times[times.length-1].getTime() + INACTIVE_MARGIN_MIN*60000;
+  const t = now.getTime();
+  if(t<first || t>last) return null;
+  for(let i=0;i<stops.length-1;i++){
+    const t0=times[i].getTime(), t1=times[i+1].getTime();
+    if(t>=t0 && t<=t1){
+      const frac = t1===t0 ? 0 : (t-t0)/(t1-t0);
+      return {
+        lat: stops[i].lat + (stops[i+1].lat-stops[i].lat)*frac,
+        lon: stops[i].lon + (stops[i+1].lon-stops[i].lon)*frac,
+        fromStation: stops[i].name, toStation: stops[i+1].name
+      };
+    }
+  }
+  // avant premier arrêt ou après dernier arrêt, mais dans la marge de tolérance
+  if(t<times[0].getTime()) return {lat:stops[0].lat, lon:stops[0].lon, fromStation:stops[0].name, toStation:stops[0].name};
+  const lastS=stops[stops.length-1];
+  return {lat:lastS.lat, lon:lastS.lon, fromStation:lastS.name, toStation:lastS.name};
+}
+function computeRisk(userPos){
+  let best={risk:0,lineName:'--',dist:Infinity};
+  trains.forEach(train=>{
+    const pos = trainPositionNow(train);
+    if(!pos) return;
+    const dist = haversine(userPos,[pos.lat,pos.lon]);
+    const risk = Math.round(Math.max(0, 1 - dist/RISK_THRESHOLD_M)*100);
+    if(dist<best.dist){
+      best = {risk, dist, lineName: train.name+' ('+pos.fromStation+' → '+pos.toStation+')'};
+    }
+  });
+  // info visuelle: distance à la voie ferrée la plus proche (OSM), indépendant du risque train
+  let trackInfo=null;
+  osmTracks.forEach(track=>{
+    const near = nearestOnTrack(userPos, track.coords);
+    if(!trackInfo || near.dist<trackInfo.dist) trackInfo={dist:near.dist,name:track.name};
+  });
+  best.trackInfo = trackInfo;
+  return best;
+}
+
+// ---------- geolocation watch ----------
+document.getElementById('startBtn').onclick = startWatch;
+document.getElementById('stopBtn').onclick = stopWatch;
+function startWatch(){
+  if(!navigator.geolocation){ alert('الموقع الجغرافي غير مدعوم'); return; }
+  requestWakeLock();
+  requestNotifPermission();
+  watchId = navigator.geolocation.watchPosition(onPos, onGeoErr, {
+    enableHighAccuracy:true, maximumAge:2000, timeout:15000
+  });
+  document.getElementById('startBtn').style.display='none';
+  document.getElementById('stopBtn').style.display='block';
+  document.getElementById('gpsDot').className='status-dot on';
+}
+function stopWatch(){
+  if(watchId) navigator.geolocation.clearWatch(watchId);
+  watchId=null;
+  if(recalcTimer){ clearInterval(recalcTimer); recalcTimer=null; }
+  document.getElementById('startBtn').style.display='block';
+  document.getElementById('stopBtn').style.display='none';
+  document.getElementById('gpsDot').className='status-dot off';
+  releaseWakeLock();
+}
+function onPos(pos){
+  const {latitude,longitude,accuracy,speed}=pos.coords;
+  lastPos=[latitude,longitude];
+  document.getElementById('gpsAcc').textContent = Math.round(accuracy)+' م';
+  let spKmh = speed? (speed*3.6).toFixed(1) : '0';
+  document.getElementById('speedNow').textContent = spKmh+' كم/سا';
+
+  if(map){
+    if(!userMarker){
+      userMarker = L.circleMarker([latitude,longitude],{radius:7,color:'#00e0ff',fillColor:'#00e0ff',fillOpacity:.9}).addTo(map);
+      map.setView([latitude,longitude],13);
+    } else {
+      userMarker.setLatLng([latitude,longitude]);
+    }
+  }
+  recalcAndDisplay();
+  if(!recalcTimer) recalcTimer = setInterval(recalcAndDisplay, 5000); // le train bouge même si l'utilisateur est immobile
+}
+function recalcAndDisplay(){
+  if(!lastPos) return;
+  const result = computeRisk(lastPos);
+  document.getElementById('nearLine').textContent = result.lineName;
+  const trackTxt = result.trackInfo ? Math.round(result.trackInfo.dist)+' م (سكة)' : '--';
+  document.getElementById('distLine').textContent = isFinite(result.dist)? Math.round(result.dist)+' م (قطار) · '+trackTxt : trackTxt;
+  updateGauge(result.risk);
+  lastRisk = result.risk;
+  if(result.risk>=80 && !alertActive){ triggerAlert(result); }
+}
+function onGeoErr(err){
+  document.getElementById('gpsAcc').textContent='خطأ: '+err.message;
+}
+
+function updateGauge(risk){
+  const fill=document.getElementById('riskFill'), label=document.getElementById('riskLabel');
+  fill.style.width=risk+'%';
+  label.textContent=risk+'%';
+  if(risk<40){ fill.style.background='linear-gradient(90deg,#2ecc71,#a8e063)'; label.style.color='#2ecc71'; }
+  else if(risk<80){ fill.style.background='linear-gradient(90deg,#f1c40f,#ff9800)'; label.style.color='#f1c40f'; }
+  else { fill.style.background='linear-gradient(90deg,#ff5722,#ff1744)'; label.style.color='#ff1744'; }
+}
+
+// ---------- alert system ----------
+function triggerAlert(result){
+  alertActive=true;
+  document.getElementById('alertOverlay').style.display='flex';
+  document.getElementById('alertText').innerHTML =
+    'أنت قرب <b>'+result.lineName+'</b> (المسافة: '+Math.round(result.dist)+' م)<br>نسبة الخطر: '+result.risk+'%<br>ابتعد فوراً عن المسار!';
+  startSiren();
+  if(navigator.vibrate) navigator.vibrate([400,150,400,150,400,150,800]);
+  try{
+    if(Notification && Notification.permission==='granted'){
+      new Notification('🚨 خطر تصادم محتمل!',{
+        body:'أنت قرب سكة حديدية وتوقيت قطار متطابق تقريباً. ابتعد فوراً.',
+        requireInteraction:true, tag:'qitari-alert'
+      });
+    }
+  }catch(e){}
+}
+window.dismissAlert=function(){
+  alertActive=false;
+  document.getElementById('alertOverlay').style.display='none';
+  stopSiren();
+};
+function startSiren(){
+  if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+  if(sirenOsc) return;
+  sirenOsc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  sirenOsc.type='sawtooth';
+  gain.gain.value=0.25;
+  sirenOsc.connect(gain).connect(audioCtx.destination);
+  sirenOsc.start();
+  sirenOsc._sweep = setInterval(()=>{
+    const t=audioCtx.currentTime;
+    sirenOsc.frequency.setValueAtTime(880,t);
+    sirenOsc.frequency.linearRampToValueAtTime(440,t+0.4);
+    sirenOsc.frequency.linearRampToValueAtTime(880,t+0.8);
+  },800);
+}
+function stopSiren(){
+  if(sirenOsc){ clearInterval(sirenOsc._sweep); sirenOsc.stop(); sirenOsc.disconnect(); sirenOsc=null; }
+}
+
+// ---------- wake lock / notif permission ----------
+async function requestWakeLock(){
+  try{ if('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); }catch(e){}
+}
+function releaseWakeLock(){ if(wakeLock){ wakeLock.release(); wakeLock=null; } }
+function requestNotifPermission(){
+  if('Notification' in window && Notification.permission==='default'){
+    Notification.requestPermission();
+  }
+}
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible' && watchId) requestWakeLock();
+});
+
+// ---------- service worker (installability + best-effort) ----------
+if('serviceWorker' in navigator){
+  const swCode = `
+    self.addEventListener('install',e=>self.skipWaiting());
+    self.addEventListener('activate',e=>self.clients.claim());
+  `;
+  const blob = new Blob([swCode],{type:'application/javascript'});
+  navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(()=>{});
+}
+
+// ---------- init ----------
+initMap();
+renderLines();
+})();
+</script>
+</body>
+</html>
