@@ -74,6 +74,8 @@ body{
 .risk-label{text-align:center;font-size:22px;font-weight:900;margin-top:4px;}
 
 #map{width:100%;height:230px;border-radius:14px;margin-top:8px;border:1px solid var(--glass-b);}
+.card.picking{border-color:var(--gold);animation:pickPulse 1.1s ease-in-out infinite;}
+@keyframes pickPulse{0%,100%{box-shadow:0 0 0 0 rgba(255,215,0,.55)}50%{box-shadow:0 0 0 10px rgba(255,215,0,0)}}
 
 .status-dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-left:6px;}
 .status-dot.on{background:#2ecc71;box-shadow:0 0 8px #2ecc71;}
@@ -136,9 +138,10 @@ body{
     <button class="btn secondary" id="testAlertBtn">🧪 جرب التنبيه الآن (اختبار)</button>
   </div>
 
-  <div class="card">
+  <div class="card" id="mapCard">
     <h3>🗺️ الخريطة</h3>
     <div id="map"></div>
+    <div class="small-note" id="mapPickHint" style="display:none;color:var(--gold);font-weight:700;text-align:center;">👆 انقر الآن فوق نقطة على الخريطة أعلاه لتحديد محطة الانطلاق</div>
     <button class="btn secondary" id="fetchLinesBtn">🔄 تحميل خطوط السكة القريبة (Overpass)</button>
   </div>
 
@@ -160,7 +163,7 @@ body{
 
   <div class="card" id="tripCard">
     <h3>🎯 وين نحب نمشي؟</h3>
-    <div class="small-note">اختر محطة الانطلاق ومحطة الوصول، والتطبيق يقترح لك أفضل قطار (مباشر أو بتبديل).</div>
+    <div class="small-note">اختر محطة الانطلاق ومحطة الوصول من القائمة، أو استعمل الخريطة/GPS — عندها يبحث التطبيق في عدة محطات قريبة من نقطتك تلقائياً ليجد أفضل حل بالقطار.</div>
     <label style="font-size:11px;color:var(--gold3)">محطة الانطلاق</label>
     <select id="fromSelect" style="width:100%;background:rgba(0,0,0,.3);border:1px solid var(--glass-b);color:#fff;border-radius:6px;padding:8px;margin-top:4px;font-family:'Tajawal',sans-serif;font-size:13px;">
       <option value="">— اختر محطة الانطلاق —</option>
@@ -173,6 +176,7 @@ body{
     <select id="destSelect" style="width:100%;background:rgba(0,0,0,.3);border:1px solid var(--glass-b);color:#fff;border-radius:6px;padding:8px;margin-top:4px;font-family:'Tajawal',sans-serif;font-size:13px;">
       <option value="">— اختر محطة الوصول —</option>
     </select>
+    <button class="btn secondary" id="pickDestBtn" style="margin-top:8px">🗺️ اختر الوصول من الخريطة</button>
     <button class="btn" id="planTripBtn">🔎 ابحث عن الحل بالقطار</button>
     <div id="tripResult" style="margin-top:10px;"></div>
   </div>
@@ -201,7 +205,8 @@ body{
 
 // ---------- state ----------
 let watchId=null, map=null, userMarker=null, trainMarkers={}, lineLayers={};
-let manualOrigin=null, manualOriginMarker=null, pickModeActive=false;
+let manualOrigin=null, manualOriginMarker=null;
+let manualDest=null, manualDestMarker=null;
 let osmTracks = JSON.parse(localStorage.getItem('qitari_osm_tracks')||'[]'); // [{id,name,coords:[[lat,lon],...]}]
 let wakeLock=null, audioCtx=null, sirenOsc=null, alertActive=false, lastRisk=0, lastPos=null;
 let recalcTimer=null;
@@ -532,18 +537,51 @@ function nearestUsedStation(pos){
   });
   return {name:best, dist:bestDist};
 }
+// أقرب عدة محطات (وليس محطة واحدة فقط) — تُستعمل عند التحديد عبر الخريطة/GPS
+// حتى يجرب التطبيق كل التوليفات الممكنة ويجد أفضل حل، وليس فقط أقرب محطة قد لا يمر بها قطار مناسب
+function nearestUsedStations(pos, n){
+  const allowed = stationNamesUsedInTrains();
+  const list = allowed.map(name=>({name, dist:haversine(pos, STATIONS[name])}));
+  list.sort((a,b)=>a.dist-b.dist);
+  return list.slice(0, n);
+}
 function minsNow(){ const n=new Date(); return n.getHours()*60+n.getMinutes(); }
 
-// ---------- تحديد نقطة على الخريطة أو GPS لملء محطة الانطلاق تلقائياً ----------
+// ---------- تحديد نقطة الانطلاق أو الوصول من الخريطة (زر واحد يعرف أي حقل يملأ) ----------
+let pickTarget=null; // 'from' | 'to' | null
+let fromCandidates=null, toCandidates=null; // عدة محطات مرشحة عند الاختيار عبر الخريطة/GPS
+function showPickUI(labelText){
+  document.getElementById('mapCard').classList.add('picking');
+  const hint = document.getElementById('mapPickHint');
+  hint.textContent = '👆 انقر الآن فوق نقطة على الخريطة أعلاه لتحديد '+labelText;
+  hint.style.display = 'block';
+  document.getElementById('mapCard').scrollIntoView({behavior:'smooth', block:'center'});
+  if(map) setTimeout(()=>map.invalidateSize(), 350);
+}
+function clearPickUI(){
+  document.getElementById('mapCard').classList.remove('picking');
+  document.getElementById('mapPickHint').style.display = 'none';
+}
 function onMapClickForOrigin(e){
-  if(!pickModeActive) return;
-  manualOrigin = [e.latlng.lat, e.latlng.lng];
-  pickModeActive = false;
-  document.getElementById('pickOriginBtn').textContent = '🗺️ من الخريطة';
-  updateManualOriginMarker();
-  const near = nearestUsedStation(manualOrigin);
-  const sel = document.getElementById('fromSelect');
-  if(sel && near.name){ sel.value = near.name; }
+  if(!pickTarget) return;
+  const pos = [e.latlng.lat, e.latlng.lng];
+  const candidates = nearestUsedStations(pos, 3);
+  if(!candidates.length) return;
+  if(pickTarget==='from'){
+    manualOrigin = pos;
+    updateManualOriginMarker();
+    fromCandidates = candidates.map(c=>c.name);
+    document.getElementById('fromSelect').value = candidates[0].name;
+    document.getElementById('pickOriginBtn').textContent = '🗺️ من الخريطة';
+  } else {
+    manualDest = pos;
+    updateManualDestMarker();
+    toCandidates = candidates.map(c=>c.name);
+    document.getElementById('destSelect').value = candidates[0].name;
+    document.getElementById('pickDestBtn').textContent = '🗺️ اختر الوصول من الخريطة';
+  }
+  pickTarget = null;
+  clearPickUI();
 }
 function updateManualOriginMarker(){
   if(!map || !manualOrigin) return;
@@ -555,23 +593,44 @@ function updateManualOriginMarker(){
   if(manualOriginMarker) map.removeLayer(manualOriginMarker);
   manualOriginMarker = L.marker(manualOrigin,{icon}).addTo(map);
 }
+function updateManualDestMarker(){
+  if(!map || !manualDest) return;
+  const icon = L.divIcon({
+    className:'dest-icon',
+    html:'<div style="width:28px;height:28px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:radial-gradient(circle at 35% 30%,#5be0c3,#0f9d78 75%);display:flex;align-items:center;justify-content:center;box-shadow:0 0 10px rgba(15,157,120,.9),0 0 0 3px rgba(255,255,255,.9);"><span style="font-size:13px;line-height:1;transform:rotate(45deg)">🏁</span></div>',
+    iconSize:[28,28], iconAnchor:[14,28]
+  });
+  if(manualDestMarker) map.removeLayer(manualDestMarker);
+  manualDestMarker = L.marker(manualDest,{icon}).addTo(map);
+}
 document.getElementById('pickOriginBtn').onclick = ()=>{
   const btn = document.getElementById('pickOriginBtn');
   if(!map){ alert('يرجى الانتظار حتى تحميل الخريطة'); return; }
-  if(pickModeActive){
-    pickModeActive=false;
-    btn.textContent = '🗺️ من الخريطة';
-    return;
-  }
-  pickModeActive = true;
+  if(pickTarget==='from'){ pickTarget=null; btn.textContent='🗺️ من الخريطة'; clearPickUI(); return; }
+  pickTarget='from';
+  document.getElementById('pickDestBtn').textContent = '🗺️ اختر الوصول من الخريطة';
   btn.textContent = '👆 انقر فوق الخريطة الآن';
+  showPickUI('محطة الانطلاق');
+};
+document.getElementById('pickDestBtn').onclick = ()=>{
+  const btn = document.getElementById('pickDestBtn');
+  if(!map){ alert('يرجى الانتظار حتى تحميل الخريطة'); return; }
+  if(pickTarget==='to'){ pickTarget=null; btn.textContent='🗺️ اختر الوصول من الخريطة'; clearPickUI(); return; }
+  pickTarget='to';
+  document.getElementById('pickOriginBtn').textContent = '🗺️ من الخريطة';
+  btn.textContent = '👆 انقر فوق الخريطة الآن';
+  showPickUI('محطة الوصول');
 };
 document.getElementById('useGpsOriginBtn').onclick = ()=>{
   if(!lastPos){ alert('يرجى تشغيل تحديد الموقع (GPS) أولاً من بطاقة الحالة أعلاه.'); return; }
-  const near = nearestUsedStation(lastPos);
-  const sel = document.getElementById('fromSelect');
-  if(sel && near.name){ sel.value = near.name; }
+  const candidates = nearestUsedStations(lastPos, 3);
+  if(!candidates.length) return;
+  fromCandidates = candidates.map(c=>c.name);
+  document.getElementById('fromSelect').value = candidates[0].name;
 };
+// عند تغيير القائمة يدوياً، نعتبر أن المستخدم يريد بالضبط تلك المحطة (لا مرشحين متعددين)
+document.getElementById('fromSelect').addEventListener('change', ()=>{ fromCandidates=null; });
+document.getElementById('destSelect').addEventListener('change', ()=>{ toCandidates=null; });
 function findDirectRoutes(fromName,toName){
   const routes=[];
   trains.forEach(t=>{
@@ -579,7 +638,7 @@ function findDirectRoutes(fromName,toName){
     const iFrom = stops.findIndex(s=>s.name===fromName && s.time);
     const iTo = stops.findIndex(s=>s.name===toName && s.time);
     if(iFrom>-1 && iTo>iFrom){
-      routes.push({type:'direct', trainName:t.name, depTime:stops[iFrom].time, arrTime:stops[iTo].time});
+      routes.push({type:'direct', trainName:t.name, depTime:stops[iFrom].time, arrTime:stops[iTo].time, fromName, toName});
     }
   });
   return routes;
@@ -607,7 +666,8 @@ function findTransferRoutes(fromName,toName){
         routes.push({
           type:'transfer', trainName:tA.name, trainName2:tB.name,
           depTime:stopsA[iFrom].time, transferStation:tr.name,
-          arrAtTransfer:tr.time, depFromTransfer:stopsB[iX].time, arrTime:stopsB[iTo].time
+          arrAtTransfer:tr.time, depFromTransfer:stopsB[iX].time, arrTime:stopsB[iTo].time,
+          fromName, toName
         });
       });
     }
@@ -616,31 +676,39 @@ function findTransferRoutes(fromName,toName){
 }
 function planTrip(){
   const resultBox = document.getElementById('tripResult');
-  const fromName = document.getElementById('fromSelect').value;
-  const toName = document.getElementById('destSelect').value;
-  if(!fromName){ resultBox.innerHTML = '<div class="small-note" style="color:#ff8888">اختر أولاً محطة الانطلاق.</div>'; return; }
-  if(!toName){ resultBox.innerHTML = '<div class="small-note" style="color:#ff8888">اختر أولاً محطة الوصول.</div>'; return; }
-  if(fromName===toName){ resultBox.innerHTML = '<div class="small-note">محطة الانطلاق والوصول متطابقتان.</div>'; return; }
-  let routes = findDirectRoutes(fromName,toName);
+  const fromSel = document.getElementById('fromSelect').value;
+  const toSel = document.getElementById('destSelect').value;
+  if(!fromSel){ resultBox.innerHTML = '<div class="small-note" style="color:#ff8888">اختر أولاً محطة الانطلاق.</div>'; return; }
+  if(!toSel){ resultBox.innerHTML = '<div class="small-note" style="color:#ff8888">اختر أولاً محطة الوصول.</div>'; return; }
+  // إذا جاءت المحطة من الخريطة/GPS نجرب كل المحطات القريبة المرشحة، وإلا نستعمل فقط المحطة المختارة يدوياً
+  const fromList = (fromCandidates && fromCandidates.length) ? fromCandidates : [fromSel];
+  const toList = (toCandidates && toCandidates.length) ? toCandidates : [toSel];
+  const usingCombos = (fromList.length>1 || toList.length>1);
+  let routes = [];
+  fromList.forEach(fN=>{ toList.forEach(tN=>{ if(fN!==tN) routes.push(...findDirectRoutes(fN,tN)); }); });
   let indirect = false;
-  if(routes.length===0){ routes = findTransferRoutes(fromName,toName); indirect = true; }
+  if(routes.length===0){
+    fromList.forEach(fN=>{ toList.forEach(tN=>{ if(fN!==tN) routes.push(...findTransferRoutes(fN,tN)); }); });
+    indirect = routes.length>0;
+  }
   const now = minsNow();
   routes.forEach(r=>{ const dep=minutesOf(r.depTime); r.waitMin=(dep-now+1440)%1440; });
   routes.sort((a,b)=>a.waitMin-b.waitMin);
   routes = routes.slice(0,6);
+  const combosNote = usingCombos ? '<div class="small-note">🔎 تم البحث تلقائياً عبر عدة محطات قريبة من نقطتك لإيجاد أفضل حل.</div>' : '';
   if(routes.length===0){
-    resultBox.innerHTML = '<div class="small-note" style="color:#ff8888">لم يتم العثور على قطار مناسب بين '+fromName+' و'+toName+'. تحقق من قائمة الخطوط أو أضف خطاً يدوياً.</div>';
+    resultBox.innerHTML = combosNote + '<div class="small-note" style="color:#ff8888">لم يتم العثور على قطار مناسب بين '+fromSel+' و'+toSel+'. تحقق من قائمة الخطوط أو أضف خطاً يدوياً.</div>';
     return;
   }
-  resultBox.innerHTML = routes.map(r=>{
+  resultBox.innerHTML = combosNote + routes.map(r=>{
     const isTomorrow = minutesOf(r.depTime) < now;
     const badge = isTomorrow ? '<span class="badge" style="background:#7ee787;color:#023">غداً</span>' : '';
     if(r.type==='direct'){
       const duree = formatDuration(minutesOf(r.arrTime)-minutesOf(r.depTime));
       return `<div class="line-item">
         <div class="row" style="border:none;padding:2px 0"><span>🚆 <b>${r.trainName}</b></span>${badge}</div>
-        <div class="row" style="border:none;padding:2px 0"><span>الانطلاق</span><b>${r.depTime} — ${fromName}</b></div>
-        <div class="row" style="border:none;padding:2px 0"><span>الوصول</span><b>${r.arrTime} — ${toName}</b></div>
+        <div class="row" style="border:none;padding:2px 0"><span>الانطلاق</span><b>${r.depTime} — ${r.fromName}</b></div>
+        <div class="row" style="border:none;padding:2px 0"><span>الوصول</span><b>${r.arrTime} — ${r.toName}</b></div>
         <div class="row" style="border:none;padding:2px 0"><span>مدة الرحلة</span><b>${duree}</b></div>
       </div>`;
     } else {
@@ -648,11 +716,11 @@ function planTrip(){
       return `<div class="line-item">
         <div class="row" style="border:none;padding:2px 0"><span>🔀 تبديل عبر <b>${r.transferStation}</b></span>${badge}</div>
         <div class="row" style="border:none;padding:2px 0"><span>القطار الأول</span><b>${r.trainName}</b></div>
-        <div class="row" style="border:none;padding:2px 0"><span>الانطلاق</span><b>${r.depTime} — ${fromName}</b></div>
+        <div class="row" style="border:none;padding:2px 0"><span>الانطلاق</span><b>${r.depTime} — ${r.fromName}</b></div>
         <div class="row" style="border:none;padding:2px 0"><span>الوصول للتبديل</span><b>${r.arrAtTransfer}</b></div>
         <div class="row" style="border:none;padding:2px 0"><span>القطار الثاني</span><b>${r.trainName2}</b></div>
         <div class="row" style="border:none;padding:2px 0"><span>الانطلاق من التبديل</span><b>${r.depFromTransfer}</b></div>
-        <div class="row" style="border:none;padding:2px 0"><span>الوصول النهائي</span><b>${r.arrTime} — ${toName}</b></div>
+        <div class="row" style="border:none;padding:2px 0"><span>الوصول النهائي</span><b>${r.arrTime} — ${r.toName}</b></div>
         <div class="row" style="border:none;padding:2px 0"><span>مدة الرحلة الكلية</span><b>${duree}</b></div>
       </div>`;
     }
