@@ -224,7 +224,7 @@ const STATIONS = {
   "Kalaâ Seghira":[35.83,10.57], "Kalaâ Kebira":[35.87,10.53], "Enfidha":[36.13,10.38],
   "Bouficha":[36.28,10.38], "Bir Bou Regba":[36.4167,10.5333], "Bouargoub":[36.50,10.52],
   "Grombalia":[36.60,10.50], "Borj Cedria":[36.7167,10.3667], "Hammam Lif":[36.7333,10.3333],
-  "Tunis Ville":[36.7930,10.1846], "Tunis":[36.7930,10.1846],
+  "Tunis":[36.7930,10.1846],
   "Nabeul":[36.4561,10.7376], "Hammamet":[36.4000,10.6167],
   // Branche Métlaoui - Moulares - Redeyef (coordonnées très approximatives)
   "Selja":[34.28,8.30], "Tabeddit 1er arrêt":[34.25,8.25], "Tabeddit 2ème arrêt":[34.22,8.20],
@@ -256,17 +256,17 @@ const STATIONS = {
 // ---------- horaires SNCFT été 2026 (transcription manuelle depuis l'affiche — VÉRIFIE et corrige via l'éditeur ci-dessous, surtout les gares intermédiaires proches de Sousse/Enfidha où plusieurs trains se chevauchent) ----------
 const DEFAULT_TRAINS = [
  {id:'t5-90', name:'5/90 — Gabès → Tunis',
-  stopsText:"Gabes@00:05, Ghraiba@01:22, Maharès@01:42, Sfax Arrivée@02:16, Sfax Départ@02:25, El Jem@03:30, Sousse Arrivée@04:37, Sousse Départ@04:50, Kalaâ Seghira@05:03, Kalaâ Kebira@05:12, Enfidha@05:40, Bouficha@05:55, Bir Bou Regba@06:09, Bouargoub@06:21, Grombalia@06:30, Tunis Ville@07:22"},
+  stopsText:"Gabes@00:05, Ghraiba@01:22, Maharès@01:42, Sfax Arrivée@02:16, Sfax Départ@02:25, El Jem@03:30, Sousse Arrivée@04:37, Sousse Départ@04:50, Kalaâ Seghira@05:03, Kalaâ Kebira@05:12, Enfidha@05:40, Bouficha@05:55, Bir Bou Regba@06:09, Bouargoub@06:21, Grombalia@06:30, Tunis@07:22"},
  {id:'t12-5-52', name:'12-5/52(B) — Sousse → Tunis (sauf dim. et fêtes)',
-  stopsText:"Sousse Départ@05:10, Kalaâ Seghira@05:23, Kalaâ Kebira@05:32, Enfidha@06:01, Bouficha@06:18, Bir Bou Regba@06:34, Bouargoub@06:46, Grombalia@06:54, Borj Cedria@07:08, Tunis Ville@07:44"},
+  stopsText:"Sousse Départ@05:10, Kalaâ Seghira@05:23, Kalaâ Kebira@05:32, Enfidha@06:01, Bouficha@06:18, Bir Bou Regba@06:34, Bouargoub@06:46, Grombalia@06:54, Borj Cedria@07:08, Tunis@07:44"},
  {id:'t22-5-54', name:'22-5/54 — Mahdia → Tunis',
-  stopsText:"Mahdia@04:45, Monastir@06:00, Messadine@06:28, Kalaâ Seghira@06:36, Kalaâ Kebira@06:45, Enfidha@07:12, Bir Bou Regba@07:39, Bouargoub@07:50, Grombalia@07:59, Borj Cedria@08:13, Tunis Ville@08:51"},
+  stopsText:"Mahdia@04:45, Monastir@06:00, Messadine@06:28, Kalaâ Seghira@06:36, Kalaâ Kebira@06:45, Enfidha@07:12, Bir Bou Regba@07:39, Bouargoub@07:50, Grombalia@07:59, Borj Cedria@08:13, Tunis@08:51"},
  {id:'t5-58', name:'5/58 — Sfax → Tunis',
-  stopsText:"Sfax Départ@05:15, Sakiet Ezzit@05:41, La Hencha@06:06, El Jem@06:22, Kerker@06:44, Messadine@07:12, Sousse Départ@07:45, Kalaâ Seghira@07:58, Kalaâ Kebira@08:06, Enfidha@08:33, Bir Bou Regba@09:01, Grombalia@09:19, Borj Cedria@09:33, Hammam Lif@09:43, Tunis Ville@10:09"},
+  stopsText:"Sfax Départ@05:15, Sakiet Ezzit@05:41, La Hencha@06:06, El Jem@06:22, Kerker@06:44, Messadine@07:12, Sousse Départ@07:45, Kalaâ Seghira@07:58, Kalaâ Kebira@08:06, Enfidha@08:33, Bir Bou Regba@09:01, Grombalia@09:19, Borj Cedria@09:33, Hammam Lif@09:43, Tunis@10:09"},
  {id:'t13-5-72', name:'13-5/72 — Tozeur → Tunis',
-  stopsText:"Tozeur@06:00, Elouediane@06:12, Metlaoui@07:20, Gafsa@08:00, Sened@08:47, Maknassy@09:20, Ghraiba@10:12, Maharès@10:32, Sfax Arrivée@11:05, Sfax Départ@11:30, Sakiet Ezzit@11:55, El Jem@12:35, Kerker@12:57, Messadine@13:25, Sousse Arrivée@13:45, Sousse Départ@14:00, Bir Bou Regba@15:18, Grombalia@15:38, Tunis Ville@16:31"},
+  stopsText:"Tozeur@06:00, Elouediane@06:12, Metlaoui@07:20, Gafsa@08:00, Sened@08:47, Maknassy@09:20, Ghraiba@10:12, Maharès@10:32, Sfax Arrivée@11:05, Sfax Départ@11:30, Sakiet Ezzit@11:55, El Jem@12:35, Kerker@12:57, Messadine@13:25, Sousse Arrivée@13:45, Sousse Départ@14:00, Bir Bou Regba@15:18, Grombalia@15:38, Tunis@16:31"},
  {id:'t5-76', name:'5/76 — Gabès → Tunis',
-  stopsText:"Gabes@10:50, Ghraiba@12:08, Maharès@12:28, Sfax Arrivée@13:02, Sfax Départ@13:25, La Hencha@14:16, El Jem@14:32, Kerker@14:54, Messadine@15:22, Sousse Arrivée@15:40, Sousse Départ@15:55, Bir Bou Regba@17:08, Grombalia@17:28, Hammam Lif@17:51, Tunis Ville@18:20"},
+  stopsText:"Gabes@10:50, Ghraiba@12:08, Maharès@12:28, Sfax Arrivée@13:02, Sfax Départ@13:25, La Hencha@14:16, El Jem@14:32, Kerker@14:54, Messadine@15:22, Sousse Arrivée@15:40, Sousse Départ@15:55, Bir Bou Regba@17:08, Grombalia@17:28, Hammam Lif@17:51, Tunis@18:20"},
  {id:'t805', name:'805 — Banlieue Tunis → Nabeul', stopsText:"Tunis@06:15, Bir Bou Regba@06:53, Hammamet@07:05, Nabeul@07:14"},
  {id:'t5-10-75', name:'5-10/75 — Banlieue Tunis → Nabeul', stopsText:"Tunis@13:50, Bir Bou Regba@14:51, Hammamet@15:21, Nabeul@15:34"},
  {id:'t817', name:'817 — Banlieue Tunis → Nabeul', stopsText:"Tunis@18:20, Bir Bou Regba@18:44, Hammamet@19:07, Nabeul@19:19"},
@@ -276,56 +276,56 @@ const DEFAULT_TRAINS = [
 
  // L5 — Tunis → Tozeur (sens retour)
  {id:'t5-13-57', name:'5-13/57 — Tunis → Tozeur',
-  stopsText:"Tunis Ville@07:25, Hammam Lif@07:55, Grombalia@08:19, Bir Bou Regba@08:38, Bouficha@08:53, Enfidha@09:08, Kalaâ Kebira@09:35, Sousse Arrivée@09:56, Sousse Départ@10:11, Messadine@10:30, El Jem@11:22, Sfax Arrivée@12:31, Sfax Départ@13:00, Maharès@13:39, Ghraiba@14:00, Maknassy@14:59, Sened@15:35, Gafsa@16:30, Metlaoui@17:35, Elouediane@18:18, Tozeur@18:30"},
+  stopsText:"Tunis@07:25, Hammam Lif@07:55, Grombalia@08:19, Bir Bou Regba@08:38, Bouficha@08:53, Enfidha@09:08, Kalaâ Kebira@09:35, Sousse Arrivée@09:56, Sousse Départ@10:11, Messadine@10:30, El Jem@11:22, Sfax Arrivée@12:31, Sfax Départ@13:00, Maharès@13:39, Ghraiba@14:00, Maknassy@14:59, Sened@15:35, Gafsa@16:30, Metlaoui@17:35, Elouediane@18:18, Tozeur@18:30"},
  {id:'t5-73', name:'5/73 — Tunis → Gabès',
-  stopsText:"Tunis Ville@13:05, Grombalia@13:56, Bir Bou Regba@14:13, Bouficha@14:27, Enfidha@14:41, Kalaâ Kebira@15:08, Kalaâ Seghira@15:16, Messadine@15:23, Kerker@15:50, El Jem@16:12, La Hencha@16:28, Sakiet Ezzit@16:53, Sfax Arrivée@17:17, Sfax Départ@17:25, Maharès@18:00, Ghraiba@18:20, Gabes@19:36"},
+  stopsText:"Tunis@13:05, Grombalia@13:56, Bir Bou Regba@14:13, Bouficha@14:27, Enfidha@14:41, Kalaâ Kebira@15:08, Kalaâ Seghira@15:16, Messadine@15:23, Kerker@15:50, El Jem@16:12, La Hencha@16:28, Sakiet Ezzit@16:53, Sfax Arrivée@17:17, Sfax Départ@17:25, Maharès@18:00, Ghraiba@18:20, Gabes@19:36"},
  {id:'t5-22-77', name:'5-22/77 — Tunis → Mahdia',
-  stopsText:"Tunis Ville@14:45, Grombalia@15:36, Bir Bou Regba@15:54, Enfidha@16:22, Kalaâ Seghira@16:56, Sousse Arrivée@17:08, Sousse Départ@17:17, Messadine@17:36, Monastir@18:15, Mahdia@19:21"},
+  stopsText:"Tunis@14:45, Grombalia@15:36, Bir Bou Regba@15:54, Enfidha@16:22, Kalaâ Seghira@16:56, Sousse Arrivée@17:08, Sousse Départ@17:17, Messadine@17:36, Monastir@18:15, Mahdia@19:21"},
  {id:'t5-12-79', name:'5-12/79(A) — Tunis → Sousse (sauf sam. et veilles fêtes)',
-  stopsText:"Tunis Ville@15:15, Hammam Lif@15:45, Grombalia@16:09, Bou Argoub@16:18, Bir Bou Regba@16:29, Bouficha@16:46, Enfidha@17:03, Kalaâ Kebira@17:33, Kalaâ Seghira@17:42, Sousse Arrivée@17:54"},
+  stopsText:"Tunis@15:15, Hammam Lif@15:45, Grombalia@16:09, Bou Argoub@16:18, Bir Bou Regba@16:29, Bouficha@16:46, Enfidha@17:03, Kalaâ Kebira@17:33, Kalaâ Seghira@17:42, Sousse Arrivée@17:54"},
  {id:'t5-87', name:'5/87 — Tunis → Gabès',
-  stopsText:"Tunis Ville@17:20, Hammam Lif@17:50, Grombalia@18:14, Bou Argoub@18:23, Bir Bou Regba@18:34, Bouficha@18:49, Enfidha@19:06, Kalaâ Kebira@19:34, Kalaâ Seghira@19:43, Sousse Arrivée@19:55, Sousse Départ@20:05, Messadine@20:23, El Jem@21:13, Sakiet Ezzit@21:53, Sfax Arrivée@22:18"},
+  stopsText:"Tunis@17:20, Hammam Lif@17:50, Grombalia@18:14, Bou Argoub@18:23, Bir Bou Regba@18:34, Bouficha@18:49, Enfidha@19:06, Kalaâ Kebira@19:34, Kalaâ Seghira@19:43, Sousse Arrivée@19:55, Sousse Départ@20:05, Messadine@20:23, El Jem@21:13, Sakiet Ezzit@21:53, Sfax Arrivée@22:18"},
  {id:'t5-97', name:'5/97 — Tunis → Gabès (nuit)',
-  stopsText:"Tunis Ville@21:15, Bir Bou Regba@22:24, Sousse Arrivée@23:36, Sousse Départ@23:50, El Jem@00:58, Sfax Arrivée@01:57, Sfax Départ@02:15, Maharès@02:49, Ghraiba@03:09, Gabes@04:25"},
+  stopsText:"Tunis@21:15, Bir Bou Regba@22:24, Sousse Arrivée@23:36, Sousse Départ@23:50, El Jem@00:58, Sfax Arrivée@01:57, Sfax Départ@02:15, Maharès@02:49, Ghraiba@03:09, Gabes@04:25"},
  {id:'t15-77', name:'15/77 — Métlaoui → Redeyef', stopsText:"Metlaoui@17:10, Redeyef@19:27"},
  {id:'t16-60', name:'16/60 — Redeyef → Métlaoui', stopsText:"Redeyef@04:30, Metlaoui@06:46"},
 
  // L6 — Tunis ↔ Kalaâ Khasba (Le Kef)
  {id:'t6-51', name:'6/51 — Tunis → Kalaâ Khasba',
-  stopsText:"Tunis Ville@05:55, Jebel Jelloud@06:09, Bir Kassaa@06:21, Naassen@06:32, Khelidia@06:43, Oudna@06:48, Cheylus@06:58, Bir M'Cherga@07:07, Depienne@07:17, Pont du Fahs@07:32, Bou Arada@07:54, El Aroussa@08:10, Sidi Ayed@08:21, Gaafour@08:33, El Akhouat@08:45, El Krib@08:57, Sidi Bou Rouis@09:10, Trika@09:21, Le Sers@09:37, Les Salines@09:44, Les Zouarines@09:55, Dahmani@10:06, Ain Mesria@10:21, Fej et Tameur@10:32, Gouraïa@10:45, Oued Sarrath@10:56, Kalaâ Khasba@11:13"},
+  stopsText:"Tunis@05:55, Jebel Jelloud@06:09, Bir Kassaa@06:21, Naassen@06:32, Khelidia@06:43, Oudna@06:48, Cheylus@06:58, Bir M'Cherga@07:07, Depienne@07:17, Pont du Fahs@07:32, Bou Arada@07:54, El Aroussa@08:10, Sidi Ayed@08:21, Gaafour@08:33, El Akhouat@08:45, El Krib@08:57, Sidi Bou Rouis@09:10, Trika@09:21, Le Sers@09:37, Les Salines@09:44, Les Zouarines@09:55, Dahmani@10:06, Ain Mesria@10:21, Fej et Tameur@10:32, Gouraïa@10:45, Oued Sarrath@10:56, Kalaâ Khasba@11:13"},
  {id:'t6-65', name:'6/65 — Tunis → Dahmani',
-  stopsText:"Tunis Ville@14:15, Bir Kassaa@14:39, Naassen@14:48, Khelidia@14:59, Oudna@15:04, Cheylus@15:14, Bir M'Cherga@15:24, Depienne@15:32, Pont du Fahs@15:47, Bou Arada@16:09, El Aroussa@16:25, Sidi Ayed@16:36, Gaafour@16:48, El Akhouat@17:00, El Krib@17:12, Sidi Bou Rouis@17:25, Trika@17:36, Le Sers@17:52, Les Salines@17:59, Les Zouarines@18:10, Dahmani@18:20"},
+  stopsText:"Tunis@14:15, Bir Kassaa@14:39, Naassen@14:48, Khelidia@14:59, Oudna@15:04, Cheylus@15:14, Bir M'Cherga@15:24, Depienne@15:32, Pont du Fahs@15:47, Bou Arada@16:09, El Aroussa@16:25, Sidi Ayed@16:36, Gaafour@16:48, El Akhouat@17:00, El Krib@17:12, Sidi Bou Rouis@17:25, Trika@17:36, Le Sers@17:52, Les Salines@17:59, Les Zouarines@18:10, Dahmani@18:20"},
  {id:'t6-8-69', name:'6-8/69 — Tunis → Le Kef (express)',
-  stopsText:"Tunis Ville@15:45, Bir Kassaa@16:07, Naassen@16:15, Cheylus@16:32, Bir M'Cherga@16:40, Depienne@16:48, Pont du Fahs@17:00, Bou Arada@17:18, El Aroussa@17:32, Gaafour@17:48, Sidi Bou Rouis@18:16, Le Sers@18:35, Le Kef@19:11"},
+  stopsText:"Tunis@15:45, Bir Kassaa@16:07, Naassen@16:15, Cheylus@16:32, Bir M'Cherga@16:40, Depienne@16:48, Pont du Fahs@17:00, Bou Arada@17:18, El Aroussa@17:32, Gaafour@17:48, Sidi Bou Rouis@18:16, Le Sers@18:35, Le Kef@19:11"},
  {id:'t6-50', name:'6/50 — Kalaâ Khasba → Tunis',
-  stopsText:"Dahmani@03:00, Les Zouarines@03:11, Les Salines@03:22, Le Sers@03:29, Trika@03:44, Sidi Bou Rouis@03:55, El Krib@04:08, El Akhouat@04:20, Gaafour@04:33, Sidi Ayed@04:44, El Aroussa@04:55, Bou Arada@05:11, Pont du Fahs@05:33, Depienne@05:48, Bir M'Cherga@05:56, Cheylus@06:05, Oudna@06:15, Khelidia@06:20, Naassen@06:31, Bir Kassaa@06:40, Jebel Jelloud@06:50, Tunis Ville@07:02"},
+  stopsText:"Dahmani@03:00, Les Zouarines@03:11, Les Salines@03:22, Le Sers@03:29, Trika@03:44, Sidi Bou Rouis@03:55, El Krib@04:08, El Akhouat@04:20, Gaafour@04:33, Sidi Ayed@04:44, El Aroussa@04:55, Bou Arada@05:11, Pont du Fahs@05:33, Depienne@05:48, Bir M'Cherga@05:56, Cheylus@06:05, Oudna@06:15, Khelidia@06:20, Naassen@06:31, Bir Kassaa@06:40, Jebel Jelloud@06:50, Tunis@07:02"},
  {id:'t8-6-54', name:'8-6/54 — Le Kef → Tunis (express)',
-  stopsText:"Le Kef@05:00, Le Sers@05:37, Sidi Bou Rouis@05:57, Gaafour@06:26, El Aroussa@06:38, Bou Arada@06:48, Pont du Fahs@07:04, Bir M'Cherga@07:24, Cheylus@07:32, Naassen@07:49, Bir Kassaa@07:59, Tunis Ville@08:18"},
+  stopsText:"Le Kef@05:00, Le Sers@05:37, Sidi Bou Rouis@05:57, Gaafour@06:26, El Aroussa@06:38, Bou Arada@06:48, Pont du Fahs@07:04, Bir M'Cherga@07:24, Cheylus@07:32, Naassen@07:49, Bir Kassaa@07:59, Tunis@08:18"},
  {id:'t6-76', name:'6/76 — Kalaâ Khasba → Tunis',
-  stopsText:"Kalaâ Khasba@12:45, Oued Sarrath@13:03, Gouraïa@13:14, Fej et Tameur@13:27, Ain Mesria@13:38, Dahmani@13:53, Les Zouarines@14:04, Les Salines@14:15, Le Sers@14:22, Trika@14:38, Sidi Bou Rouis@14:49, El Krib@15:02, El Akhouat@15:14, Gaafour@15:27, Sidi Ayed@15:38, El Aroussa@15:50, Bou Arada@16:10, Pont du Fahs@16:32, Depienne@16:47, Bir M'Cherga@16:55, Cheylus@17:04, Oudna@17:14, Naassen@17:29, Bir Kassaa@17:38, Jebel Jelloud@17:48, Tunis Ville@18:00"},
+  stopsText:"Kalaâ Khasba@12:45, Oued Sarrath@13:03, Gouraïa@13:14, Fej et Tameur@13:27, Ain Mesria@13:38, Dahmani@13:53, Les Zouarines@14:04, Les Salines@14:15, Le Sers@14:22, Trika@14:38, Sidi Bou Rouis@14:49, El Krib@15:02, El Akhouat@15:14, Gaafour@15:27, Sidi Ayed@15:38, El Aroussa@15:50, Bou Arada@16:10, Pont du Fahs@16:32, Depienne@16:47, Bir M'Cherga@16:55, Cheylus@17:04, Oudna@17:14, Naassen@17:29, Bir Kassaa@17:38, Jebel Jelloud@17:48, Tunis@18:00"},
 
  // Tunis ↔ Béja ↔ Jendouba ↔ Ghardimaou ↔ Souk Ahras ↔ Annaba
  {id:'t7', name:'7 — Tunis → Ghardimaou',
-  stopsText:"Tunis Ville@06:25, Manouba@06:43, Jedeida@07:05, Tebourba@07:22, Borj Toum@07:44, Mejez El Bab@08:00, Oued Zarga@08:19, Sidi M'Himech@08:39, Beja@08:54, Mastouta@09:07, Sidi S'mail@09:16, Bousalem@09:32, Ben Bechir@09:45, Jendouba@09:58, Oued Meliz@10:18, Ghardimaou Arrivée@10:26"},
+  stopsText:"Tunis@06:25, Manouba@06:43, Jedeida@07:05, Tebourba@07:22, Borj Toum@07:44, Mejez El Bab@08:00, Oued Zarga@08:19, Sidi M'Himech@08:39, Beja@08:54, Mastouta@09:07, Sidi S'mail@09:16, Bousalem@09:32, Ben Bechir@09:45, Jendouba@09:58, Oued Meliz@10:18, Ghardimaou Arrivée@10:26"},
  {id:'tTM1', name:'TM1(A) — Tunis → Annaba (lun/mer/ven)',
-  stopsText:"Tunis Ville@08:25, Beja@10:39, Jendouba@11:36, Ghardimaou Arrivée@12:03, Ghardimaou Départ@13:30, Souk Ahras Arrivée@14:47, Souk Ahras Départ@15:45, Annaba@18:20"},
+  stopsText:"Tunis@08:25, Beja@10:39, Jendouba@11:36, Ghardimaou Arrivée@12:03, Ghardimaou Départ@13:30, Souk Ahras Arrivée@14:47, Souk Ahras Départ@15:45, Annaba@18:20"},
  {id:'t13', name:'13 — Tunis → Ghardimaou',
-  stopsText:"Tunis Ville@13:00, Manouba@13:19, Jedeida@13:40, Tebourba@13:53, Borj Toum@14:16, Mejez El Bab@14:35, Oued Zarga@14:54, Sidi M'Himech@15:14, Beja@15:30, Mastouta@15:43, Sidi S'mail@15:56, Bousalem@16:12, Ben Bechir@16:25, Jendouba@16:38, Oued Meliz@16:58, Ghardimaou Arrivée@17:06"},
+  stopsText:"Tunis@13:00, Manouba@13:19, Jedeida@13:40, Tebourba@13:53, Borj Toum@14:16, Mejez El Bab@14:35, Oued Zarga@14:54, Sidi M'Himech@15:14, Beja@15:30, Mastouta@15:43, Sidi S'mail@15:56, Bousalem@16:12, Ben Bechir@16:25, Jendouba@16:38, Oued Meliz@16:58, Ghardimaou Arrivée@17:06"},
  {id:'t17', name:'17 — Tunis → Ghardimaou',
-  stopsText:"Tunis Ville@16:45, Manouba@17:04, Jedeida@17:28, Tebourba@17:41, Borj Toum@18:03, Mejez El Bab@18:19, Oued Zarga@18:38, Sidi M'Himech@18:58, Beja@19:14, Mastouta@19:27, Sidi S'mail@19:36, Bousalem@19:52, Ben Bechir@20:05, Jendouba@20:18, Oued Meliz@20:38, Ghardimaou Arrivée@20:46"},
+  stopsText:"Tunis@16:45, Manouba@17:04, Jedeida@17:28, Tebourba@17:41, Borj Toum@18:03, Mejez El Bab@18:19, Oued Zarga@18:38, Sidi M'Himech@18:58, Beja@19:14, Mastouta@19:27, Sidi S'mail@19:36, Bousalem@19:52, Ben Bechir@20:05, Jendouba@20:18, Oued Meliz@20:38, Ghardimaou Arrivée@20:46"},
  {id:'t8', name:'8 — Ghardimaou → Tunis',
-  stopsText:"Ghardimaou Départ@04:25, Oued Meliz@04:34, Jendouba@04:53, Ben Bechir@05:05, Bousalem@05:18, Sidi S'mail@05:33, Mastouta@05:42, Beja@05:56, Sidi M'Himech@06:12, Oued Zarga@06:29, Mejez El Bab@06:46, Borj Toum@07:01, Tebourba@07:21, Jedeida@07:35, Manouba@07:58, Tunis Ville@08:17"},
+  stopsText:"Ghardimaou Départ@04:25, Oued Meliz@04:34, Jendouba@04:53, Ben Bechir@05:05, Bousalem@05:18, Sidi S'mail@05:33, Mastouta@05:42, Beja@05:56, Sidi M'Himech@06:12, Oued Zarga@06:29, Mejez El Bab@06:46, Borj Toum@07:01, Tebourba@07:21, Jedeida@07:35, Manouba@07:58, Tunis@08:17"},
  {id:'t12', name:'12 — Ghardimaou → Tunis',
-  stopsText:"Ghardimaou Départ@08:35, Oued Meliz@08:44, Jendouba@09:05, Ben Bechir@09:17, Bousalem@09:31, Sidi S'mail@09:46, Mastouta@09:55, Beja@10:08, Sidi M'Himech@10:26, Oued Zarga@10:45, Mejez El Bab@11:03, Borj Toum@11:19, Tebourba@11:41, Jedeida@11:54, Manouba@12:21, Tunis Ville@12:40"},
+  stopsText:"Ghardimaou Départ@08:35, Oued Meliz@08:44, Jendouba@09:05, Ben Bechir@09:17, Bousalem@09:31, Sidi S'mail@09:46, Mastouta@09:55, Beja@10:08, Sidi M'Himech@10:26, Oued Zarga@10:45, Mejez El Bab@11:03, Borj Toum@11:19, Tebourba@11:41, Jedeida@11:54, Manouba@12:21, Tunis@12:40"},
  {id:'t14', name:'14 — Ghardimaou → Tunis (express)',
-  stopsText:"Ghardimaou Départ@12:10, Oued Meliz@12:19, Jendouba@12:40, Ben Bechir@12:52, Bousalem@13:05, Sidi S'mail@13:20, Mastouta@13:29, Beja@13:42, Sidi M'Himech@13:58, Oued Zarga@14:16, Mejez El Bab@14:33, Tebourba@15:09, Jedeida@15:20, Manouba@15:44, Tunis Ville@16:04"},
+  stopsText:"Ghardimaou Départ@12:10, Oued Meliz@12:19, Jendouba@12:40, Ben Bechir@12:52, Bousalem@13:05, Sidi S'mail@13:20, Mastouta@13:29, Beja@13:42, Sidi M'Himech@13:58, Oued Zarga@14:16, Mejez El Bab@14:33, Tebourba@15:09, Jedeida@15:20, Manouba@15:44, Tunis@16:04"},
  {id:'tTM2', name:'TM2(B) — Annaba → Tunis (mar/jeu/dim)',
-  stopsText:"Annaba@09:00, Souk Ahras Arrivée@11:10, Souk Ahras Départ@12:10, Ghardimaou Arrivée@13:21, Ghardimaou Départ@14:50, Jendouba@15:18, Beja@16:17, Tunis Ville@18:30"},
+  stopsText:"Annaba@09:00, Souk Ahras Arrivée@11:10, Souk Ahras Départ@12:10, Ghardimaou Arrivée@13:21, Ghardimaou Départ@14:50, Jendouba@15:18, Beja@16:17, Tunis@18:30"},
 
  // Tunis ↔ Bizerte (navette)
- {id:'t1-19', name:'1/19 — Tunis → Bizerte', stopsText:"Tunis Ville@15:15, Jedeida@15:38, Mateur@16:40, Bizerte@18:01"},
- {id:'t1-4', name:'1/4(A) — Bizerte → Tunis (sauf dim/fêtes)', stopsText:"Bizerte@05:00, Mateur@06:28, Jedeida@07:13, Tunis Ville@07:53"},
- {id:'t1-10', name:'1/10(B) — Bizerte → Tunis (dim/fêtes)', stopsText:"Bizerte@06:50, Mateur@08:18, Jedeida@09:04, Tunis Ville@09:45"}
+ {id:'t1-19', name:'1/19 — Tunis → Bizerte', stopsText:"Tunis@15:15, Jedeida@15:38, Mateur@16:40, Bizerte@18:01"},
+ {id:'t1-4', name:'1/4(A) — Bizerte → Tunis (sauf dim/fêtes)', stopsText:"Bizerte@05:00, Mateur@06:28, Jedeida@07:13, Tunis@07:53"},
+ {id:'t1-10', name:'1/10(B) — Bizerte → Tunis (dim/fêtes)', stopsText:"Bizerte@06:50, Mateur@08:18, Jedeida@09:04, Tunis@09:45"}
 ];
 
 let trains = JSON.parse(localStorage.getItem('qitari_trains')||'null') || DEFAULT_TRAINS.map(t=>({...t}));
@@ -425,7 +425,7 @@ function renderLines(){
   populateStationSelects();
 }
 document.getElementById('addLineBtn').onclick=()=>{
-  trains.push({id:'t'+Date.now(),name:'قطار جديد',stopsText:"Tunis Ville@06:00, Sousse Départ@08:00"});
+  trains.push({id:'t'+Date.now(),name:'قطار جديد',stopsText:"Tunis@06:00, Sousse Départ@08:00"});
   saveTrains(); renderLines();
 };
 
