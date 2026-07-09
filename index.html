@@ -128,8 +128,11 @@ body{
   <div class="card" id="statusCard">
     <h3>📡 الحالة</h3>
     <div class="row"><span>GPS <span class="status-dot off" id="gpsDot"></span></span><b id="gpsAcc">--</b></div>
-    <div class="row"><span>أقرب سكة حديدية</span><b id="nearLine">--</b></div>
-    <div class="row"><span>المسافة إلى السكة</span><b id="distLine">--</b></div>
+    <div class="row"><span>أقرب قطار</span><b id="nearLine">--</b></div>
+    <div class="row"><span>المسافة إلى القطار</span><b id="distTrain">--</b></div>
+    <div class="row"><span>اتجاه القطار</span><b id="trainDirection">--</b></div>
+    <div class="row"><span>أقرب سكة حديدية</span><b id="nearTrack">--</b></div>
+    <div class="row"><span>المسافة إلى السكة</span><b id="distTrack">--</b></div>
     <div class="row"><span>السرعة الحالية</span><b id="speedNow">--</b></div>
     <button class="btn" id="startBtn">▶️ تشغيل المراقبة</button>
     <button class="btn secondary" id="stopBtn" style="display:none">⏸️ إيقاف المراقبة</button>
@@ -157,21 +160,14 @@ body{
     <button class="btn secondary" id="addLineBtn">➕ إضافة خط يدوياً</button>
   </div>
 
-  <div class="card" id="timetableCard">
-    <h3>🕒 الاطلاع على التوقيت</h3>
-    <label style="font-size:11px;color:var(--gold3)">تصفية حسب المحطة (انطلاق / وصول / مرور)</label>
-    <select id="stationSelect" style="width:100%;background:rgba(0,0,0,.3);border:1px solid var(--glass-b);color:#fff;border-radius:6px;padding:8px;margin-top:4px;font-family:'Tajawal',sans-serif;font-size:13px;">
-      <option value="">— كل المحطات (نظرة عامة) —</option>
-    </select>
-    <div id="timetableList" style="margin-top:10px;"></div>
-  </div>
-
   <div class="card" id="tripCard">
     <h3>🎯 وين نحب نمشي؟</h3>
-    <div class="small-note">اختر محطة الانطلاق ومحطة الوصول من القائمة، أو استعمل الخريطة/GPS — عندها يبحث التطبيق في عدة محطات قريبة من نقطتك تلقائياً ليجد أفضل حل بالقطار.</div>
+    <div class="small-note">اختر محطة الانطلاق ومحطة الوصول من القائمة، أو استعمل الخريطة/GPS — عندها يبحث التطبيق في عدة محطات قريبة من نقطتك تلقائياً ليجد أفضل حل بالقطار. <b style="color:var(--gold)">اترك أحد الحقلين فارغاً</b> لعرض كل الرحلات الممكنة من/إلى المحطة الأخرى، أو اتركهما فارغين معاً لعرض جميع القطارات.</div>
+    <div class="row" style="border:none;padding:2px 0"><span>بيانات SNCFT المباشرة <span class="status-dot off" id="liveDot"></span></span><b id="liveStatusTxt" style="font-size:11px">--</b></div>
     <label style="font-size:11px;color:var(--gold3)">محطة الانطلاق</label>
+
     <select id="fromSelect" style="width:100%;background:rgba(0,0,0,.3);border:1px solid var(--glass-b);color:#fff;border-radius:6px;padding:8px;margin-top:4px;font-family:'Tajawal',sans-serif;font-size:13px;">
-      <option value="">— اختر محطة الانطلاق —</option>
+      <option value="">— محطة الانطلاق (اتركها فارغة لعرض كل الرحلات) —</option>
     </select>
     <div style="display:flex;gap:8px;margin-top:8px;">
       <button class="btn secondary" id="pickOriginBtn" style="margin-top:0;flex:1">🗺️ من الخريطة</button>
@@ -179,7 +175,7 @@ body{
     </div>
     <label style="font-size:11px;color:var(--gold3);margin-top:12px;display:block">محطة الوصول</label>
     <select id="destSelect" style="width:100%;background:rgba(0,0,0,.3);border:1px solid var(--glass-b);color:#fff;border-radius:6px;padding:8px;margin-top:4px;font-family:'Tajawal',sans-serif;font-size:13px;">
-      <option value="">— اختر محطة الوصول —</option>
+      <option value="">— محطة الوصول (اتركها فارغة لعرض كل الرحلات) —</option>
     </select>
     <button class="btn secondary" id="pickDestBtn" style="margin-top:8px">🗺️ اختر الوصول من الخريطة</button>
     <button class="btn" id="planTripBtn">🔎 ابحث عن الحل بالقطار</button>
@@ -195,6 +191,13 @@ body{
       وAndroid يقيّده بشدة أيضاً. هذا قيد من نظام التشغيل نفسه وليس عيباً في التطبيق.
       للحصول على حماية مضمونة 100% في الخلفية، يلزم تطبيق أصلي (native) وليس تطبيق ويب.
     </div>
+  </div>
+
+  <div class="shimmer"></div>
+  <div style="text-align:center;padding:14px 0 6px;font-family:'Amiri',serif;letter-spacing:1px;
+    background:linear-gradient(90deg,var(--gold),var(--gold3),var(--gold2));
+    -webkit-background-clip:text;background-clip:text;color:transparent;font-size:15px;font-weight:700;">
+    LORD SIDHOM I — THE CONCEPTOR
   </div>
 </div>
 
@@ -236,6 +239,7 @@ let manualOrigin=null, manualOriginMarker=null;
 let manualDest=null, manualDestMarker=null;
 let osmTracks = JSON.parse(localStorage.getItem('qitari_osm_tracks')||'[]'); // [{id,name,coords:[[lat,lon],...]}]
 let wakeLock=null, audioCtx=null, sirenOsc=null, alertActive=false, lastRisk=0, lastPos=null;
+let lastTrainId=null, lastTrainDist=null, lastTrainDistTime=null; // لحساب سرعة اقتراب/ابتعاد القطار الأقرب
 let recalcTimer=null;
 
 // ---------- stations database (coordonnées approximatives, corrige si besoin) ----------
@@ -277,7 +281,14 @@ const STATIONS = {
   // Branche Tunis - Bizerte
   "Sidi Othman":[36.85,9.95], "Chaouat":[36.87,9.90], "Ain Ghelal":[36.95,9.75],
   "Mateur":[37.0392,9.6650], "Tinja":[37.1333,9.7333], "La Pecherie":[37.20,9.85],
-  "Bizerte":[37.2744,9.8739]
+  "Bizerte":[37.2744,9.8739],
+  // Ligne D : Tunis - Gobaa (été 2026) - coordonnées approximatives, à corriger via l'éditeur
+  "Sayda Manoubia":[36.7930,10.1600], "Mellassine":[36.7930,10.1450], "Erraoudha":[36.7980,10.1300],
+  "Le Bardo":[36.8092,10.1397], "Elbortal":[36.8100,10.1150], "Les Orangers":[36.8150,10.0800],
+  "Gobaa":[36.8200,10.0400], "Gobaa Ville":[36.8250,10.0200],
+  // Ligne E : Tunis - Bougatfa (été 2026) - coordonnées approximatives, à corriger via l'éditeur
+  "Ennajah":[36.7900,10.1550], "Etayarane":[36.7950,10.1350], "Ezzouhour 2":[36.8000,10.1150],
+  "Elhrayria":[36.8050,10.0900], "Bougatfa":[36.8100,10.0600]
 };
 
 // ---------- horaires SNCFT été 2026 (transcription manuelle depuis l'affiche — VÉRIFIE et corrige via l'éditeur ci-dessous, surtout les gares intermédiaires proches de Sousse/Enfidha où plusieurs trains se chevauchent) ----------
@@ -352,7 +363,352 @@ const DEFAULT_TRAINS = [
  // Tunis ↔ Bizerte (navette)
  {id:'t1-19', name:'1/19 — Tunis → Bizerte', stopsText:"Tunis@15:15, Jedeida@15:38, Mateur@16:40, Bizerte@18:01"},
  {id:'t1-4', name:'1/4(A) — Bizerte → Tunis (sauf dim/fêtes)', stopsText:"Bizerte@05:00, Mateur@06:28, Jedeida@07:13, Tunis@07:53"},
- {id:'t1-10', name:'1/10(B) — Bizerte → Tunis (dim/fêtes)', stopsText:"Bizerte@06:50, Mateur@08:18, Jedeida@09:04, Tunis@09:45"}
+ {id:'t1-10', name:'1/10(B) — Bizerte → Tunis (dim/fêtes)', stopsText:"Bizerte@06:50, Mateur@08:18, Jedeida@09:04, Tunis@09:45"},
+
+  // ---------- Ligne D : Gobaa - Tunis (été 2026) ----------
+ {id:'tD602', name:'602 — Gobaa → Tunis',
+  stopsText:"Gobaa Ville@4:35, Gobaa@4:39, Les Orangers@4:42, Manouba@4:44, Elbortal@4:46, Le Bardo@4:50, Erraoudha@4:56, Mellassine@4:58, Sayda Manoubia@5:01, Tunis@5:05"},
+ {id:'tD604', name:'604 — Gobaa → Tunis',
+  stopsText:"Gobaa Ville@5:20, Gobaa@5:26, Les Orangers@5:28, Manouba@5:31, Elbortal@5:33, Le Bardo@5:37, Erraoudha@5:43, Mellassine@5:45, Sayda Manoubia@5:48, Tunis@5:52"},
+ {id:'tD606', name:'606 — Gobaa → Tunis',
+  stopsText:"Gobaa Ville@5:50, Gobaa@5:55, Les Orangers@5:57, Manouba@6:00, Elbortal@6:02, Le Bardo@6:06, Erraoudha@6:12, Mellassine@6:14, Sayda Manoubia@6:17, Tunis@6:21"},
+ {id:'tD608', name:'608 — Gobaa → Tunis',
+  stopsText:"Gobaa Ville@6:40, Gobaa@6:47, Les Orangers@6:49, Manouba@6:52, Elbortal@6:54, Le Bardo@6:58, Erraoudha@7:04, Mellassine@7:06, Sayda Manoubia@7:08, Tunis@7:12"},
+ {id:'tD610', name:'610 — Gobaa → Tunis',
+  stopsText:"Gobaa Ville@7:25, Gobaa@7:32, Les Orangers@7:34, Manouba@7:37, Elbortal@7:39, Le Bardo@7:43, Erraoudha@7:49, Mellassine@7:51, Sayda Manoubia@7:54, Tunis@7:58"},
+ {id:'tD612', name:'612 — Gobaa → Tunis',
+  stopsText:"Gobaa Ville@7:50, Gobaa@7:56, Les Orangers@7:58, Manouba@8:01, Elbortal@8:03, Le Bardo@8:07, Erraoudha@8:13, Mellassine@8:15, Sayda Manoubia@8:18, Tunis@8:22"},
+ {id:'tD614', name:'614 — Gobaa → Tunis',
+  stopsText:"Gobaa Ville@8:35, Gobaa@8:43, Les Orangers@8:45, Manouba@8:48, Elbortal@8:50, Le Bardo@8:54, Erraoudha@9:00, Mellassine@9:02, Sayda Manoubia@9:05, Tunis@9:09"},
+ {id:'tD616', name:'616 — Gobaa → Tunis',
+  stopsText:"Gobaa Ville@9:20, Gobaa@9:25, Les Orangers@9:27, Manouba@9:30, Elbortal@9:32, Le Bardo@9:36, Erraoudha@9:42, Mellassine@9:44, Sayda Manoubia@9:47, Tunis@9:51"},
+ {id:'tD618', name:'618 — Gobaa → Tunis',
+  stopsText:"Gobaa Ville@10:10, Gobaa@10:17, Les Orangers@10:19, Manouba@10:22, Elbortal@10:24, Le Bardo@10:28, Erraoudha@10:34, Mellassine@10:36, Sayda Manoubia@10:39, Tunis@10:43"},
+ {id:'tD620', name:'620 — Gobaa → Tunis',
+  stopsText:"Gobaa Ville@10:50, Gobaa@10:57, Les Orangers@10:59, Manouba@11:02, Elbortal@11:04, Le Bardo@11:08, Erraoudha@11:14, Mellassine@11:16, Sayda Manoubia@11:19, Tunis@11:23"},
+ {id:'tD622', name:'622 — Gobaa → Tunis',
+  stopsText:"Gobaa Ville@11:30, Gobaa@11:37, Les Orangers@11:39, Manouba@11:42, Elbortal@11:44, Le Bardo@11:48, Erraoudha@11:54, Mellassine@11:56, Sayda Manoubia@11:59, Tunis@12:03"},
+ {id:'tD624', name:'624 — Gobaa → Tunis',
+  stopsText:"Gobaa Ville@12:15, Gobaa@12:21, Les Orangers@12:23, Manouba@12:26, Elbortal@12:28, Le Bardo@12:32, Erraoudha@12:38, Mellassine@12:40, Sayda Manoubia@12:43, Tunis@12:47"},
+ {id:'tD628', name:'628 — Gobaa → Tunis',
+  stopsText:"Gobaa Ville@13:10, Gobaa@13:18, Les Orangers@13:20, Manouba@13:23, Elbortal@13:25, Le Bardo@13:29, Erraoudha@13:35, Mellassine@13:37, Sayda Manoubia@13:40, Tunis@13:44"},
+ {id:'tD630', name:'630 — Gobaa → Tunis',
+  stopsText:"Gobaa Ville@13:50, Gobaa@13:58, Les Orangers@14:00, Manouba@14:02, Elbortal@14:05, Le Bardo@14:08, Erraoudha@14:14, Mellassine@14:16, Sayda Manoubia@14:18, Tunis@14:22"},
+ {id:'tD632', name:'632 — Gobaa → Tunis',
+  stopsText:"Gobaa Ville@14:30, Gobaa@14:36, Les Orangers@14:38, Manouba@14:41, Elbortal@14:43, Le Bardo@14:47, Erraoudha@14:53, Mellassine@14:54, Sayda Manoubia@14:57, Tunis@15:01"},
+ {id:'tD634', name:'634 — Gobaa → Tunis',
+  stopsText:"Gobaa Ville@15:15, Gobaa@15:23, Les Orangers@15:25, Manouba@15:30, Elbortal@15:32, Le Bardo@15:36, Erraoudha@15:42, Mellassine@15:44, Sayda Manoubia@15:46, Tunis@15:50"},
+ {id:'tD638', name:'638 — Gobaa → Tunis',
+  stopsText:"Gobaa Ville@16:10, Gobaa@16:17, Les Orangers@16:19, Manouba@16:22, Elbortal@16:24, Le Bardo@16:28, Erraoudha@16:34, Mellassine@16:36, Sayda Manoubia@16:39, Tunis@16:43"},
+ {id:'tD640', name:'640 — Gobaa → Tunis',
+  stopsText:"Gobaa Ville@17:05, Gobaa@17:12, Les Orangers@17:14, Manouba@17:17, Elbortal@17:19, Le Bardo@17:23, Erraoudha@17:29, Mellassine@17:31, Sayda Manoubia@17:34, Tunis@17:38"},
+ {id:'tD642', name:'642 — Gobaa → Tunis',
+  stopsText:"Gobaa Ville@18:05, Gobaa@18:11, Les Orangers@18:13, Manouba@18:16, Elbortal@18:18, Le Bardo@18:22, Erraoudha@18:29, Mellassine@18:31, Sayda Manoubia@18:33, Tunis@18:37"},
+ {id:'tD644', name:'644 — Gobaa → Tunis',
+  stopsText:"Gobaa Ville@18:50, Gobaa@18:58, Les Orangers@19:00, Manouba@19:03, Elbortal@19:05, Le Bardo@19:09, Erraoudha@19:15, Mellassine@19:17, Sayda Manoubia@19:20, Tunis@19:24"},
+ {id:'tD646', name:'646 — Gobaa → Tunis',
+  stopsText:"Gobaa Ville@19:30, Gobaa@19:37, Les Orangers@19:39, Manouba@19:42, Elbortal@19:44, Le Bardo@19:48, Erraoudha@19:54, Mellassine@19:56, Sayda Manoubia@19:59, Tunis@20:03"},
+ {id:'tD648', name:'648 — Gobaa → Tunis',
+  stopsText:"Gobaa Ville@20:20, Gobaa@20:27, Les Orangers@20:29, Manouba@20:32, Elbortal@20:34, Le Bardo@20:39, Erraoudha@20:45, Mellassine@20:47, Sayda Manoubia@20:49, Tunis@20:53"},
+ {id:'tD650', name:'650 — Gobaa → Tunis',
+  stopsText:"Gobaa Ville@21:00, Gobaa@21:06, Les Orangers@21:08, Manouba@21:11, Elbortal@21:13, Le Bardo@21:17, Erraoudha@21:23, Mellassine@21:25, Sayda Manoubia@21:28, Tunis@21:32"},
+ {id:'tD652', name:'652 — Gobaa → Tunis',
+  stopsText:"Gobaa Ville@22:20, Gobaa@22:26, Les Orangers@22:28, Manouba@22:31, Elbortal@22:33, Le Bardo@22:37, Erraoudha@22:43, Mellassine@22:45, Sayda Manoubia@22:48, Tunis@22:52"},
+ {id:'tD601', name:'601 — Tunis → Gobaa',
+  stopsText:"Tunis@4:00, Sayda Manoubia@4:04, Mellassine@4:06, Erraoudha@4:08, Le Bardo@4:14, Elbortal@4:19, Manouba@4:21, Les Orangers@4:23, Gobaa@4:26, Gobaa Ville@4:30"},
+ {id:'tD603', name:'603 — Tunis → Gobaa',
+  stopsText:"Tunis@4:25, Sayda Manoubia@4:29, Mellassine@4:31, Erraoudha@4:33, Le Bardo@4:39, Elbortal@4:44, Manouba@4:46, Les Orangers@4:48, Gobaa@4:51, Gobaa Ville@4:55"},
+ {id:'tD605', name:'605 — Tunis → Gobaa',
+  stopsText:"Tunis@5:10, Sayda Manoubia@5:14, Mellassine@5:16, Erraoudha@5:18, Le Bardo@5:24, Elbortal@5:29, Manouba@5:31, Les Orangers@5:33, Gobaa@5:36, Gobaa Ville@5:40"},
+ {id:'tD607', name:'607 — Tunis → Gobaa',
+  stopsText:"Tunis@5:15, Sayda Manoubia@5:19, Mellassine@5:21, Erraoudha@5:22, Le Bardo@5:28, Elbortal@5:33, Manouba@6:00, Les Orangers@6:01, Gobaa@6:05, Gobaa Ville@6:09"},
+ {id:'tD609', name:'609 — Tunis → Gobaa',
+  stopsText:"Tunis@6:35, Sayda Manoubia@6:39, Mellassine@6:41, Erraoudha@6:43, Le Bardo@6:49, Elbortal@6:54, Manouba@6:56, Les Orangers@6:58, Gobaa@7:01, Gobaa Ville@7:05"},
+ {id:'tD611', name:'611 — Tunis → Gobaa',
+  stopsText:"Tunis@7:15, Sayda Manoubia@7:19, Mellassine@7:21, Erraoudha@7:23, Le Bardo@7:29, Elbortal@7:34, Manouba@7:36, Les Orangers@7:38, Gobaa@7:41, Gobaa Ville@7:45"},
+ {id:'tD613', name:'613 — Tunis → Gobaa',
+  stopsText:"Tunis@8:30, Sayda Manoubia@8:34, Mellassine@8:36, Erraoudha@8:38, Le Bardo@8:44, Elbortal@8:49, Manouba@8:51, Les Orangers@8:53, Gobaa@8:56, Gobaa Ville@9:00"},
+ {id:'tD615', name:'615 — Tunis → Gobaa',
+  stopsText:"Tunis@9:10, Sayda Manoubia@9:14, Mellassine@9:16, Erraoudha@9:18, Le Bardo@9:24, Elbortal@9:29, Manouba@9:31, Les Orangers@9:33, Gobaa@9:36, Gobaa Ville@9:40"},
+ {id:'tD617', name:'617 — Tunis → Gobaa',
+  stopsText:"Tunis@10:05, Sayda Manoubia@10:09, Mellassine@10:11, Erraoudha@10:13, Le Bardo@10:19, Elbortal@10:24, Manouba@10:26, Les Orangers@10:28, Gobaa@10:31, Gobaa Ville@10:35"},
+ {id:'tD619', name:'619 — Tunis → Gobaa',
+  stopsText:"Tunis@10:45, Sayda Manoubia@10:49, Mellassine@10:51, Erraoudha@10:53, Le Bardo@10:59, Elbortal@11:04, Manouba@11:06, Les Orangers@11:08, Gobaa@11:11, Gobaa Ville@11:15"},
+ {id:'tD621', name:'621 — Tunis → Gobaa',
+  stopsText:"Tunis@11:25, Sayda Manoubia@11:29, Mellassine@11:31, Erraoudha@11:33, Le Bardo@11:39, Elbortal@11:44, Manouba@11:46, Les Orangers@11:48, Gobaa@11:51, Gobaa Ville@11:55"},
+ {id:'tD623', name:'623 — Tunis → Gobaa',
+  stopsText:"Tunis@12:05, Sayda Manoubia@12:09, Mellassine@12:11, Erraoudha@12:13, Le Bardo@12:19, Elbortal@12:24, Manouba@12:26, Les Orangers@12:28, Gobaa@12:31, Gobaa Ville@12:35"},
+ {id:'tD627', name:'627 — Tunis → Gobaa',
+  stopsText:"Tunis@13:05, Sayda Manoubia@13:09, Mellassine@13:11, Erraoudha@13:13, Le Bardo@13:19, Elbortal@13:24, Manouba@13:26, Les Orangers@13:28, Gobaa@13:31, Gobaa Ville@13:35"},
+ {id:'tD629', name:'629 — Tunis → Gobaa',
+  stopsText:"Tunis@13:45, Sayda Manoubia@13:49, Mellassine@13:51, Erraoudha@13:53, Le Bardo@13:59, Elbortal@14:04, Manouba@14:06, Les Orangers@14:08, Gobaa@14:10, Gobaa Ville@14:14"},
+ {id:'tD631', name:'631 — Tunis → Gobaa',
+  stopsText:"Tunis@14:25, Sayda Manoubia@14:29, Mellassine@14:31, Erraoudha@14:33, Le Bardo@14:38, Elbortal@14:43, Manouba@14:45, Les Orangers@14:47, Gobaa@14:50, Gobaa Ville@14:54"},
+ {id:'tD633', name:'633 — Tunis → Gobaa',
+  stopsText:"Tunis@15:02, Sayda Manoubia@15:06, Mellassine@15:08, Erraoudha@15:10, Le Bardo@15:16, Elbortal@15:21, Manouba@15:23, Les Orangers@15:25, Gobaa@15:28, Gobaa Ville@15:32"},
+ {id:'tD637', name:'637 — Tunis → Gobaa',
+  stopsText:"Tunis@16:05, Sayda Manoubia@16:09, Mellassine@16:11, Erraoudha@16:13, Le Bardo@16:19, Elbortal@16:24, Manouba@16:26, Les Orangers@16:28, Gobaa@16:31, Gobaa Ville@16:35"},
+ {id:'tD639', name:'639 — Tunis → Gobaa',
+  stopsText:"Tunis@16:55, Sayda Manoubia@16:59, Mellassine@17:01, Erraoudha@17:03, Le Bardo@17:09, Elbortal@17:14, Manouba@17:16, Les Orangers@17:18, Gobaa@17:21, Gobaa Ville@17:25"},
+ {id:'tD641', name:'641 — Tunis → Gobaa',
+  stopsText:"Tunis@17:50, Sayda Manoubia@17:54, Mellassine@17:56, Erraoudha@17:58, Le Bardo@18:05, Elbortal@18:09, Manouba@18:12, Les Orangers@18:14, Gobaa@18:17, Gobaa Ville@18:21"},
+ {id:'tD643', name:'643 — Tunis → Gobaa',
+  stopsText:"Tunis@18:45, Sayda Manoubia@18:49, Mellassine@18:51, Erraoudha@18:53, Le Bardo@18:59, Elbortal@19:04, Manouba@19:06, Les Orangers@19:08, Gobaa@19:11, Gobaa Ville@19:16"},
+ {id:'tD645', name:'645 — Tunis → Gobaa',
+  stopsText:"Tunis@19:25, Sayda Manoubia@19:29, Mellassine@19:31, Erraoudha@19:33, Le Bardo@19:39, Elbortal@19:44, Manouba@19:46, Les Orangers@19:48, Gobaa@19:51, Gobaa Ville@19:55"},
+ {id:'tD647', name:'647 — Tunis → Gobaa',
+  stopsText:"Tunis@20:15, Sayda Manoubia@20:19, Mellassine@20:21, Erraoudha@20:23, Le Bardo@20:29, Elbortal@20:34, Manouba@20:36, Les Orangers@20:38, Gobaa@20:41, Gobaa Ville@20:45"},
+ {id:'tD649', name:'649 — Tunis → Gobaa',
+  stopsText:"Tunis@20:55, Sayda Manoubia@20:59, Mellassine@21:01, Erraoudha@21:03, Le Bardo@21:08, Elbortal@21:13, Manouba@21:15, Les Orangers@21:17, Gobaa@21:20, Gobaa Ville@21:24"},
+ {id:'tD651', name:'651 — Tunis → Gobaa',
+  stopsText:"Tunis@21:45, Sayda Manoubia@21:49, Mellassine@21:51, Erraoudha@21:53, Le Bardo@21:59, Elbortal@22:04, Manouba@22:06, Les Orangers@22:08, Gobaa@22:11, Gobaa Ville@22:15"},
+  // ---------- Ligne E : Bougatfa - Tunis (été 2026) ----------
+ {id:'tE402', name:'402 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@5:00, Elhrayria@5:02, Ezzouhour 2@5:04, Etayarane@5:07, Ennajah@5:09, Sayda Manoubia@5:11, Tunis@5:15"},
+ {id:'tE404', name:'404 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@5:20, Elhrayria@5:22, Ezzouhour 2@5:24, Etayarane@5:27, Ennajah@5:29, Sayda Manoubia@5:31, Tunis@5:35"},
+ {id:'tE406', name:'406 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@5:40, Elhrayria@5:42, Ezzouhour 2@5:44, Etayarane@5:47, Ennajah@5:49, Sayda Manoubia@5:51, Tunis@5:55"},
+ {id:'tE408', name:'408 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@5:50, Elhrayria@5:52, Ezzouhour 2@5:54, Etayarane@5:57, Ennajah@5:59, Sayda Manoubia@6:01, Tunis@6:05"},
+ {id:'tE410', name:'410 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@6:00, Elhrayria@6:02, Ezzouhour 2@6:04, Etayarane@6:07, Ennajah@6:09, Sayda Manoubia@6:11, Tunis@6:15"},
+ {id:'tE412', name:'412 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@6:20, Elhrayria@6:22, Ezzouhour 2@6:24, Etayarane@6:27, Ennajah@6:29, Sayda Manoubia@6:31, Tunis@6:35"},
+ {id:'tE414', name:'414 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@6:40, Elhrayria@6:42, Ezzouhour 2@6:44, Etayarane@6:47, Ennajah@6:49, Sayda Manoubia@6:51, Tunis@6:55"},
+ {id:'tE416', name:'416 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@6:50, Elhrayria@6:52, Ezzouhour 2@6:54, Etayarane@6:57, Ennajah@6:59, Sayda Manoubia@7:01, Tunis@7:05"},
+ {id:'tE418', name:'418 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@7:00, Elhrayria@7:02, Ezzouhour 2@7:04, Etayarane@7:07, Ennajah@7:09, Sayda Manoubia@7:11, Tunis@7:15"},
+ {id:'tE420', name:'420 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@7:20, Elhrayria@7:22, Ezzouhour 2@7:24, Etayarane@7:27, Ennajah@7:29, Sayda Manoubia@7:31, Tunis@7:35"},
+ {id:'tE422', name:'422 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@7:40, Elhrayria@7:42, Ezzouhour 2@7:44, Etayarane@7:47, Ennajah@7:49, Sayda Manoubia@7:51, Tunis@7:55"},
+ {id:'tE424', name:'424 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@7:50, Elhrayria@7:52, Ezzouhour 2@7:54, Etayarane@7:57, Ennajah@7:59, Sayda Manoubia@8:01, Tunis@8:05"},
+ {id:'tE426', name:'426 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@8:00, Elhrayria@8:02, Ezzouhour 2@8:04, Etayarane@8:07, Ennajah@8:09, Sayda Manoubia@8:11, Tunis@8:15"},
+ {id:'tE428', name:'428 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@8:20, Elhrayria@8:22, Ezzouhour 2@8:24, Etayarane@8:27, Ennajah@8:29, Sayda Manoubia@8:31, Tunis@8:35"},
+ {id:'tE430', name:'430 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@8:40, Elhrayria@8:42, Ezzouhour 2@8:44, Etayarane@8:47, Ennajah@8:49, Sayda Manoubia@8:51, Tunis@8:55"},
+ {id:'tE432', name:'432 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@8:50, Elhrayria@8:52, Ezzouhour 2@8:54, Etayarane@8:57, Ennajah@8:59, Sayda Manoubia@9:01, Tunis@9:05"},
+ {id:'tE434', name:'434 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@9:00, Elhrayria@9:02, Ezzouhour 2@9:04, Etayarane@9:07, Ennajah@9:09, Sayda Manoubia@9:11, Tunis@9:15"},
+ {id:'tE436', name:'436 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@9:20, Elhrayria@9:22, Ezzouhour 2@9:24, Etayarane@9:27, Ennajah@9:29, Sayda Manoubia@9:31, Tunis@9:35"},
+ {id:'tE438', name:'438 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@9:40, Elhrayria@9:42, Ezzouhour 2@9:44, Etayarane@9:47, Ennajah@9:49, Sayda Manoubia@9:51, Tunis@9:55"},
+ {id:'tE440', name:'440 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@9:50, Elhrayria@9:52, Ezzouhour 2@9:54, Etayarane@9:57, Ennajah@9:59, Sayda Manoubia@10:01, Tunis@10:05"},
+ {id:'tE442', name:'442 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@10:00, Elhrayria@10:02, Ezzouhour 2@10:04, Etayarane@10:07, Ennajah@10:09, Sayda Manoubia@10:11, Tunis@10:15"},
+ {id:'tE444', name:'444 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@10:20, Elhrayria@10:22, Ezzouhour 2@10:24, Etayarane@10:27, Ennajah@10:29, Sayda Manoubia@10:31, Tunis@10:35"},
+ {id:'tE446', name:'446 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@10:40, Elhrayria@10:42, Ezzouhour 2@10:44, Etayarane@10:47, Ennajah@10:49, Sayda Manoubia@10:51, Tunis@10:55"},
+ {id:'tE448', name:'448 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@10:50, Elhrayria@10:52, Ezzouhour 2@10:54, Etayarane@10:57, Ennajah@10:59, Sayda Manoubia@11:01, Tunis@11:05"},
+ {id:'tE450', name:'450 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@11:00, Elhrayria@11:02, Ezzouhour 2@11:04, Etayarane@11:07, Ennajah@11:09, Sayda Manoubia@11:11, Tunis@11:15"},
+ {id:'tE452', name:'452 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@11:20, Elhrayria@11:22, Ezzouhour 2@11:24, Etayarane@11:27, Ennajah@11:29, Sayda Manoubia@11:31, Tunis@11:35"},
+ {id:'tE454', name:'454 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@11:40, Elhrayria@11:42, Ezzouhour 2@11:44, Etayarane@11:47, Ennajah@11:49, Sayda Manoubia@11:51, Tunis@11:55"},
+ {id:'tE456', name:'456 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@11:50, Elhrayria@11:52, Ezzouhour 2@11:54, Etayarane@11:57, Ennajah@11:59, Sayda Manoubia@12:01, Tunis@12:05"},
+ {id:'tE458', name:'458 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@12:00, Elhrayria@12:02, Ezzouhour 2@12:04, Etayarane@12:07, Ennajah@12:09, Sayda Manoubia@12:11, Tunis@12:15"},
+ {id:'tE460', name:'460 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@12:20, Elhrayria@12:22, Ezzouhour 2@12:24, Etayarane@12:27, Ennajah@12:29, Sayda Manoubia@12:31, Tunis@12:35"},
+ {id:'tE462', name:'462 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@12:40, Elhrayria@12:42, Ezzouhour 2@12:44, Etayarane@12:47, Ennajah@12:49, Sayda Manoubia@12:51, Tunis@12:55"},
+ {id:'tE464', name:'464 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@12:50, Elhrayria@12:52, Ezzouhour 2@12:54, Etayarane@12:57, Ennajah@12:59, Sayda Manoubia@13:01, Tunis@13:05"},
+ {id:'tE466', name:'466 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@12:53, Elhrayria@13:02, Ezzouhour 2@13:04, Etayarane@13:07, Ennajah@13:09, Sayda Manoubia@13:11, Tunis@13:15"},
+ {id:'tE468', name:'468 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@13:20, Elhrayria@13:22, Ezzouhour 2@13:24, Etayarane@13:27, Ennajah@13:29, Sayda Manoubia@13:31, Tunis@13:35"},
+ {id:'tE470', name:'470 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@13:40, Elhrayria@13:42, Ezzouhour 2@13:44, Etayarane@13:47, Ennajah@13:49, Sayda Manoubia@13:51, Tunis@13:55"},
+ {id:'tE472', name:'472 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@13:50, Elhrayria@13:52, Ezzouhour 2@13:54, Etayarane@13:57, Ennajah@13:59, Sayda Manoubia@14:01, Tunis@14:05"},
+ {id:'tE474', name:'474 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@14:00, Elhrayria@14:02, Ezzouhour 2@14:04, Etayarane@14:07, Ennajah@14:09, Sayda Manoubia@14:11, Tunis@14:15"},
+ {id:'tE476', name:'476 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@14:20, Elhrayria@14:22, Ezzouhour 2@14:24, Etayarane@14:27, Ennajah@14:29, Sayda Manoubia@14:31, Tunis@14:35"},
+ {id:'tE478', name:'478 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@14:40, Elhrayria@14:42, Ezzouhour 2@14:44, Etayarane@14:47, Ennajah@14:49, Sayda Manoubia@14:51, Tunis@14:55"},
+ {id:'tE480', name:'480 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@14:50, Elhrayria@14:52, Ezzouhour 2@14:54, Etayarane@14:57, Ennajah@14:59, Sayda Manoubia@15:01, Tunis@15:05"},
+ {id:'tE482', name:'482 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@15:00, Elhrayria@15:02, Ezzouhour 2@15:04, Etayarane@15:07, Ennajah@15:09, Sayda Manoubia@15:11, Tunis@15:15"},
+ {id:'tE484', name:'484 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@15:20, Elhrayria@15:22, Ezzouhour 2@15:24, Etayarane@15:27, Ennajah@15:29, Sayda Manoubia@15:31, Tunis@15:35"},
+ {id:'tE486', name:'486 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@15:40, Elhrayria@15:42, Ezzouhour 2@15:44, Etayarane@15:47, Ennajah@15:49, Sayda Manoubia@15:51, Tunis@15:55"},
+ {id:'tE488', name:'488 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@15:50, Elhrayria@15:52, Ezzouhour 2@15:54, Etayarane@15:57, Ennajah@15:59, Sayda Manoubia@16:01, Tunis@16:05"},
+ {id:'tE490', name:'490 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@16:00, Elhrayria@16:02, Ezzouhour 2@16:04, Etayarane@16:07, Ennajah@16:09, Sayda Manoubia@16:11, Tunis@16:15"},
+ {id:'tE492', name:'492 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@16:20, Elhrayria@16:22, Ezzouhour 2@16:24, Etayarane@16:27, Ennajah@16:29, Sayda Manoubia@16:31, Tunis@16:35"},
+ {id:'tE494', name:'494 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@16:40, Elhrayria@16:42, Ezzouhour 2@16:44, Etayarane@16:47, Ennajah@16:49, Sayda Manoubia@16:51, Tunis@16:55"},
+ {id:'tE496', name:'496 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@16:50, Elhrayria@16:52, Ezzouhour 2@16:54, Etayarane@16:57, Ennajah@16:59, Sayda Manoubia@17:01, Tunis@17:05"},
+ {id:'tE498', name:'498 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@17:00, Elhrayria@17:02, Ezzouhour 2@17:04, Etayarane@17:07, Ennajah@17:09, Sayda Manoubia@17:11, Tunis@17:15"},
+ {id:'tE500', name:'500 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@17:20, Elhrayria@17:22, Ezzouhour 2@17:24, Etayarane@17:27, Ennajah@17:29, Sayda Manoubia@17:31, Tunis@17:35"},
+ {id:'tE502', name:'502 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@17:40, Elhrayria@17:42, Ezzouhour 2@17:44, Etayarane@17:47, Ennajah@17:49, Sayda Manoubia@17:51, Tunis@17:55"},
+ {id:'tE504', name:'504 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@17:50, Elhrayria@17:52, Ezzouhour 2@17:54, Etayarane@17:57, Ennajah@17:59, Sayda Manoubia@18:01, Tunis@18:05"},
+ {id:'tE506', name:'506 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@18:00, Elhrayria@18:02, Ezzouhour 2@18:04, Etayarane@18:07, Ennajah@18:09, Sayda Manoubia@18:11, Tunis@18:15"},
+ {id:'tE508', name:'508 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@18:20, Elhrayria@18:22, Ezzouhour 2@18:24, Etayarane@18:27, Ennajah@18:29, Sayda Manoubia@18:31, Tunis@18:35"},
+ {id:'tE510', name:'510 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@18:50, Elhrayria@18:52, Ezzouhour 2@18:54, Etayarane@18:57, Ennajah@18:59, Sayda Manoubia@19:01, Tunis@19:05"},
+ {id:'tE512', name:'512 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@19:20, Elhrayria@19:22, Ezzouhour 2@19:24, Etayarane@19:27, Ennajah@19:29, Sayda Manoubia@19:31, Tunis@19:35"},
+ {id:'tE514', name:'514 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@19:50, Elhrayria@19:52, Ezzouhour 2@19:54, Etayarane@19:57, Ennajah@19:59, Sayda Manoubia@20:01, Tunis@20:05"},
+ {id:'tE516', name:'516 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@20:20, Elhrayria@20:22, Ezzouhour 2@20:24, Etayarane@20:27, Ennajah@20:29, Sayda Manoubia@20:31, Tunis@20:35"},
+ {id:'tE518', name:'518 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@20:50, Elhrayria@20:52, Ezzouhour 2@20:54, Etayarane@20:57, Ennajah@20:59, Sayda Manoubia@21:01, Tunis@21:05"},
+ {id:'tE520', name:'520 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@21:20, Elhrayria@21:22, Ezzouhour 2@21:24, Etayarane@21:27, Ennajah@21:29, Sayda Manoubia@21:31, Tunis@21:35"},
+ {id:'tE522', name:'522 — Bougatfa → Tunis',
+  stopsText:"Bougatfa@21:50, Elhrayria@21:52, Ezzouhour 2@21:54, Etayarane@21:57, Ennajah@21:59, Sayda Manoubia@22:01, Tunis@22:05"},
+ {id:'tE401', name:'401 — Tunis → Bougatfa',
+  stopsText:"Tunis@4:40, Sayda Manoubia@4:44, Ennajah@4:46, Etayarane@4:49, Ezzouhour 2@4:51, Elhrayria@4:53, Bougatfa@4:55"},
+ {id:'tE403', name:'403 — Tunis → Bougatfa',
+  stopsText:"Tunis@5:00, Sayda Manoubia@5:04, Ennajah@5:06, Etayarane@5:09, Ezzouhour 2@5:11, Elhrayria@5:13, Bougatfa@5:15"},
+ {id:'tE405', name:'405 — Tunis → Bougatfa',
+  stopsText:"Tunis@5:20, Sayda Manoubia@5:24, Ennajah@5:26, Etayarane@5:29, Ezzouhour 2@5:31, Elhrayria@5:33, Bougatfa@5:35"},
+ {id:'tE407', name:'407 — Tunis → Bougatfa',
+  stopsText:"Tunis@5:30, Sayda Manoubia@5:34, Ennajah@5:36, Etayarane@5:39, Ezzouhour 2@5:41, Elhrayria@5:43, Bougatfa@5:45"},
+ {id:'tE409', name:'409 — Tunis → Bougatfa',
+  stopsText:"Tunis@5:40, Sayda Manoubia@5:44, Ennajah@5:46, Etayarane@5:49, Ezzouhour 2@5:51, Elhrayria@5:53, Bougatfa@5:55"},
+ {id:'tE411', name:'411 — Tunis → Bougatfa',
+  stopsText:"Tunis@6:00, Sayda Manoubia@6:04, Ennajah@6:06, Etayarane@6:09, Ezzouhour 2@6:11, Elhrayria@6:13, Bougatfa@6:15"},
+ {id:'tE413', name:'413 — Tunis → Bougatfa',
+  stopsText:"Tunis@6:20, Sayda Manoubia@6:24, Ennajah@6:26, Etayarane@6:29, Ezzouhour 2@6:31, Elhrayria@6:33, Bougatfa@6:35"},
+ {id:'tE415', name:'415 — Tunis → Bougatfa',
+  stopsText:"Tunis@6:30, Sayda Manoubia@6:34, Ennajah@6:36, Etayarane@6:39, Ezzouhour 2@6:41, Elhrayria@6:43, Bougatfa@6:45"},
+ {id:'tE417', name:'417 — Tunis → Bougatfa',
+  stopsText:"Tunis@6:40, Sayda Manoubia@6:44, Ennajah@6:46, Etayarane@6:49, Ezzouhour 2@6:51, Elhrayria@6:53, Bougatfa@6:55"},
+ {id:'tE419', name:'419 — Tunis → Bougatfa',
+  stopsText:"Tunis@7:00, Sayda Manoubia@7:04, Ennajah@7:06, Etayarane@7:09, Ezzouhour 2@7:11, Elhrayria@7:13, Bougatfa@7:15"},
+ {id:'tE421', name:'421 — Tunis → Bougatfa',
+  stopsText:"Tunis@7:20, Sayda Manoubia@7:24, Ennajah@7:26, Etayarane@7:29, Ezzouhour 2@7:31, Elhrayria@7:33, Bougatfa@7:35"},
+ {id:'tE423', name:'423 — Tunis → Bougatfa',
+  stopsText:"Tunis@7:30, Sayda Manoubia@7:34, Ennajah@7:36, Etayarane@7:39, Ezzouhour 2@7:41, Elhrayria@7:43, Bougatfa@7:45"},
+ {id:'tE425', name:'425 — Tunis → Bougatfa',
+  stopsText:"Tunis@7:40, Sayda Manoubia@7:44, Ennajah@7:46, Etayarane@7:49, Ezzouhour 2@7:51, Elhrayria@7:53, Bougatfa@7:55"},
+ {id:'tE427', name:'427 — Tunis → Bougatfa',
+  stopsText:"Tunis@8:00, Sayda Manoubia@8:04, Ennajah@8:06, Etayarane@8:09, Ezzouhour 2@8:11, Elhrayria@8:13, Bougatfa@8:15"},
+ {id:'tE429', name:'429 — Tunis → Bougatfa',
+  stopsText:"Tunis@8:20, Sayda Manoubia@8:24, Ennajah@8:26, Etayarane@8:29, Ezzouhour 2@8:31, Elhrayria@8:33, Bougatfa@8:35"},
+ {id:'tE431', name:'431 — Tunis → Bougatfa',
+  stopsText:"Tunis@8:25, Sayda Manoubia@8:29, Ennajah@8:31, Etayarane@8:34, Ezzouhour 2@8:36, Elhrayria@8:38, Bougatfa@8:40"},
+ {id:'tE433', name:'433 — Tunis → Bougatfa',
+  stopsText:"Tunis@8:40, Sayda Manoubia@8:44, Ennajah@8:46, Etayarane@8:49, Ezzouhour 2@8:51, Elhrayria@8:53, Bougatfa@8:55"},
+ {id:'tE435', name:'435 — Tunis → Bougatfa',
+  stopsText:"Tunis@9:00, Sayda Manoubia@9:04, Ennajah@9:06, Etayarane@9:09, Ezzouhour 2@9:11, Elhrayria@9:13, Bougatfa@9:15"},
+ {id:'tE437', name:'437 — Tunis → Bougatfa',
+  stopsText:"Tunis@9:20, Sayda Manoubia@9:24, Ennajah@9:26, Etayarane@9:29, Ezzouhour 2@9:31, Elhrayria@9:33, Bougatfa@9:35"},
+ {id:'tE439', name:'439 — Tunis → Bougatfa',
+  stopsText:"Tunis@9:30, Sayda Manoubia@9:34, Ennajah@9:36, Etayarane@9:39, Ezzouhour 2@9:41, Elhrayria@9:43, Bougatfa@9:45"},
+ {id:'tE441', name:'441 — Tunis → Bougatfa',
+  stopsText:"Tunis@9:40, Sayda Manoubia@9:44, Ennajah@9:46, Etayarane@9:49, Ezzouhour 2@9:51, Elhrayria@9:53, Bougatfa@9:55"},
+ {id:'tE443', name:'443 — Tunis → Bougatfa',
+  stopsText:"Tunis@10:00, Sayda Manoubia@10:04, Ennajah@10:06, Etayarane@10:09, Ezzouhour 2@10:11, Elhrayria@10:13, Bougatfa@10:15"},
+ {id:'tE445', name:'445 — Tunis → Bougatfa',
+  stopsText:"Tunis@10:20, Sayda Manoubia@10:24, Ennajah@10:26, Etayarane@10:29, Ezzouhour 2@10:31, Elhrayria@10:33, Bougatfa@10:35"},
+ {id:'tE447', name:'447 — Tunis → Bougatfa',
+  stopsText:"Tunis@10:30, Sayda Manoubia@10:34, Ennajah@10:36, Etayarane@10:39, Ezzouhour 2@10:41, Elhrayria@10:43, Bougatfa@10:45"},
+ {id:'tE449', name:'449 — Tunis → Bougatfa',
+  stopsText:"Tunis@10:40, Sayda Manoubia@10:44, Ennajah@10:46, Etayarane@10:49, Ezzouhour 2@10:51, Elhrayria@10:53, Bougatfa@10:55"},
+ {id:'tE451', name:'451 — Tunis → Bougatfa',
+  stopsText:"Tunis@11:00, Sayda Manoubia@11:04, Ennajah@11:06, Etayarane@11:09, Ezzouhour 2@11:11, Elhrayria@11:13, Bougatfa@11:15"},
+ {id:'tE453', name:'453 — Tunis → Bougatfa',
+  stopsText:"Tunis@11:20, Sayda Manoubia@11:24, Ennajah@11:26, Etayarane@11:29, Ezzouhour 2@11:31, Elhrayria@11:33, Bougatfa@11:35"},
+ {id:'tE455', name:'455 — Tunis → Bougatfa',
+  stopsText:"Tunis@11:30, Sayda Manoubia@11:34, Ennajah@11:36, Etayarane@11:39, Ezzouhour 2@11:41, Elhrayria@11:43, Bougatfa@11:45"},
+ {id:'tE457', name:'457 — Tunis → Bougatfa',
+  stopsText:"Tunis@11:40, Sayda Manoubia@11:44, Ennajah@11:46, Etayarane@11:49, Ezzouhour 2@11:51, Elhrayria@11:53, Bougatfa@11:55"},
+ {id:'tE459', name:'459 — Tunis → Bougatfa',
+  stopsText:"Tunis@12:00, Sayda Manoubia@12:04, Ennajah@12:06, Etayarane@12:09, Ezzouhour 2@12:11, Elhrayria@12:13, Bougatfa@12:15"},
+ {id:'tE461', name:'461 — Tunis → Bougatfa',
+  stopsText:"Tunis@12:20, Sayda Manoubia@12:24, Ennajah@12:26, Etayarane@12:29, Ezzouhour 2@12:31, Elhrayria@12:33, Bougatfa@12:35"},
+ {id:'tE463', name:'463 — Tunis → Bougatfa',
+  stopsText:"Tunis@12:30, Sayda Manoubia@12:34, Ennajah@12:36, Etayarane@12:39, Ezzouhour 2@12:41, Elhrayria@12:43, Bougatfa@12:45"},
+ {id:'tE465', name:'465 — Tunis → Bougatfa',
+  stopsText:"Tunis@12:40, Sayda Manoubia@12:44, Ennajah@12:46, Etayarane@12:49, Ezzouhour 2@12:51, Elhrayria@12:53, Bougatfa@12:55"},
+ {id:'tE467', name:'467 — Tunis → Bougatfa',
+  stopsText:"Tunis@13:02, Sayda Manoubia@13:06, Ennajah@13:08, Etayarane@13:11, Ezzouhour 2@13:13, Elhrayria@13:15, Bougatfa@13:17"},
+ {id:'tE469', name:'469 — Tunis → Bougatfa',
+  stopsText:"Tunis@13:20, Sayda Manoubia@13:24, Ennajah@13:26, Etayarane@13:29, Ezzouhour 2@13:31, Elhrayria@13:33, Bougatfa@13:35"},
+ {id:'tE471', name:'471 — Tunis → Bougatfa',
+  stopsText:"Tunis@13:30, Sayda Manoubia@13:34, Ennajah@13:36, Etayarane@13:39, Ezzouhour 2@13:41, Elhrayria@13:43, Bougatfa@13:45"},
+ {id:'tE473', name:'473 — Tunis → Bougatfa',
+  stopsText:"Tunis@13:40, Sayda Manoubia@13:44, Ennajah@13:46, Etayarane@13:49, Ezzouhour 2@13:51, Elhrayria@13:53, Bougatfa@13:55"},
+ {id:'tE475', name:'475 — Tunis → Bougatfa',
+  stopsText:"Tunis@14:00, Sayda Manoubia@14:04, Ennajah@14:06, Etayarane@14:09, Ezzouhour 2@14:11, Elhrayria@14:13, Bougatfa@14:15"},
+ {id:'tE477', name:'477 — Tunis → Bougatfa',
+  stopsText:"Tunis@14:20, Sayda Manoubia@14:24, Ennajah@14:26, Etayarane@14:29, Ezzouhour 2@14:31, Elhrayria@14:33, Bougatfa@14:35"},
+ {id:'tE479', name:'479 — Tunis → Bougatfa',
+  stopsText:"Tunis@14:30, Sayda Manoubia@14:34, Ennajah@14:36, Etayarane@14:39, Ezzouhour 2@14:41, Elhrayria@14:43, Bougatfa@14:45"},
+ {id:'tE481', name:'481 — Tunis → Bougatfa',
+  stopsText:"Tunis@14:40, Sayda Manoubia@14:44, Ennajah@14:46, Etayarane@14:49, Ezzouhour 2@14:51, Elhrayria@14:53, Bougatfa@14:55"},
+ {id:'tE483', name:'483 — Tunis → Bougatfa',
+  stopsText:"Tunis@15:00, Sayda Manoubia@15:04, Ennajah@15:06, Etayarane@15:09, Ezzouhour 2@15:11, Elhrayria@15:13, Bougatfa@15:15"},
+ {id:'tE485', name:'485 — Tunis → Bougatfa',
+  stopsText:"Tunis@15:20, Sayda Manoubia@15:24, Ennajah@15:26, Etayarane@15:29, Ezzouhour 2@15:31, Elhrayria@15:33, Bougatfa@15:35"},
+ {id:'tE487', name:'487 — Tunis → Bougatfa',
+  stopsText:"Tunis@15:30, Sayda Manoubia@15:34, Ennajah@15:36, Etayarane@15:39, Ezzouhour 2@15:41, Elhrayria@15:43, Bougatfa@15:45"},
+ {id:'tE489', name:'489 — Tunis → Bougatfa',
+  stopsText:"Tunis@15:40, Sayda Manoubia@15:44, Ennajah@15:46, Etayarane@15:49, Ezzouhour 2@15:51, Elhrayria@15:53, Bougatfa@15:55"},
+ {id:'tE491', name:'491 — Tunis → Bougatfa',
+  stopsText:"Tunis@16:00, Sayda Manoubia@16:04, Ennajah@16:06, Etayarane@16:09, Ezzouhour 2@16:11, Elhrayria@16:13, Bougatfa@16:15"},
+ {id:'tE493', name:'493 — Tunis → Bougatfa',
+  stopsText:"Tunis@16:20, Sayda Manoubia@16:24, Ennajah@16:26, Etayarane@16:29, Ezzouhour 2@16:31, Elhrayria@16:33, Bougatfa@16:35"},
+ {id:'tE495', name:'495 — Tunis → Bougatfa',
+  stopsText:"Tunis@16:30, Sayda Manoubia@16:34, Ennajah@16:36, Etayarane@16:39, Ezzouhour 2@16:41, Elhrayria@16:43, Bougatfa@16:45"},
+ {id:'tE497', name:'497 — Tunis → Bougatfa',
+  stopsText:"Tunis@16:40, Sayda Manoubia@16:44, Ennajah@16:46, Etayarane@16:49, Ezzouhour 2@16:51, Elhrayria@16:53, Bougatfa@16:55"},
+ {id:'tE499', name:'499 — Tunis → Bougatfa',
+  stopsText:"Tunis@17:00, Sayda Manoubia@17:04, Ennajah@17:06, Etayarane@17:09, Ezzouhour 2@17:11, Elhrayria@17:13, Bougatfa@17:15"},
+ {id:'tE501', name:'501 — Tunis → Bougatfa',
+  stopsText:"Tunis@17:20, Sayda Manoubia@17:24, Ennajah@17:26, Etayarane@17:29, Ezzouhour 2@17:31, Elhrayria@17:33, Bougatfa@17:35"},
+ {id:'tE503', name:'503 — Tunis → Bougatfa',
+  stopsText:"Tunis@17:30, Sayda Manoubia@17:34, Ennajah@17:36, Etayarane@17:39, Ezzouhour 2@17:41, Elhrayria@17:43, Bougatfa@17:45"},
+ {id:'tE505', name:'505 — Tunis → Bougatfa',
+  stopsText:"Tunis@17:40, Sayda Manoubia@17:44, Ennajah@17:46, Etayarane@17:49, Ezzouhour 2@17:51, Elhrayria@17:53, Bougatfa@17:55"},
+ {id:'tE507', name:'507 — Tunis → Bougatfa',
+  stopsText:"Tunis@18:00, Sayda Manoubia@18:04, Ennajah@18:06, Etayarane@18:09, Ezzouhour 2@18:11, Elhrayria@18:13, Bougatfa@18:15"},
+ {id:'tE509', name:'509 — Tunis → Bougatfa',
+  stopsText:"Tunis@18:30, Sayda Manoubia@18:34, Ennajah@18:36, Etayarane@18:39, Ezzouhour 2@18:41, Elhrayria@18:43, Bougatfa@18:45"},
+ {id:'tE511', name:'511 — Tunis → Bougatfa',
+  stopsText:"Tunis@19:00, Sayda Manoubia@19:04, Ennajah@19:06, Etayarane@19:09, Ezzouhour 2@19:11, Elhrayria@19:13, Bougatfa@19:15"},
+ {id:'tE513', name:'513 — Tunis → Bougatfa',
+  stopsText:"Tunis@19:30, Sayda Manoubia@19:34, Ennajah@19:36, Etayarane@19:39, Ezzouhour 2@19:41, Elhrayria@19:43, Bougatfa@19:45"},
+ {id:'tE515', name:'515 — Tunis → Bougatfa',
+  stopsText:"Tunis@20:00, Sayda Manoubia@20:04, Ennajah@20:06, Etayarane@20:09, Ezzouhour 2@20:11, Elhrayria@20:13, Bougatfa@20:15"},
+ {id:'tE517', name:'517 — Tunis → Bougatfa',
+  stopsText:"Tunis@20:30, Sayda Manoubia@20:34, Ennajah@20:36, Etayarane@20:39, Ezzouhour 2@20:41, Elhrayria@20:43, Bougatfa@20:45"},
+ {id:'tE519', name:'519 — Tunis → Bougatfa',
+  stopsText:"Tunis@21:00, Sayda Manoubia@21:04, Ennajah@21:06, Etayarane@21:09, Ezzouhour 2@21:11, Elhrayria@21:13, Bougatfa@21:15"},
+ {id:'tE521', name:'521 — Tunis → Bougatfa',
+  stopsText:"Tunis@21:30, Sayda Manoubia@21:34, Ennajah@21:36, Etayarane@21:39, Ezzouhour 2@21:41, Elhrayria@21:43, Bougatfa@21:45"},
+ {id:'tE523', name:'523 — Tunis → Bougatfa',
+  stopsText:"Tunis@22:00, Sayda Manoubia@22:04, Ennajah@22:06, Etayarane@22:09, Ezzouhour 2@22:11, Elhrayria@22:13, Bougatfa@22:15"},
 ];
 
 let trains = JSON.parse(localStorage.getItem('qitari_trains')||'null') || DEFAULT_TRAINS.map(t=>({...t}));
@@ -372,6 +728,84 @@ function parseStops(stopsText){
     const coord = STATIONS[name];
     return coord ? {name,time,lat:coord[0],lon:coord[1]} : {name,time,lat:null,lon:null,unknown:true};
   });
+}
+
+// ---------- SNCFT بيانات مباشرة (فقط لكشف التأخير على الخط، لا تغيّر شيئاً في محرك التوقيت v8) ----------
+const SNCFT_LIVE_URL = 'https://www.sncft.com.tn/wp-content/plugins/sncft-live-tracker/proxy.php';
+let liveTrains = [];
+let liveFetchOk = false;
+let liveFetchTimer = null;
+let liveFetchAt = 0; // وقت آخر جلب ناجح للبيانات المباشرة (ms) — يُستعمل لمنع استعمال بيانات قديمة (مثلاً من الأمس)
+const LIVE_DATA_MAX_AGE_MS = 90*1000; // بعد 90 ثانية بدون تحديث ناجح، تُعتبر البيانات منتهية الصلاحية ولا تُستعمل إطلاقاً
+const MAX_STALE_DELAY_BUFFER_MIN = 10; // إن تجاوز الوقت الحالي توقيت المحطة المرصودة بأكثر من هذا الهامش، فالقطار قطعاً مرّ من هناك فعلاً — الخبر أصبح بلا فائدة ويُهمَل
+function stripAccents(s){ return (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
+function normName(s){ return stripAccents(s).toUpperCase().trim(); }
+// تطابق مرن بين اسم محطة من الجدول واسم محطة قادم من البيانات المباشرة (قد يكون مختصراً)
+function stationNamesMatch(a,b){
+  if(!a || !b) return false;
+  const na=normName(a), nb=normName(b);
+  if(!na || !nb) return false;
+  return na===nb || na.includes(nb) || nb.includes(na);
+}
+// تتحقق أن بيانات التأخير المباشرة حديثة فعلاً (وليست من جلسة قديمة/يوم سابق قد يكون التطبيق بقي مفتوحاً منذ ذلك الوقت)
+function isLiveDataFresh(){
+  return liveFetchOk && liveTrains.length>0 && (Date.now()-liveFetchAt) < LIVE_DATA_MAX_AGE_MS;
+}
+async function fetchLiveTrains(){
+  try{
+    const res = await fetch(SNCFT_LIVE_URL, {cache:'no-store'});
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const data = await res.json();
+    liveTrains = Array.isArray(data) ? data : [];
+    liveFetchOk = true;
+    liveFetchAt = Date.now();
+    const dot=document.getElementById('liveDot'), txt=document.getElementById('liveStatusTxt');
+    if(dot) dot.className='status-dot on';
+    if(txt) txt.textContent = 'متصل ✓';
+  }catch(e){
+    liveFetchOk = false;
+    const dot=document.getElementById('liveDot'), txt=document.getElementById('liveStatusTxt');
+    if(dot) dot.className='status-dot off';
+    if(txt) txt.textContent = 'غير متوفر (تقدير الجدول فقط)';
+    console.warn('SNCFT live fetch échoué (CORS ou réseau) — recherche بالجدول فقط:', e.message);
+  }
+}
+// يجمع القطارات الفعلية وراء هذه الرحلة (قطار واحد إن كانت مباشرة، أو قطاران إن كانت بتبديل) مع محطاتهم وأوقاتهم
+function routeUnderlyingTrains(route){
+  const list = [];
+  if(route.type==='direct'){
+    const t = trains.find(tt=>tt.name===route.trainName);
+    if(t){ const stops=parseStops(t.stopsText).filter(s=>!s.unknown && s.time); if(stops.length) list.push(stops); }
+  } else if(route.type==='transfer'){
+    const tA = trains.find(tt=>tt.name===route.trainName);
+    const tB = trains.find(tt=>tt.name===route.trainName2);
+    if(tA){ const stops=parseStops(tA.stopsText).filter(s=>!s.unknown && s.time); if(stops.length) list.push(stops); }
+    if(tB){ const stops=parseStops(tB.stopsText).filter(s=>!s.unknown && s.time); if(stops.length) list.push(stops); }
+  }
+  return list;
+}
+// يبحث في البيانات المباشرة عن تأخير مسجّل على أحد محطات هذا الخط (ويتجاهل أي خبر أصبح قديماً بلا فائدة)
+function findLiveDelayForRoute(route){
+  if(!isLiveDataFresh()) return null;
+  const trainsStops = routeUnderlyingTrains(route);
+  const now = Date.now();
+  let best = null;
+  liveTrains.forEach(lt=>{
+    const delay = Number(lt.delay)||0;
+    if(delay<=0) return;
+    trainsStops.forEach(stops=>{
+      const matched = stops.find(s=> stationNamesMatch(s.name, lt.curFr) || stationNamesMatch(s.name, lt.nextFr));
+      if(!matched) return;
+      // الوصول الفعلي المتوقّع لهذا القطار بالذات = وقت وصوله الأخير المجدول + التأخير نفسه. تجاوزنا هذا الوقت (+ هامش) يعني وصل فعلاً وانتهت رحلته
+      const lastStop = stops[stops.length-1];
+      const expectedRealArrival = todayAt(lastStop.time).getTime() + delay*60000;
+      if(now > expectedRealArrival + MAX_STALE_DELAY_BUFFER_MIN*60000) return;
+      if(!best || delay>best.delay){
+        best = {delay, num:lt.num, name:lt.name, curFr:lt.curFr, nextFr:lt.nextFr};
+      }
+    });
+  });
+  return best;
 }
 
 // ---------- map init ----------
@@ -448,7 +882,6 @@ function renderLines(){
       trains.splice(+e.target.dataset.del,1); saveTrains(); renderLines();
     });
   });
-  renderTimetable();
   populateStationSelects();
 }
 document.getElementById('addLineBtn').onclick=()=>{
@@ -475,61 +908,12 @@ applyLinesVisibility();
 
 // ---------- الاطلاع على التوقيت (حسب المحطة، رقم القطار، مدة الرحلة) ----------
 function minutesOf(hhmm){ const [h,m]=hhmm.split(':').map(Number); return h*60+m; }
+function minsToHHMM(mins){ mins=((mins%1440)+1440)%1440; const h=Math.floor(mins/60), m=mins%60; return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0'); }
 function formatDuration(mins){
   if(mins<0) mins += 24*60; // عبور منتصف الليل
   const h=Math.floor(mins/60), m=mins%60;
   return h>0 ? (h+'س'+String(m).padStart(2,'0')) : (m+' د');
 }
-function populateStationSelect(){
-  const sel = document.getElementById('stationSelect');
-  if(!sel) return;
-  const used = new Set();
-  trains.forEach(t=> parseStops(t.stopsText).forEach(s=>{ if(!s.unknown) used.add(s.name); }));
-  const names = Array.from(used).sort((a,b)=>a.localeCompare(b,'fr'));
-  const current = sel.value;
-  sel.innerHTML = '<option value="">— كل المحطات (نظرة عامة) —</option>' +
-    names.map(n=>`<option value="${n}">${n}</option>`).join('');
-  if(names.includes(current)) sel.value = current;
-}
-function renderTimetable(){
-  populateStationSelect();
-  const sel = document.getElementById('stationSelect');
-  if(!sel) return;
-  const filter = sel.value;
-  const box = document.getElementById('timetableList');
-  const rows = [];
-  trains.forEach(t=>{
-    const stops = parseStops(t.stopsText).filter(s=>!s.unknown && s.time);
-    if(stops.length<2) return;
-    const first=stops[0], last=stops[stops.length-1];
-    const duree = formatDuration(minutesOf(last.time)-minutesOf(first.time));
-    if(filter){
-      const hit = stops.find(s=>s.name===filter);
-      if(!hit) return;
-      rows.push({sortKey:minutesOf(hit.time), html:`
-        <div class="line-item">
-          <div class="row" style="border:none;padding:2px 0"><span>🚆 <b>${t.name}</b></span><b>${hit.time}</b></div>
-          <div class="row" style="border:none;padding:2px 0"><span>الرحلة</span><b style="font-weight:600">${first.name} → ${last.name}</b></div>
-          <div class="row" style="border:none;padding:2px 0"><span>الانطلاق من الأصل</span><b>${first.time} (${first.name})</b></div>
-          <div class="row" style="border:none;padding:2px 0"><span>الوصول إلى الوجهة</span><b>${last.time} (${last.name})</b></div>
-          <div class="row" style="border:none;padding:2px 0"><span>مدة الرحلة الكلية</span><b>${duree}</b></div>
-        </div>`});
-    } else {
-      rows.push({sortKey:minutesOf(first.time), html:`
-        <div class="line-item">
-          <div class="row" style="border:none;padding:2px 0"><span>🚆 <b>${t.name}</b></span><span class="badge">${stops.length} محطات</span></div>
-          <div class="row" style="border:none;padding:2px 0"><span>${first.name}</span><b>${first.time}</b></div>
-          <div class="row" style="border:none;padding:2px 0"><span>${last.name}</span><b>${last.time}</b></div>
-          <div class="row" style="border:none;padding:2px 0"><span>مدة الرحلة الكلية</span><b>${duree}</b></div>
-        </div>`});
-    }
-  });
-  rows.sort((a,b)=>a.sortKey-b.sortKey);
-  box.innerHTML = rows.length ? rows.map(r=>r.html).join('') :
-    '<div class="small-note">لا يوجد قطار لهذه المحطة.</div>';
-}
-document.getElementById('stationSelect').addEventListener('change', renderTimetable);
-
 // ---------- خطة الرحلة: اختيار محطة الانطلاق ومحطة الوصول مباشرة ----------
 function stationNamesUsedInTrains(){
   const used = new Set();
@@ -538,7 +922,7 @@ function stationNamesUsedInTrains(){
 }
 function populateStationSelects(){
   const names = stationNamesUsedInTrains();
-  [{id:'fromSelect', ph:'— اختر محطة الانطلاق —'},{id:'destSelect', ph:'— اختر محطة الوصول —'}].forEach(cfg=>{
+  [{id:'fromSelect', ph:'— محطة الانطلاق (اتركها فارغة لعرض كل الرحلات) —'},{id:'destSelect', ph:'— محطة الوصول (اتركها فارغة لعرض كل الرحلات) —'}].forEach(cfg=>{
     const sel = document.getElementById(cfg.id);
     if(!sel) return;
     const current = sel.value;
@@ -701,12 +1085,91 @@ function findTransferRoutes(fromName,toName){
   });
   return routes;
 }
+// تعرض كل القطارات (بدون أي تصفية) — تُستعمل عندما يترك المستخدم حقلي الانطلاق والوصول فارغين معاً
+function renderAllTrainsOverview(){
+  const rows = [];
+  trains.forEach(t=>{
+    const stops = parseStops(t.stopsText).filter(s=>!s.unknown && s.time);
+    if(stops.length<2) return;
+    const first=stops[0], last=stops[stops.length-1];
+    const duree = formatDuration(minutesOf(last.time)-minutesOf(first.time));
+    rows.push({sortKey:minutesOf(first.time), html:`
+      <div class="line-item">
+        <div class="row" style="border:none;padding:2px 0"><span>🚆 <b>${t.name}</b></span><span class="badge">${stops.length} محطات</span></div>
+        <div class="row" style="border:none;padding:2px 0"><span>${first.name}</span><b>${first.time}</b></div>
+        <div class="row" style="border:none;padding:2px 0"><span>${last.name}</span><b>${last.time}</b></div>
+        <div class="row" style="border:none;padding:2px 0"><span>مدة الرحلة الكلية</span><b>${duree}</b></div>
+      </div>`});
+  });
+  rows.sort((a,b)=>a.sortKey-b.sortKey);
+  return rows.map(r=>r.html).join('');
+}
+// تعرض كل القطارات المارّة بمحطة واحدة معيّنة — تُستعمل عندما يُترك حقل الانطلاق أو الوصول فارغاً (بدل البحث عن مسار محدد)
+// كل القطارات التي تُغادر فعلاً من محطة معيّنة نحو وجهة أخرى (وليس القطارات التي تنتهي رحلتها عند هذه المحطة)
+function renderDepartureFilter(stationName){
+  const rows = [];
+  trains.forEach(t=>{
+    const stops = parseStops(t.stopsText).filter(s=>!s.unknown && s.time);
+    if(stops.length<2) return;
+    const idx = stops.findIndex(s=>s.name===stationName);
+    if(idx===-1) return;
+    if(idx===stops.length-1) return; // هذه المحطة هي نهاية الخط لهذا القطار — لا يمكن "الانطلاق" منها بهذا القطار
+    const hit = stops[idx], last = stops[stops.length-1];
+    const duree = formatDuration(minutesOf(last.time)-minutesOf(hit.time));
+    rows.push({sortKey:minutesOf(hit.time), html:`
+      <div class="line-item">
+        <div class="row" style="border:none;padding:2px 0"><span>🚆 <b>${t.name}</b></span><b>${hit.time}</b></div>
+        <div class="row" style="border:none;padding:2px 0"><span>الانطلاق من</span><b>${hit.time} (${stationName})</b></div>
+        <div class="row" style="border:none;padding:2px 0"><span>الوصول إلى</span><b>${last.time} (${last.name})</b></div>
+        <div class="row" style="border:none;padding:2px 0"><span>مدة الرحلة</span><b>${duree}</b></div>
+      </div>`});
+  });
+  rows.sort((a,b)=>a.sortKey-b.sortKey);
+  return rows.length ? rows.map(r=>r.html).join('') :
+    '<div class="small-note">لا يوجد قطار ينطلق من هذه المحطة.</div>';
+}
+// كل القطارات التي تصل فعلاً إلى محطة معيّنة قادمة من مكان آخر (وليس القطارات التي تنطلق أصلاً من هذه المحطة)
+function renderArrivalFilter(stationName){
+  const rows = [];
+  trains.forEach(t=>{
+    const stops = parseStops(t.stopsText).filter(s=>!s.unknown && s.time);
+    if(stops.length<2) return;
+    const idx = stops.findIndex(s=>s.name===stationName);
+    if(idx===-1) return;
+    if(idx===0) return; // هذه المحطة هي بداية الخط لهذا القطار — لا معنى لـ"الوصول" إليها بهذا القطار
+    const hit = stops[idx], first = stops[0];
+    const duree = formatDuration(minutesOf(hit.time)-minutesOf(first.time));
+    rows.push({sortKey:minutesOf(hit.time), html:`
+      <div class="line-item">
+        <div class="row" style="border:none;padding:2px 0"><span>🚆 <b>${t.name}</b></span><b>${hit.time}</b></div>
+        <div class="row" style="border:none;padding:2px 0"><span>الانطلاق من</span><b>${first.time} (${first.name})</b></div>
+        <div class="row" style="border:none;padding:2px 0"><span>الوصول إلى</span><b>${hit.time} (${stationName})</b></div>
+        <div class="row" style="border:none;padding:2px 0"><span>مدة الرحلة</span><b>${duree}</b></div>
+      </div>`});
+  });
+  rows.sort((a,b)=>a.sortKey-b.sortKey);
+  return rows.length ? rows.map(r=>r.html).join('') :
+    '<div class="small-note">لا يوجد قطار يصل إلى هذه المحطة.</div>';
+}
 function planTrip(){
   const resultBox = document.getElementById('tripResult');
   const fromSel = document.getElementById('fromSelect').value;
   const toSel = document.getElementById('destSelect').value;
-  if(!fromSel){ resultBox.innerHTML = '<div class="small-note" style="color:#ff8888">اختر أولاً محطة الانطلاق.</div>'; return; }
-  if(!toSel){ resultBox.innerHTML = '<div class="small-note" style="color:#ff8888">اختر أولاً محطة الوصول.</div>'; return; }
+  // إذا تُرك الحقلان فارغين معاً: نظرة عامة على كل القطارات
+  if(!fromSel && !toSel){
+    resultBox.innerHTML = '<div class="small-note">📋 كل القطارات (اختر محطة انطلاق و/أو وصول لتضييق البحث):</div>' + renderAllTrainsOverview();
+    return;
+  }
+  // إذا تُرك حقل الانطلاق فارغاً: كل القطارات الواصلة فعلاً إلى محطة الوصول (وليس القطارات المنطلقة منها)
+  if(!fromSel && toSel){
+    resultBox.innerHTML = '<div class="small-note">📋 كل القطارات الواصلة إلى محطة <b>'+toSel+'</b> (اختر أيضاً محطة الانطلاق لتضييق البحث):</div>' + renderArrivalFilter(toSel);
+    return;
+  }
+  // إذا تُرك حقل الوصول فارغاً: كل القطارات المنطلقة فعلاً من محطة الانطلاق (وليس القطارات المنتهية عندها)
+  if(fromSel && !toSel){
+    resultBox.innerHTML = '<div class="small-note">📋 كل القطارات المنطلقة من محطة <b>'+fromSel+'</b> (اختر أيضاً محطة الوصول لتضييق البحث):</div>' + renderDepartureFilter(fromSel);
+    return;
+  }
   // إذا جاءت المحطة من الخريطة/GPS نجرب كل المحطات القريبة المرشحة، وإلا نستعمل فقط المحطة المختارة يدوياً
   const fromList = (fromCandidates && fromCandidates.length) ? fromCandidates : [fromSel];
   const toList = (toCandidates && toCandidates.length) ? toCandidates : [toSel];
@@ -719,7 +1182,10 @@ function planTrip(){
     indirect = routes.length>0;
   }
   const now = minsNow();
-  routes.forEach(r=>{ const dep=minutesOf(r.depTime); r.waitMin=(dep-now+1440)%1440; });
+  routes.forEach(r=>{
+    r.liveDelay = findLiveDelayForRoute(r);
+    const dep=minutesOf(r.depTime); r.waitMin=(dep-now+1440)%1440; // الترتيب دائماً حسب توقيت الجدول الرسمي
+  });
   routes.sort((a,b)=>a.waitMin-b.waitMin);
   routes = routes.slice(0,6);
   const combosNote = usingCombos ? '<div class="small-note">🔎 تم البحث تلقائياً عبر عدة محطات قريبة من نقطتك لإيجاد أفضل حل.</div>' : '';
@@ -730,30 +1196,58 @@ function planTrip(){
   resultBox.innerHTML = combosNote + routes.map(r=>{
     const isTomorrow = minutesOf(r.depTime) < now;
     const badge = isTomorrow ? '<span class="badge" style="background:#7ee787;color:#023">غداً</span>' : '';
+    const liveDelay = r.liveDelay;
+    // ملاحظة إعلامية فقط: التأخير الحقيقي لا يغيّر توقيت الجدول المعروض هنا (هذا ليس دوره)،
+    // فالتأخير المرصود على القطار قد يحدث في منتصف الرحلة، وليس بالضرورة من نقطة الانطلاق.
+    // دوره الحقيقي هو حساب موقع القطار الفعلي على السكة لتقييم خطر التصادم (أنظر computeRisk/trainPositionNow).
+    const delayNote = liveDelay
+      ? `<div class="small-note" style="color:#ff9800;border-color:#ff9800">⏱️ تأخير حقيقي مرصود الآن على هذا الخط: <b>+${liveDelay.delay} د</b>${liveDelay.num?(' (قطار '+liveDelay.num+')'):''} — قرب ${liveDelay.curFr||'?'}${liveDelay.nextFr?(' → '+liveDelay.nextFr):''}. التوقيت أعلاه هو توقيت الجدول الرسمي (التأخير لا يغيّره).</div>`
+      : '';
+    const depDisplay = `<b>${r.depTime}</b>`;
+    const arrDisplay = `<b>${r.arrTime}</b>`;
     if(r.type==='direct'){
       const duree = formatDuration(minutesOf(r.arrTime)-minutesOf(r.depTime));
       return `<div class="line-item">
         <div class="row" style="border:none;padding:2px 0"><span>🚆 <b>${r.trainName}</b></span>${badge}</div>
-        <div class="row" style="border:none;padding:2px 0"><span>الانطلاق</span><b>${r.depTime} — ${r.fromName}</b></div>
-        <div class="row" style="border:none;padding:2px 0"><span>الوصول</span><b>${r.arrTime} — ${r.toName}</b></div>
+        <div class="row" style="border:none;padding:2px 0"><span>الانطلاق</span>${depDisplay} — ${r.fromName}</div>
+        <div class="row" style="border:none;padding:2px 0"><span>الوصول</span>${arrDisplay} — ${r.toName}</div>
         <div class="row" style="border:none;padding:2px 0"><span>مدة الرحلة</span><b>${duree}</b></div>
+        ${delayNote}
       </div>`;
     } else {
+      const arrTransferDisplay = `<b>${r.arrAtTransfer}</b>`;
+      const depTransferDisplay = `<b>${r.depFromTransfer}</b>`;
       const duree = formatDuration(minutesOf(r.arrTime)-minutesOf(r.depTime));
       return `<div class="line-item">
         <div class="row" style="border:none;padding:2px 0"><span>🔀 تبديل عبر <b>${r.transferStation}</b></span>${badge}</div>
         <div class="row" style="border:none;padding:2px 0"><span>القطار الأول</span><b>${r.trainName}</b></div>
-        <div class="row" style="border:none;padding:2px 0"><span>الانطلاق</span><b>${r.depTime} — ${r.fromName}</b></div>
-        <div class="row" style="border:none;padding:2px 0"><span>الوصول للتبديل</span><b>${r.arrAtTransfer}</b></div>
+        <div class="row" style="border:none;padding:2px 0"><span>الانطلاق</span>${depDisplay} — ${r.fromName}</div>
+        <div class="row" style="border:none;padding:2px 0"><span>الوصول للتبديل</span>${arrTransferDisplay}</div>
         <div class="row" style="border:none;padding:2px 0"><span>القطار الثاني</span><b>${r.trainName2}</b></div>
-        <div class="row" style="border:none;padding:2px 0"><span>الانطلاق من التبديل</span><b>${r.depFromTransfer}</b></div>
-        <div class="row" style="border:none;padding:2px 0"><span>الوصول النهائي</span><b>${r.arrTime} — ${r.toName}</b></div>
+        <div class="row" style="border:none;padding:2px 0"><span>الانطلاق من التبديل</span>${depTransferDisplay}</div>
+        <div class="row" style="border:none;padding:2px 0"><span>الوصول النهائي</span>${arrDisplay} — ${r.toName}</div>
         <div class="row" style="border:none;padding:2px 0"><span>مدة الرحلة الكلية</span><b>${duree}</b></div>
+        ${delayNote}
       </div>`;
     }
   }).join('') + (indirect ? '<div class="small-note">⚠️ لا يوجد قطار مباشر، هذا اقتراح بتبديل واحد.</div>' : '');
 }
-document.getElementById('planTripBtn').onclick = planTrip;
+document.getElementById('planTripBtn').onclick = function(){
+  fetchLiveTrains().finally(planTrip); // نحدّث بيانات التأخير الحقيقية قبل كل بحث
+};
+// تحديث دوري في الخلفية حتى تبقى بيانات التأخير جاهزة حتى قبل أول بحث
+fetchLiveTrains();
+if(liveFetchTimer) clearInterval(liveFetchTimer);
+liveFetchTimer = setInterval(fetchLiveTrains, 30000);
+// فحص دوري إضافي: حتى لو نجح آخر جلب تقنياً، إن مرّ وقت طويل بدون تحديث فعلي (مثلاً التطبيق كان في الخلفية)
+// نعرض الحالة كـ"غير متوفر" حتى لا يظن المستخدم أن البيانات لا تزال حيّة
+setInterval(()=>{
+  if(!isLiveDataFresh()){
+    const dot=document.getElementById('liveDot'), txt=document.getElementById('liveStatusTxt');
+    if(dot) dot.className='status-dot off';
+    if(txt) txt.textContent = 'غير متوفر (تقدير الجدول فقط)';
+  }
+}, 5000);
 
 // ---------- geometry helpers ----------
 function haversine(a,b){
@@ -797,11 +1291,34 @@ function todayAt(hhmm){
   const now=new Date();
   return new Date(now.getFullYear(),now.getMonth(),now.getDate(),h,m,0);
 }
+// يبحث في البيانات المباشرة عن تأخير حقيقي مسجّل لهذا القطار بالذات (وليس لخط رحلة كامل)
+function getLiveDelayForTrain(train){
+  if(!isLiveDataFresh()) return null;
+  const stops = parseStops(train.stopsText).filter(s=>!s.unknown && s.time);
+  if(stops.length<2) return null;
+  const now = Date.now();
+  const lastStop = stops[stops.length-1];
+  let best = null;
+  liveTrains.forEach(lt=>{
+    const delay = Number(lt.delay)||0;
+    if(delay<=0) return;
+    const matched = stops.find(s=> stationNamesMatch(s.name, lt.curFr) || stationNamesMatch(s.name, lt.nextFr));
+    if(!matched) return;
+    // الوصول الفعلي المتوقّع = وقت الوصول المجدول للمحطة الأخيرة + التأخير نفسه. إن تجاوزنا هذا الوقت (+ هامش)، فالقطار وصل قطعاً وانتهت رحلته — الخبر بلا فائدة
+    const expectedRealArrival = todayAt(lastStop.time).getTime() + delay*60000;
+    if(now > expectedRealArrival + MAX_STALE_DELAY_BUFFER_MIN*60000) return;
+    if(!best || delay>best) best = delay;
+  });
+  return best;
+}
 // Position interpolée du train à l'instant présent, ou null s'il n'est pas en service
+// مهم: التأخير الحقيقي المرصود يُستعمل هنا فقط — لإرجاع "الوقت الفعّال" إلى الوراء بمقدار التأخير،
+// فيصبح موقع القطار المحسوب أقرب لموقعه الحقيقي على السكة (لا علاقة له بعرض أوقات الرحلات في المخطط)
 function trainPositionNow(train){
   const stops = parseStops(train.stopsText).filter(s=>!s.unknown && s.time);
   if(stops.length<2) return null;
-  const now = new Date();
+  const delayMin = getLiveDelayForTrain(train) || 0;
+  const now = new Date(Date.now() - delayMin*60000); // القطار المتأخر بـD دقائق هو فعلياً حيث كان يجب أن يكون قبل D دقائق حسب الجدول
   const times = stops.map(s=>todayAt(s.time));
   const first = times[0].getTime() - INACTIVE_MARGIN_MIN*60000;
   const last = times[times.length-1].getTime() + INACTIVE_MARGIN_MIN*60000;
@@ -814,24 +1331,25 @@ function trainPositionNow(train){
       return {
         lat: stops[i].lat + (stops[i+1].lat-stops[i].lat)*frac,
         lon: stops[i].lon + (stops[i+1].lon-stops[i].lon)*frac,
-        fromStation: stops[i].name, toStation: stops[i+1].name
+        fromStation: stops[i].name, toStation: stops[i+1].name, delayMin
       };
     }
   }
-  // avant premier arrêt ou après dernier arrêt, mais dans la marge de tolérance
-  if(t<times[0].getTime()) return {lat:stops[0].lat, lon:stops[0].lon, fromStation:stops[0].name, toStation:stops[0].name};
+  // avant premier arrêt ou après dernier arrêt, مais dans la marge de tolérance
+  if(t<times[0].getTime()) return {lat:stops[0].lat, lon:stops[0].lon, fromStation:stops[0].name, toStation:stops[0].name, delayMin};
   const lastS=stops[stops.length-1];
-  return {lat:lastS.lat, lon:lastS.lon, fromStation:lastS.name, toStation:lastS.name};
+  return {lat:lastS.lat, lon:lastS.lon, fromStation:lastS.name, toStation:lastS.name, delayMin};
 }
 function computeRisk(userPos){
-  let best={risk:0,lineName:'--',dist:Infinity,trainPos:null};
+  let best={risk:0,lineName:'--',dist:Infinity,trainPos:null,trainId:null};
   trains.forEach(train=>{
     const pos = trainPositionNow(train);
     if(!pos) return;
     const dist = haversine(userPos,[pos.lat,pos.lon]);
     const risk = Math.round(Math.max(0, 1 - dist/RISK_THRESHOLD_M)*100);
     if(dist<best.dist){
-      best = {risk, dist, lineName: train.name+' ('+pos.fromStation+' → '+pos.toStation+')', trainPos:{lat:pos.lat,lon:pos.lon}};
+      const delayTxt = pos.delayMin ? (' — متأخر '+pos.delayMin+' د (موقع مصحّح)') : '';
+      best = {risk, dist, lineName: train.name+' ('+pos.fromStation+' → '+pos.toStation+')'+delayTxt, trainPos:{lat:pos.lat,lon:pos.lon}, trainId: train.name};
     }
   });
   // info visuelle: distance à la voie ferrée la plus proche (OSM), indépendant du risque train
@@ -914,12 +1432,48 @@ function updateTrainMarker(trainPos){
     trainMarkers.active.setLatLng(ll);
   }
 }
+// يحسب هل القطار الأقرب يقترب أو يبتعد، وبأي سرعة تقريبية، بمقارنة المسافة لنفس القطار بين قراءتين متتاليتين
+function trainDirectionInfo(result){
+  const now = Date.now();
+  if(!isFinite(result.dist) || !result.trainId){
+    lastTrainId=null; lastTrainDist=null; lastTrainDistTime=null;
+    return null;
+  }
+  let info = null;
+  if(lastTrainId===result.trainId && lastTrainDist!=null && lastTrainDistTime!=null){
+    const dtSec = (now-lastTrainDistTime)/1000;
+    if(dtSec>=3){ // نتجنب القراءات المتقاربة جداً في الوقت لأنها تعطي ضجيجاً
+      const deltaDist = result.dist - lastTrainDist; // سالب = يقترب، موجب = يبتعد
+      const speedKmh = (Math.abs(deltaDist)/dtSec)*3.6;
+      info = {approaching: deltaDist<0, speedKmh};
+      lastTrainDist = result.dist; lastTrainDistTime = now;
+    }
+  } else {
+    lastTrainDist = result.dist; lastTrainDistTime = now;
+  }
+  lastTrainId = result.trainId;
+  return info;
+}
 function recalcAndDisplay(){
   if(!lastPos) return;
   const result = computeRisk(lastPos);
-  document.getElementById('nearLine').textContent = result.lineName;
-  const trackTxt = result.trackInfo ? formatDist(result.trackInfo.dist)+' (سكة)' : '--';
-  document.getElementById('distLine').textContent = isFinite(result.dist)? formatDist(result.dist)+' (قطار) · '+trackTxt : trackTxt;
+  // القطار الأقرب (بالاعتماد على موقعه الحقيقي المُقدّر من التوقيت)
+  document.getElementById('nearLine').textContent = isFinite(result.dist) ? result.lineName : 'لا يوجد قطار بالخدمة حالياً';
+  document.getElementById('distTrain').textContent = isFinite(result.dist) ? formatDist(result.dist) : '--';
+  const dirInfo = trainDirectionInfo(result);
+  const dirEl = document.getElementById('trainDirection');
+  if(!isFinite(result.dist)){
+    dirEl.textContent = '--'; dirEl.style.color='';
+  } else if(dirInfo){
+    const speedTxt = dirInfo.speedKmh.toFixed(1)+' كم/سا';
+    if(dirInfo.approaching){ dirEl.textContent='🔴 القطار الأقرب يقترب بسرعة '+speedTxt; dirEl.style.color='#ff4d4d'; }
+    else { dirEl.textContent='🟢 القطار الأقرب يبتعد بسرعة '+speedTxt; dirEl.style.color='#4dff88'; }
+  } else {
+    dirEl.textContent = '⏳ جارٍ التحديد...'; dirEl.style.color='';
+  }
+  // السكة الحديدية الأقرب (بيانات OSM الثابتة، مستقلة تماماً عن أي قطار)
+  document.getElementById('nearTrack').textContent = result.trackInfo ? result.trackInfo.name : '--';
+  document.getElementById('distTrack').textContent = result.trackInfo ? formatDist(result.trackInfo.dist) : '--';
   updateGauge(result.risk);
   updateTrainMarker(result.trainPos);
   lastRisk = result.risk;
