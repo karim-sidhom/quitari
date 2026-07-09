@@ -1022,6 +1022,87 @@ if('serviceWorker' in navigator){
   navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(()=>{});
 }
 
+// ---------- API pour Farhoum (intégration cachée : questions départ/arrivée + risque de collision) ----------
+function normalizeStationName(s){
+  return (s||'').toString().normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+}
+function stationBaseGroups(){
+  const map={};
+  Object.keys(STATIONS).forEach(k=>{
+    const base = k.replace(/\s+(Arrivée|Départ|1er arrêt|2ème arrêt)$/,'').trim();
+    if(!map[base]) map[base]=[];
+    map[base].push(k);
+  });
+  return map;
+}
+function matchStationNames(query){
+  const nq = normalizeStationName(query);
+  if(!nq) return [];
+  const map = stationBaseGroups();
+  let candidates=[];
+  Object.keys(map).forEach(base=>{
+    const nb = normalizeStationName(base);
+    if(nb===nq) candidates.push(...map[base]);
+  });
+  if(!candidates.length){
+    Object.keys(map).forEach(base=>{
+      const nb = normalizeStationName(base);
+      if(nb.indexOf(nq)===0 || nq.indexOf(nb)===0) candidates.push(...map[base]);
+    });
+  }
+  if(!candidates.length){
+    Object.keys(map).forEach(base=>{
+      const nb = normalizeStationName(base);
+      if(nb.indexOf(nq)!==-1 || nq.indexOf(nb)!==-1) candidates.push(...map[base]);
+    });
+  }
+  return candidates;
+}
+function qitariHandleTripQuery(d){
+  const fromCands = matchStationNames(d.from);
+  const toCands = matchStationNames(d.to);
+  let routes=[];
+  fromCands.forEach(fN=>{ toCands.forEach(tN=>{ if(fN!==tN) routes.push(...findDirectRoutes(fN,tN)); }); });
+  let indirect=false;
+  if(!routes.length){
+    fromCands.forEach(fN=>{ toCands.forEach(tN=>{ if(fN!==tN) routes.push(...findTransferRoutes(fN,tN)); }); });
+    indirect = routes.length>0;
+  }
+  const now = minsNow();
+  routes.forEach(r=>{ const dep=minutesOf(r.depTime); r.waitMin=(dep-now+1440)%1440; });
+  routes.sort((a,b)=>a.waitMin-b.waitMin);
+  routes = routes.slice(0,3);
+  return {
+    type:'qitari_trip_result', requestId:d.requestId,
+    fromFound: !!fromCands.length, toFound: !!toCands.length,
+    ok: !!routes.length, indirect,
+    route: routes[0]||null, allRoutes: routes
+  };
+}
+function qitariHandleRiskQuery(d){
+  if(!lastPos){ return {type:'qitari_risk_result', requestId:d.requestId, hasPos:false}; }
+  const result = computeRisk(lastPos);
+  return {type:'qitari_risk_result', requestId:d.requestId, hasPos:true, risk:result.risk, lineName:result.lineName, dist:result.dist};
+}
+window.addEventListener('message', function(ev){
+  const d = ev.data || {};
+  if(d.type === 'qitari_trip_query'){
+    try{ ev.source.postMessage(qitariHandleTripQuery(d), ev.origin==='null'?'*':ev.origin); }catch(e){}
+  } else if(d.type === 'qitari_risk_query'){
+    try{ ev.source.postMessage(qitariHandleRiskQuery(d), ev.origin==='null'?'*':ev.origin); }catch(e){}
+  }
+});
+// signale à Farhoum que قِطاري est prête (permet aussi de savoir qu'elle tourne en caché)
+function qitariNotifyReady(){
+  try{ if(window.parent && window.parent!==window) window.parent.postMessage({type:'qitari_ready'}, '*'); }catch(e){}
+}
+qitariNotifyReady();
+// si قِطاري est chargée en caché dans une iframe (ex: Farhoum), on démarre le suivi GPS
+// automatiquement pour que le risque de collision soit toujours disponible en arrière-plan.
+if(window.self !== window.top && navigator.geolocation){
+  setTimeout(function(){ try{ startWatch(); }catch(e){} }, 800);
+}
+
 // ---------- init ----------
 initMap();
 renderLines();
