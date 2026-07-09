@@ -129,7 +129,10 @@ body{
     <h3>📡 الحالة</h3>
     <div class="row"><span>GPS <span class="status-dot off" id="gpsDot"></span></span><b id="gpsAcc">--</b></div>
     <div class="row"><span>أقرب قطار</span><b id="nearLine">--</b></div>
+    <div class="row"><span>رقم القطار</span><b id="nearTrainNum">--</b></div>
     <div class="row"><span>المسافة إلى القطار</span><b id="distTrain">--</b></div>
+    <div class="row"><span>انطلق من</span><b id="nearTrainDep">--</b></div>
+    <div class="row"><span>الوصول المقدر</span><b id="nearTrainArr">--</b></div>
     <div class="row"><span>اتجاه القطار</span><b id="trainDirection">--</b></div>
     <div class="row"><span>أقرب سكة حديدية</span><b id="nearTrack">--</b></div>
     <div class="row"><span>المسافة إلى السكة</span><b id="distTrack">--</b></div>
@@ -1460,6 +1463,21 @@ function recalcAndDisplay(){
   // القطار الأقرب (بالاعتماد على موقعه الحقيقي المُقدّر من التوقيت)
   document.getElementById('nearLine').textContent = isFinite(result.dist) ? result.lineName : 'لا يوجد قطار بالخدمة حالياً';
   document.getElementById('distTrain').textContent = isFinite(result.dist) ? formatDist(result.dist) : '--';
+  const numEl = document.getElementById('nearTrainNum');
+  numEl.textContent = (isFinite(result.dist) && result.trainId) ? result.trainId.split('—')[0].trim() : '--';
+  // انطلق من / الوصول المقدر — للقطار الأقرب فقط
+  const depEl = document.getElementById('nearTrainDep'), arrEl = document.getElementById('nearTrainArr');
+  if(isFinite(result.dist) && result.trainId){
+    const nearTrain = trains.find(t=>t.name===result.trainId);
+    const stops = nearTrain ? parseStops(nearTrain.stopsText).filter(s=>!s.unknown && s.time) : [];
+    if(stops.length>=2){
+      const first=stops[0], last=stops[stops.length-1];
+      const delayMin = getLiveDelayForTrain(nearTrain) || 0;
+      const estArr = delayMin ? minsToHHMM(minutesOf(last.time)+delayMin) : last.time;
+      depEl.textContent = first.time+' ('+first.name+')';
+      arrEl.textContent = estArr+' ('+last.name+')'+(delayMin ? ' — متأخر '+delayMin+' د' : '');
+    } else { depEl.textContent='--'; arrEl.textContent='--'; }
+  } else { depEl.textContent='--'; arrEl.textContent='--'; }
   const dirInfo = trainDirectionInfo(result);
   const dirEl = document.getElementById('trainDirection');
   if(!isFinite(result.dist)){
