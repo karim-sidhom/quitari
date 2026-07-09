@@ -787,6 +787,19 @@ function routeUnderlyingTrains(route){
   }
   return list;
 }
+// يستخرج "رقم القطار" من اسمه المعروض (الجزء قبل الشرطة —)، مع إزالة أي لاحقة بين قوسين مثل (A)/(B)
+function extractTrainNumber(trainName){
+  return (trainName||'').split('—')[0].replace(/\(.*?\)/g,'').trim();
+}
+// يتحقق أن رقم القطار المرصود في البيانات المباشرة (lt.num) يطابق فعلاً رقم قطارنا — وليس فقط أنهما يمرّان بنفس المحطة
+// هذا أساسي: محطات مثل حمام الأنف أو قرمبالية يمرّ بها عشرات القطارات المختلفة، فمطابقة الاسم وحدها كانت تُلصق تأخير قطار آخر تماماً بقطارنا
+function trainNumberMatches(trainName, ltNum){
+  if(!ltNum) return false;
+  const ours = extractTrainNumber(trainName);
+  const lv = String(ltNum).trim();
+  if(!ours || !lv) return false;
+  return ours === lv || ours.includes(lv) || lv.includes(ours);
+}
 // يبحث في البيانات المباشرة عن تأخير مسجّل على أحد محطات هذا الخط (ويتجاهل أي خبر أصبح قديماً بلا فائدة)
 function findLiveDelayForRoute(route){
   if(!isLiveDataFresh()) return null;
@@ -796,7 +809,9 @@ function findLiveDelayForRoute(route){
   liveTrains.forEach(lt=>{
     const delay = Number(lt.delay)||0;
     if(delay<=0) return;
-    trainsStops.forEach(stops=>{
+    trainsStops.forEach((stops, idx)=>{
+      const trainName = idx===0 ? route.trainName : route.trainName2;
+      if(!trainNumberMatches(trainName, lt.num)) return; // شرط أساسي: رقم القطار يجب أن يتطابق فعلاً
       const matched = stops.find(s=> stationNamesMatch(s.name, lt.curFr) || stationNamesMatch(s.name, lt.nextFr));
       if(!matched) return;
       // الوصول الفعلي المتوقّع لهذا القطار بالذات = وقت وصوله الأخير المجدول + التأخير نفسه. تجاوزنا هذا الوقت (+ هامش) يعني وصل فعلاً وانتهت رحلته
@@ -1305,6 +1320,7 @@ function getLiveDelayForTrain(train){
   liveTrains.forEach(lt=>{
     const delay = Number(lt.delay)||0;
     if(delay<=0) return;
+    if(!trainNumberMatches(train.name, lt.num)) return; // شرط أساسي: رقم القطار يجب أن يتطابق فعلاً، وليس فقط مشاركة نفس المحطة
     const matched = stops.find(s=> stationNamesMatch(s.name, lt.curFr) || stationNamesMatch(s.name, lt.nextFr));
     if(!matched) return;
     // الوصول الفعلي المتوقّع = وقت الوصول المجدول للمحطة الأخيرة + التأخير نفسه. إن تجاوزنا هذا الوقت (+ هامش)، فالقطار وصل قطعاً وانتهت رحلته — الخبر بلا فائدة
