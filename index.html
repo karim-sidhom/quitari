@@ -129,6 +129,7 @@ body{
     <h3>📡 الحالة</h3>
     <div class="row"><span>GPS <span class="status-dot off" id="gpsDot"></span></span><b id="gpsAcc">--</b></div>
     <div class="row"><span>أقرب قطار</span><b id="nearLine">--</b></div>
+    <div id="neverCloseNote" class="small-note" style="display:none;color:#7ee787;border-color:#7ee787"></div>
     <div class="row"><span>رقم القطار</span><b id="nearTrainNum">--</b></div>
     <div class="row"><span>المسافة إلى القطار</span><b id="distTrain">--</b></div>
     <div class="row"><span>انطلق من</span><b id="nearTrainDep">--</b></div>
@@ -136,6 +137,7 @@ body{
     <div class="row"><span>اتجاه القطار</span><b id="trainDirection">--</b></div>
     <div class="row"><span>أقرب سكة حديدية</span><b id="nearTrack">--</b></div>
     <div class="row"><span>المسافة إلى السكة</span><b id="distTrack">--</b></div>
+    <div class="row"><span>⏱️ منطقة آمنة لمدة</span><b id="safeTimeZone">--</b></div>
     <div class="row"><span>السرعة الحالية</span><b id="speedNow">--</b></div>
     <button class="btn" id="startBtn">▶️ تشغيل المراقبة</button>
     <button class="btn secondary" id="stopBtn" style="display:none">⏸️ إيقاف المراقبة</button>
@@ -948,6 +950,24 @@ function populateStationSelects(){
     if(names.includes(current)) sel.value = current;
   });
 }
+// يبحث عن أقرب توقيت لقطار قادم عند محطة معيّنة (اليوم، أو غداً بنفس التوقيت إن كان قد مرّ اليوم بالفعل)
+function nextTrainAtStation(stationName){
+  const now = Date.now();
+  let best = null;
+  trains.forEach(t=>{
+    const stops = parseStops(t.stopsText).filter(s=>!s.unknown && s.time);
+    const hit = stops.find(s=>s.name===stationName);
+    if(!hit) return;
+    let hitTime = todayAt(hit.time).getTime();
+    if(hitTime < now) hitTime += 24*3600000; // القطار يمرّ مجدداً غداً بنفس التوقيت
+    if(!best || hitTime<best.time) best = {time:hitTime, train:t, stationTime:hit.time};
+  });
+  return best;
+}
+function formatHoursMinutes(mins){
+  const h=Math.floor(mins/60), m=Math.round(mins%60);
+  return h>0 ? (h+' ساعة'+(m>0?(' و'+m+' د'):'')) : (m+' دقيقة');
+}
 function nearestStation(pos){
   let best=null, bestDist=Infinity;
   Object.entries(STATIONS).forEach(([name,coord])=>{
@@ -1359,6 +1379,14 @@ function trainPositionNow(train){
   const lastS=stops[stops.length-1];
   return {lat:lastS.lat, lon:lastS.lon, fromStation:lastS.name, toStation:lastS.name, delayMin};
 }
+// المسافة الدنيا الممكنة بين موقع المستخدم وكامل مسار هذا القطار: بين كل محطة والتي تليها (القطار يسير على السكة بينهما أيضاً، لا يقفز من محطة لمحطة)
+const NEVER_CLOSE_THRESHOLD_M = 300;
+function trainRouteMinDistance(userPos, train){
+  const stops = parseStops(train.stopsText).filter(s=>!s.unknown);
+  if(stops.length<2) return Infinity;
+  const coords = stops.map(s=>[s.lat,s.lon]);
+  return nearestOnTrack(userPos, coords).dist;
+}
 function computeRisk(userPos){
   let best={risk:0,lineName:'--',dist:Infinity,trainPos:null,trainId:null};
   trains.forEach(train=>{
@@ -1478,6 +1506,15 @@ function recalcAndDisplay(){
   const result = computeRisk(lastPos);
   // القطار الأقرب (بالاعتماد على موقعه الحقيقي المُقدّر من التوقيت)
   document.getElementById('nearLine').textContent = isFinite(result.dist) ? result.lineName : 'لا يوجد قطار بالخدمة حالياً';
+  const neverCloseEl = document.getElementById('neverCloseNote');
+  if(isFinite(result.dist) && result.trainId){
+    const nt = trains.find(t=>t.name===result.trainId);
+    const minPossible = nt ? trainRouteMinDistance(lastPos, nt) : Infinity;
+    if(minPossible > NEVER_CLOSE_THRESHOLD_M){
+      neverCloseEl.style.display='block';
+      neverCloseEl.textContent = '✅ هذا القطار قريب في الترتيب فقط، لكنه لن يمرّ أبداً قرب منطقتك في رحلته — لا داعي للقلق، أعرضه فقط على سبيل الإعلام.';
+    } else { neverCloseEl.style.display='none'; }
+  } else { neverCloseEl.style.display='none'; }
   document.getElementById('distTrain').textContent = isFinite(result.dist) ? formatDist(result.dist) : '--';
   const numEl = document.getElementById('nearTrainNum');
   numEl.textContent = (isFinite(result.dist) && result.trainId) ? result.trainId.split('—')[0].trim() : '--';
@@ -1508,6 +1545,17 @@ function recalcAndDisplay(){
   // السكة الحديدية الأقرب (بيانات OSM الثابتة، مستقلة تماماً عن أي قطار)
   document.getElementById('nearTrack').textContent = result.trackInfo ? result.trackInfo.name : '--';
   document.getElementById('distTrack').textContent = result.trackInfo ? formatDist(result.trackInfo.dist) : '--';
+  // منطقة آمنة لمدة: الوقت المتبقي حتى مرور أقرب قطار قادم عند أقرب محطة مستعملة لموقعك
+  const safeEl = document.getElementById('safeTimeZone');
+  const nearSt = nearestUsedStation(lastPos);
+  const nextT = (nearSt && nearSt.name) ? nextTrainAtStation(nearSt.name) : null;
+  if(nextT){
+    const minsLeft = (nextT.time - Date.now())/60000;
+    const isTomorrow = nextT.time > (todayAt('23:59').getTime());
+    const dayTxt = isTomorrow ? ' — غداً' : ' — اليوم';
+    if(minsLeft <= 15){ safeEl.textContent = '⚠️ قطار خلال '+formatHoursMinutes(minsLeft)+' عند '+nearSt.name+' (الساعة '+nextT.stationTime+dayTxt+')'; safeEl.style.color='#ff8888'; }
+    else { safeEl.textContent = formatHoursMinutes(minsLeft)+' (قطار '+nextT.train.name.split('—')[0].trim()+' عند '+nearSt.name+' الساعة '+nextT.stationTime+dayTxt+')'; safeEl.style.color='#7ee787'; }
+  } else { safeEl.textContent = '--'; safeEl.style.color=''; }
   updateGauge(result.risk);
   updateTrainMarker(result.trainPos);
   lastRisk = result.risk;
