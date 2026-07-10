@@ -128,12 +128,17 @@ body{
   <div class="card" id="statusCard">
     <h3>📡 الحالة</h3>
     <div class="row"><span>GPS <span class="status-dot off" id="gpsDot"></span></span><b id="gpsAcc">--</b></div>
-    <div class="row"><span>أقرب قطار</span><b id="nearLine">--</b></div>
+    <div class="row"><span>📍 موقعك بالنسبة للمحطات</span><b id="userBetweenStations">--</b></div>
+    <div id="segmentSafeInfo" class="small-note" style="color:#7ee787;border-color:#7ee787"></div>
+    <div class="row"><span>أقرب قطار (مؤكد SNCFT Live فقط)</span><b id="nearLine">--</b></div>
     <div id="neverCloseNote" class="small-note" style="display:none;color:#7ee787;border-color:#7ee787"></div>
     <div class="row"><span>رقم القطار</span><b id="nearTrainNum">--</b></div>
     <div class="row"><span>المسافة إلى القطار</span><b id="distTrain">--</b></div>
+    <div class="row"><span>📌 موقع القطار الآن</span><b id="nearTrainCurPos">--</b></div>
     <div class="row"><span>انطلق من</span><b id="nearTrainDep">--</b></div>
+    <div id="catchTrainNote" class="small-note" style="display:none;color:var(--gold);border-color:var(--gold)"></div>
     <div class="row"><span>الوصول المقدر</span><b id="nearTrainArr">--</b></div>
+    <div class="small-note" id="nearTrainAllStops" style="display:none"></div>
     <div class="row"><span>اتجاه القطار</span><b id="trainDirection">--</b></div>
     <div class="row"><span>أقرب سكة حديدية</span><b id="nearTrack">--</b></div>
     <div class="row"><span>المسافة إلى السكة</span><b id="distTrack">--</b></div>
@@ -151,6 +156,14 @@ body{
     <button class="btn secondary" id="testAlertBtn">🧪 جرب التنبيه الآن (اختبار)</button>
   </div>
 
+  <div class="card" id="scheduleCard">
+    <h3>🕒 جدول توقف القطار الأقرب (مؤكد SNCFT Live)</h3>
+    <div class="small-note" id="scheduleNote">لا يُعرض هنا إلا قطار مؤكد فعلياً عبر SNCFT Live — لا تُعرض أبداً قطارات مبنية على الجدول فقط بدون تأكيد مباشر.</div>
+    <div id="scheduleStripWrap" style="overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;margin-top:8px;padding-bottom:6px;">
+      <div id="scheduleStrip" style="display:flex;gap:0;align-items:flex-start;min-width:max-content;"></div>
+    </div>
+  </div>
+
   <div class="card" id="mapCard">
     <h3>🗺️ الخريطة</h3>
     <div id="map"></div>
@@ -162,7 +175,6 @@ body{
     <h3>🚆 خطوط وجداول القطارات <span class="badge" id="lineCount">0</span></h3>
     <button class="btn secondary" id="toggleLinesBtn" style="margin-bottom:8px">👁️ إخفاء القائمة</button>
     <div id="linesList"></div>
-    <button class="btn secondary" id="addLineBtn">➕ إضافة خط يدوياً</button>
   </div>
 
   <div class="card" id="tripCard">
@@ -717,10 +729,16 @@ const DEFAULT_TRAINS = [
 ];
 
 let trains = JSON.parse(localStorage.getItem('qitari_trains')||'null') || DEFAULT_TRAINS.map(t=>({...t}));
-// Fusionner les nouvelles lignes ajoutées côté code avec les données déjà sauvegardées côté utilisateur (sans écraser ses modifs)
+// مزامنة تلقائية عند كل فتح للتطبيق (بدون أي تدخل يدوي): لأي خط له نفس المعرّف (id) في القائمة الافتراضية،
+// تُحدَّث محطاته وتوقيته تلقائياً ليطابق آخر نسخة في التطبيق (يحل مشكلة خطوط ناقصة محطات مثل Nabeul أو Maharès
+// بسبب نسخة قديمة محفوظة في الهاتف) — أما الخطوط التي أضافها المستخدم يدوياً بمعرّف خاص بها فتبقى كما هي بدون أي مساس
+let autoSyncedCount = 0;
 DEFAULT_TRAINS.forEach(dt=>{
-  if(!trains.find(t=>t.id===dt.id)) trains.push({...dt});
+  const idx = trains.findIndex(t=>t.id===dt.id);
+  if(idx===-1){ trains.push({...dt}); autoSyncedCount++; }
+  else if(trains[idx].stopsText!==dt.stopsText || trains[idx].name!==dt.name){ trains[idx] = {...dt}; autoSyncedCount++; }
 });
+if(autoSyncedCount>0) saveTrains();
 
 function saveTrains(){ localStorage.setItem('qitari_trains', JSON.stringify(trains)); }
 function saveTracks(){ localStorage.setItem('qitari_osm_tracks', JSON.stringify(osmTracks)); }
@@ -827,6 +845,17 @@ function findLiveDelayForRoute(route){
   });
   return best;
 }
+// يتحقق أن هذا القطار بالذات مؤكد فعلياً الآن عبر بيانات SNCFT Live (رقم القطار يطابق + إحدى محطاته تطابق المحطة الحالية/التالية في البيانات المباشرة)
+// هذا الشرط أساسي لمنع "القطارات الشبح": لا يُعرض أي قطار كأقرب قطار أو في جدول التوقفات إلا إذا كان مؤكداً هنا — وليس فقط لأن توقيته المجدول يقول إنه يجب أن يكون في الخدمة الآن
+function isTrainLiveConfirmed(train){
+  if(!isLiveDataFresh()) return false;
+  const stops = parseStops(train.stopsText).filter(s=>!s.unknown && s.time);
+  if(stops.length<2) return false;
+  return liveTrains.some(lt=>{
+    if(!trainNumberMatches(train.name, lt.num)) return false;
+    return stops.some(s=> stationNamesMatch(s.name, lt.curFr) || stationNamesMatch(s.name, lt.nextFr));
+  });
+}
 
 // ---------- map init ----------
 function initMap(){
@@ -873,50 +902,29 @@ function fetchNearbyRailways(){
   }, ()=>{ alert('يرجى تفعيل الموقع الجغرافي أولاً'); });
 }
 
-// ---------- trains UI ----------
+// ---------- trains UI (عرض للقراءة فقط — قائمة SNCFT الرسمية المدمجة في التطبيق، بلا إضافة/تعديل/حذف يدوي) ----------
 function renderLines(){
   const list=document.getElementById('linesList');
   document.getElementById('lineCount').textContent=trains.length;
-  list.innerHTML = trains.map((t,i)=>{
+  list.innerHTML = trains.map((t)=>{
     const stops = parseStops(t.stopsText);
     const unknown = stops.filter(s=>s.unknown).map(s=>s.name);
     return `
     <div class="line-item">
-      <label>اسم القطار</label>
-      <input data-i="${i}" data-f="name" value="${t.name}">
-      <label>محطات ⟶ توقيت (شكل: المحطة@الساعة، مفصولة بفاصلة)</label>
-      <textarea data-i="${i}" data-f="stopsText" rows="3" style="width:100%;background:rgba(0,0,0,.25);border:1px solid var(--glass-b);color:#fff;border-radius:8px;padding:7px 9px;font-size:12px;margin-top:4px;font-family:'Tajawal',sans-serif;direction:ltr;text-align:left;">${t.stopsText}</textarea>
-      ${unknown.length? `<div class="small-note" style="color:#ff8888">⚠️ محطة غير معروفة الإحداثيات: ${unknown.join(', ')} — أضفها في STATIONS بالكود أو غيّر الاسم لمحطة معروفة.</div>`:''}
-      <button class="btn secondary" style="margin-top:8px;background:rgba(255,0,0,.15);border-color:rgba(255,0,0,.4)" data-del="${i}">🗑️ حذف هذا القطار</button>
+      <div class="row" style="border:none;padding:2px 0"><span>🚆 <b>${t.name}</b></span></div>
+      <div class="small-note" style="direction:ltr;text-align:left;">${t.stopsText}</div>
+      ${unknown.length? `<div class="small-note" style="color:#ff8888">⚠️ محطة غير معروفة الإحداثيات: ${unknown.join(', ')}</div>`:''}
     </div>`;
   }).join('');
-  list.querySelectorAll('textarea,input').forEach(inp=>{
-    inp.addEventListener('change',e=>{
-      const i=+e.target.dataset.i, f=e.target.dataset.f;
-      trains[i][f] = e.target.value;
-      saveTrains(); renderLines();
-    });
-  });
-  list.querySelectorAll('[data-del]').forEach(b=>{
-    b.addEventListener('click',e=>{
-      trains.splice(+e.target.dataset.del,1); saveTrains(); renderLines();
-    });
-  });
   populateStationSelects();
 }
-document.getElementById('addLineBtn').onclick=()=>{
-  trains.push({id:'t'+Date.now(),name:'قطار جديد',stopsText:"Tunis@06:00, Sousse Départ@08:00"});
-  saveTrains(); renderLines();
-};
 
 // ---------- إخفاء/إظهار قائمة القطارات (بدون حذفها) ----------
 let linesHidden = JSON.parse(localStorage.getItem('qitari_lines_hidden')||'true');
 function applyLinesVisibility(){
   const list=document.getElementById('linesList');
-  const addBtn=document.getElementById('addLineBtn');
   const toggleBtn=document.getElementById('toggleLinesBtn');
   list.style.display = linesHidden ? 'none' : '';
-  addBtn.style.display = linesHidden ? 'none' : '';
   toggleBtn.textContent = linesHidden ? '👁️ إظهار القائمة' : '👁️ إخفاء القائمة';
 }
 document.getElementById('toggleLinesBtn').onclick=()=>{
@@ -961,6 +969,15 @@ function nextTrainAtStation(stationName){
     let hitTime = todayAt(hit.time).getTime();
     if(hitTime < now) hitTime += 24*3600000; // القطار يمرّ مجدداً غداً بنفس التوقيت
     if(!best || hitTime<best.time) best = {time:hitTime, train:t, stationTime:hit.time};
+  });
+  return best;
+}
+// نفس المبدأ لكن عبر عدة محطات مرة وحدة (مثلاً أقرب محطتين لموقع المستخدم) — يرجع أقرب قطار سيمرّ عبر أي منها، مع اسم المحطة التي سيمرّ بها
+function nextTrainAtStations(stationNames){
+  let best = null;
+  (stationNames||[]).forEach(name=>{
+    const nt = nextTrainAtStation(name);
+    if(nt && (!best || nt.time<best.time)) best = Object.assign({matchedStation:name}, nt);
   });
   return best;
 }
@@ -1388,15 +1405,17 @@ function trainRouteMinDistance(userPos, train){
   return nearestOnTrack(userPos, coords).dist;
 }
 function computeRisk(userPos){
-  let best={risk:0,lineName:'--',dist:Infinity,trainPos:null,trainId:null};
+  let best={risk:0,lineName:'--',dist:Infinity,trainPos:null,trainId:null,noLiveData:!isLiveDataFresh()};
   trains.forEach(train=>{
+    // شرط "لا قطارات شبح": القطار يجب أن يكون مؤكداً فعلياً عبر SNCFT Live الآن، وليس فقط موجوداً في الجدول النظري
+    if(!isTrainLiveConfirmed(train)) return;
     const pos = trainPositionNow(train);
     if(!pos) return;
     const dist = haversine(userPos,[pos.lat,pos.lon]);
     const risk = Math.round(Math.max(0, 1 - dist/RISK_THRESHOLD_M)*100);
     if(dist<best.dist){
       const delayTxt = pos.delayMin ? (' — متأخر '+pos.delayMin+' د (موقع مصحّح)') : '';
-      best = {risk, dist, lineName: train.name+' ('+pos.fromStation+' → '+pos.toStation+')'+delayTxt, trainPos:{lat:pos.lat,lon:pos.lon}, trainId: train.name};
+      best = {risk, dist, lineName: train.name+' ('+pos.fromStation+' → '+pos.toStation+')'+delayTxt, trainPos:{lat:pos.lat,lon:pos.lon}, trainId: train.name, noLiveData:false};
     }
   });
   // info visuelle: distance à la voie ferrée la plus proche (OSM), indépendant du risque train
@@ -1504,8 +1523,44 @@ function trainDirectionInfo(result){
 function recalcAndDisplay(){
   if(!lastPos) return;
   const result = computeRisk(lastPos);
-  // القطار الأقرب (بالاعتماد على موقعه الحقيقي المُقدّر من التوقيت)
-  document.getElementById('nearLine').textContent = isFinite(result.dist) ? result.lineName : 'لا يوجد قطار بالخدمة حالياً';
+  // القطار الأقرب (بالاعتماد على موقعه الحقيقي المُقدّر من التوقيت) — لا يُعرض هنا إلا قطار مؤكد عبر SNCFT Live، أبداً قطار شبح مبني على الجدول فقط
+  document.getElementById('nearLine').textContent = isFinite(result.dist) ? result.lineName
+    : (result.noLiveData ? 'لا تتوفر بيانات SNCFT Live الآن — لا يُعرض أي قطار' : 'لا يوجد قطار مؤكد قريب الآن');
+  // موقعك بالنسبة للمحطات: بين أقرب محطتين، أو قرب محطة واحدة مباشرة إن كنت قريباً جداً منها
+  const userBetweenEl = document.getElementById('userBetweenStations');
+  const segEl = document.getElementById('segmentSafeInfo');
+  if(userBetweenEl){
+    const nearest2 = nearestUsedStations(lastPos, 2);
+    if(nearest2.length===0){ userBetweenEl.textContent='--'; if(segEl) segEl.textContent=''; }
+    else {
+      const closeEnough = nearest2.length===1 || nearest2[0].dist<=250;
+      if(closeEnough){
+        userBetweenEl.textContent = 'قرب محطة '+nearest2[0].name+' ('+formatDist(nearest2[0].dist)+')';
+      } else {
+        userBetweenEl.textContent = 'بين محطتي '+nearest2[0].name+' ('+formatDist(nearest2[0].dist)+') و'+nearest2[1].name+' ('+formatDist(nearest2[1].dist)+')';
+      }
+      // جملة واضحة: لا يوجد قطار في هذا القطاع حتى الساعة كذا (اليوم/غداً) — أو تحذير إذا قطار قريب
+      if(segEl){
+        const segNames = closeEnough ? [nearest2[0].name] : [nearest2[0].name, nearest2[1].name];
+        const nextSeg = nextTrainAtStations(segNames);
+        if(nextSeg){
+          const minsLeft = (nextSeg.time - Date.now())/60000;
+          const isTomorrow = nextSeg.time > todayAt('23:59').getTime();
+          const dayTxt = isTomorrow ? 'غداً' : 'اليوم';
+          if(minsLeft <= 15){
+            segEl.style.color='#ff8888'; segEl.style.borderColor='#ff8888';
+            segEl.textContent = '⚠️ قطار خلال '+formatHoursMinutes(minsLeft)+' — عند محطة '+nextSeg.matchedStation+' (الساعة '+nextSeg.stationTime+' '+dayTxt+')';
+          } else {
+            segEl.style.color='#7ee787'; segEl.style.borderColor='#7ee787';
+            segEl.textContent = '🚫 لا يوجد قطار في هذا القطاع حتى الساعة '+nextSeg.stationTime+' '+dayTxt+' ('+formatHoursMinutes(minsLeft)+' من الآن)';
+          }
+        } else {
+          segEl.style.color='#7ee787'; segEl.style.borderColor='#7ee787';
+          segEl.textContent = '🚫 لا يوجد أي قطار مجدول عبر هذا القطاع.';
+        }
+      }
+    }
+  }
   const neverCloseEl = document.getElementById('neverCloseNote');
   if(isFinite(result.dist) && result.trainId){
     const nt = trains.find(t=>t.name===result.trainId);
@@ -1518,19 +1573,61 @@ function recalcAndDisplay(){
   document.getElementById('distTrain').textContent = isFinite(result.dist) ? formatDist(result.dist) : '--';
   const numEl = document.getElementById('nearTrainNum');
   numEl.textContent = (isFinite(result.dist) && result.trainId) ? result.trainId.split('—')[0].trim() : '--';
-  // انطلق من / الوصول المقدر — للقطار الأقرب فقط
+  // انطلق من / الوصول المقدر — للقطار الأقرب فقط، مع موقعه الحالي، ونصيحة اللحاق به، وقائمة كل المحطات
   const depEl = document.getElementById('nearTrainDep'), arrEl = document.getElementById('nearTrainArr');
+  const curPosEl = document.getElementById('nearTrainCurPos');
+  const catchEl = document.getElementById('catchTrainNote');
+  const allStopsEl = document.getElementById('nearTrainAllStops');
   if(isFinite(result.dist) && result.trainId){
     const nearTrain = trains.find(t=>t.name===result.trainId);
     const stops = nearTrain ? parseStops(nearTrain.stopsText).filter(s=>!s.unknown && s.time) : [];
+    const posNow = nearTrain ? trainPositionNow(nearTrain) : null;
+    const delayMin = getLiveDelayForTrain(nearTrain) || 0;
     if(stops.length>=2){
       const first=stops[0], last=stops[stops.length-1];
-      const delayMin = getLiveDelayForTrain(nearTrain) || 0;
       const estArr = delayMin ? minsToHHMM(minutesOf(last.time)+delayMin) : last.time;
       depEl.textContent = first.time+' ('+first.name+')';
       arrEl.textContent = estArr+' ('+last.name+')'+(delayMin ? ' — متأخر '+delayMin+' د' : '');
-    } else { depEl.textContent='--'; arrEl.textContent='--'; }
-  } else { depEl.textContent='--'; arrEl.textContent='--'; }
+      // موقع القطار الآن (في وقت البحث): بين محطتين، أو متوقف عند محطة الانطلاق/الوصول
+      if(posNow){
+        if(posNow.fromStation===posNow.toStation){
+          curPosEl.textContent = 'متوقف حالياً عند محطة '+posNow.fromStation;
+        } else {
+          curPosEl.textContent = 'بين محطتي '+posNow.fromStation+' و'+posNow.toStation;
+        }
+      } else { curPosEl.textContent = '--'; }
+      // نصيحة اللحاق بالقطار: توجه إلى المحطة القادمة (التي سيصلها القطار تالياً) قبل موعدها
+      catchEl.style.display='none';
+      if(posNow && posNow.toStation && posNow.toStation!==posNow.fromStation){
+        const nextStopObj = stops.find(s=>s.name===posNow.toStation);
+        if(nextStopObj && nextStopObj.lat!=null){
+          const distToCatch = haversine(lastPos, [nextStopObj.lat, nextStopObj.lon]);
+          const catchTime = delayMin ? minsToHHMM(minutesOf(nextStopObj.time)+delayMin) : nextStopObj.time;
+          catchEl.style.display='block';
+          catchEl.textContent = '🏃 إذا تحب تلحق بالقطار، توجه إلى محطة "'+posNow.toStation+'" — تبعد عنك '+formatDist(distToCatch)+'، والقطار يصلها تقريباً الساعة '+catchTime+'.';
+        }
+      } else if(posNow && posNow.fromStation===posNow.toStation){
+        const stopObj = stops.find(s=>s.name===posNow.fromStation);
+        if(stopObj && stopObj.lat!=null){
+          const distToCatch = haversine(lastPos, [stopObj.lat, stopObj.lon]);
+          catchEl.style.display='block';
+          catchEl.textContent = '🏃 القطار متوقف الآن عند محطة "'+posNow.fromStation+'" — تبعد عنك '+formatDist(distToCatch)+'.';
+        }
+      }
+      // قائمة كل المحطات (وليس فقط الانطلاق والوصول)
+      allStopsEl.style.display='block';
+      allStopsEl.textContent = 'كل المحطات: '+stops.map(s=>{
+        const t = delayMin ? minsToHHMM(minutesOf(s.time)+delayMin) : s.time;
+        return s.name+' ('+t+')';
+      }).join(' ← ');
+    } else {
+      depEl.textContent='--'; arrEl.textContent='--'; curPosEl.textContent='--';
+      catchEl.style.display='none'; allStopsEl.style.display='none';
+    }
+  } else {
+    depEl.textContent='--'; arrEl.textContent='--'; curPosEl.textContent='--';
+    catchEl.style.display='none'; allStopsEl.style.display='none';
+  }
   const dirInfo = trainDirectionInfo(result);
   const dirEl = document.getElementById('trainDirection');
   if(!isFinite(result.dist)){
@@ -1558,8 +1655,66 @@ function recalcAndDisplay(){
   } else { safeEl.textContent = '--'; safeEl.style.color=''; }
   updateGauge(result.risk);
   updateTrainMarker(result.trainPos);
+  renderScheduleStrip(result, lastPos);
   lastRisk = result.risk;
   if(result.risk>=80 && !alertActive){ triggerAlert(result); }
+}
+// يعرض جدول توقفات القطار الأقرب (المؤكد فقط عبر SNCFT Live) بشكل أفقي، مع تمييز المحطات الماضية/الحالية/القادمة
+// ويوضح موقع القطار النظري الحالي = موقعه الحقيقي عند آخر محطة مؤكدة + الوقت المنقضي منذ ذلك، محسوباً وفق التأخير المرصود مباشرة
+function renderScheduleStrip(result, userPos){
+  const wrap = document.getElementById('scheduleStrip');
+  const note = document.getElementById('scheduleNote');
+  if(!wrap) return;
+  if(!result.trainId){
+    wrap.innerHTML='';
+    if(note) note.textContent = result.noLiveData
+      ? '⛔ لا تتوفر بيانات SNCFT Live الآن، لذا لا يُعرض أي جدول (تجنباً لعرض قطار شبح غير مؤكد).'
+      : 'لا يوجد قطار مؤكد عبر SNCFT Live قريب منك حالياً.';
+    return;
+  }
+  const train = trains.find(t=>t.name===result.trainId);
+  if(!train){ wrap.innerHTML=''; return; }
+  const stops = parseStops(train.stopsText).filter(s=>!s.unknown && s.time);
+  if(stops.length<2){ wrap.innerHTML=''; return; }
+  const pos = trainPositionNow(train);
+  const delayMin = getLiveDelayForTrain(train) || 0;
+  // إيجاد فهرس المحطة التي انطلق منها القطار الآن (المحطة الأولى في segment الحالي)
+  let curIdx = pos ? stops.findIndex(s=>s.name===pos.fromStation) : -1;
+  if(curIdx<0) curIdx = 0;
+  const elapsedMin = pos ? Math.max(0, Math.round((Date.now() - (todayAt(stops[curIdx].time).getTime()+delayMin*60000))/60000)) : null;
+  if(note){
+    const delayTxt = delayMin ? (' — متأخر '+delayMin+' د عن الجدول') : ' — في الموعد';
+    note.textContent = pos
+      ? ('🚆 '+train.name+delayTxt+' — الموقع النظري: انطلق من '+pos.fromStation+' منذ '+elapsedMin+' د، متجه إلى '+pos.toStation+'.')
+      : ('🚆 '+train.name+' — القطار مؤكد عبر SNCFT Live لكن خارج ساعات رحلته المجدولة حالياً.');
+  }
+  wrap.innerHTML = stops.map((s,i)=>{
+    const stopTime = delayMin ? minsToHHMM(minutesOf(s.time)+delayMin) : s.time;
+    let state = 'future';
+    if(pos){
+      if(i<curIdx) state='past';
+      else if(i===curIdx) state='current';
+      else if(i===curIdx+1) state='next';
+    }
+    const colors = {
+      past:'color:#7ee787;opacity:.55;',
+      current:'color:var(--gold);font-weight:700;text-shadow:0 0 8px rgba(255,215,0,.9);',
+      next:'color:var(--gold);',
+      future:'color:#cfd8ff;opacity:.85;'
+    };
+    const dotColor = state==='past' ? '#7ee787' : (state==='current' ? '#ffd700' : (state==='next' ? '#ffcc00' : '#5a6aa8'));
+    const trainHere = state==='current' ? '<div style="font-size:16px;line-height:1;margin-top:2px;">🚆</div>' : '';
+    return '<div style="flex:0 0 auto;display:flex;flex-direction:column;align-items:center;min-width:78px;padding:0 6px;text-align:center;">'
+      +'<div style="font-size:11px;'+colors[state]+'white-space:nowrap;">'+s.name+'</div>'
+      +'<div style="width:100%;display:flex;align-items:center;margin:4px 0;">'
+        +'<div style="flex:1;height:2px;background:'+(i===0?'transparent':dotColor)+';"></div>'
+        +'<div style="width:9px;height:9px;border-radius:50%;background:'+dotColor+';box-shadow:0 0 6px '+dotColor+';flex:0 0 auto;"></div>'
+        +'<div style="flex:1;height:2px;background:'+(i===stops.length-1?'transparent':dotColor)+';"></div>'
+      +'</div>'
+      +trainHere
+      +'<div style="font-size:12px;'+colors[state]+'font-weight:600;">'+stopTime+'</div>'
+      +'</div>';
+  }).join('');
 }
 function onGeoErr(err){
   document.getElementById('gpsAcc').textContent='خطأ: '+err.message;
