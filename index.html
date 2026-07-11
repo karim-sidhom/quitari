@@ -80,6 +80,8 @@ body{
 
 #map{width:100%;height:230px;border-radius:14px;margin-top:8px;border:1px solid var(--glass-b);}
 .card.picking{border-color:var(--gold);animation:pickPulse 1.1s ease-in-out infinite;}
+.train-label{background:var(--navy-deep);color:var(--gold3);border:1px solid var(--gold);font-weight:700;font-size:11px;padding:1px 6px;border-radius:6px;box-shadow:0 0 6px rgba(0,0,0,.5);direction:ltr;}
+.train-label::before{border-top-color:var(--gold)!important;}
 @keyframes pickPulse{0%,100%{box-shadow:0 0 0 0 rgba(255,215,0,.55)}50%{box-shadow:0 0 0 10px rgba(255,215,0,0)}}
 
 .status-dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-left:6px;}
@@ -105,7 +107,24 @@ body{
 #alertOverlay p{font-size:16px;margin-bottom:22px;line-height:1.8;}
 #alertOverlay .btn{max-width:280px;}
 
-.station-clock-wrap{display:flex;justify-content:center;margin:10px 0 4px;}
+.station-clock-wrap{display:flex;justify-content:center;align-items:center;gap:34px;margin:10px 0 4px;}
+.traffic-light{
+  display:flex;flex-direction:column;gap:7px;padding:8px 6px;border-radius:14px;
+  background:linear-gradient(160deg,#3a2f0a,#14100a 70%);
+  box-shadow:0 0 0 2px var(--gold2),0 0 0 4px var(--navy-deep),0 0 0 6px var(--gold2),0 6px 16px rgba(0,0,0,.55),inset 0 0 10px rgba(0,0,0,.6);
+}
+.traffic-light .lamp{
+  width:20px;height:20px;border-radius:50%;position:relative;
+  box-shadow:inset 0 0 4px rgba(0,0,0,.7),0 0 0 2px var(--gold2);
+  opacity:.28;transition:opacity .25s;
+}
+.traffic-light .lamp.lamp-green{background:radial-gradient(circle at 35% 30%,#baffc9,#0fae3f 75%);}
+.traffic-light .lamp.lamp-orange{background:radial-gradient(circle at 35% 30%,#ffe0a3,#e6820a 75%);}
+.traffic-light .lamp.lamp-red{background:radial-gradient(circle at 35% 30%,#ffb3b3,#d10000 75%);}
+.traffic-light .lamp.active{opacity:1;}
+.traffic-light .lamp.lamp-green.active{box-shadow:0 0 12px 4px rgba(30,220,90,.95),0 0 0 2px var(--gold2);}
+.traffic-light .lamp.lamp-orange.active{box-shadow:0 0 12px 4px rgba(255,170,0,.95),0 0 0 2px var(--gold2);}
+.traffic-light .lamp.lamp-red.active{box-shadow:0 0 14px 5px rgba(255,20,20,1),0 0 0 2px var(--gold2);}
 .station-clock{
   width:150px;height:150px;position:relative;border-radius:50%;
   background:radial-gradient(circle at 35% 30%, #3a2f0a, #14100a 70%);
@@ -163,11 +182,21 @@ body{
     <div class="title">قِطَاري</div>
     <div class="subtitle">كاشف خطر تقاطع السكة الحديدية · تونس</div>
     <div class="station-clock-wrap">
+      <div class="traffic-light" id="trafficLightL">
+        <div class="lamp lamp-red" data-lamp="red"></div>
+        <div class="lamp lamp-orange" data-lamp="orange"></div>
+        <div class="lamp lamp-green" data-lamp="green"></div>
+      </div>
       <div class="station-clock" id="stationClock">
         <div class="clock-center-dot"></div>
         <div class="hand hand-hour" id="clockHour"></div>
         <div class="hand hand-min" id="clockMin"></div>
         <div class="hand hand-sec" id="clockSec"></div>
+      </div>
+      <div class="traffic-light" id="trafficLightR">
+        <div class="lamp lamp-red" data-lamp="red"></div>
+        <div class="lamp lamp-orange" data-lamp="orange"></div>
+        <div class="lamp lamp-green" data-lamp="green"></div>
       </div>
     </div>
     <div class="station-clock-label">ساعة المحطة</div>
@@ -202,7 +231,12 @@ body{
     <h3>⚠️ نسبة الخطر</h3>
     <div class="risk-gauge"><div class="risk-fill" id="riskFill"></div></div>
     <div class="risk-label" id="riskLabel">0%</div>
-    <div class="small-note">التنبيه القوي ينطلق تلقائياً عند تجاوز <b style="color:var(--gold)">80%</b> — يُحسب من المسافة بينك وبين <b>الموقع الحقيقي المقدّر للقطار الآن</b> (استناداً لتوقيت SNCFT الفعلي بين محطتين)</div>
+    <div class="small-note">التنبيه القوي ينطلق تلقائياً عند تجاوز <b style="color:var(--gold)">80%</b> في <b>أي وحدة من الثلاث</b> أدناه — الأفضل تنبيه خاطئ من قطار يدهسك.</div>
+    <div id="modulesPanel" style="margin-top:10px;display:flex;flex-direction:column;gap:6px;">
+      <div class="row module-row" id="modRow0"><span>1️⃣ الجدول العادي (بدون تصحيح)</span><b id="modVal0">--</b></div>
+      <div class="row module-row" id="modRow1"><span>2️⃣ مصحَّح بالتأخير المباشر</span><b id="modVal1">--</b></div>
+      <div class="row module-row" id="modRow2"><span>3️⃣ SNCFT Live مباشر</span><b id="modVal2">--</b></div>
+    </div>
     <button class="btn secondary" id="testAlertBtn">🧪 جرب التنبيه الآن (اختبار)</button>
   </div>
 
@@ -219,6 +253,8 @@ body{
     <div id="map"></div>
     <div class="small-note" id="mapPickHint" style="display:none;color:var(--gold);font-weight:700;text-align:center;">👆 انقر الآن فوق نقطة على الخريطة أعلاه لتحديد محطة الانطلاق</div>
     <button class="btn secondary" id="fetchLinesBtn">🔄 تحميل خطوط السكة القريبة (Overpass)</button>
+    <button class="btn secondary" id="toggleStationsBtn" style="margin-top:6px">🚉 عرض جميع المحطات</button>
+    <button class="btn secondary" id="toggleAllTrainsBtn" style="margin-top:6px">🚆 عرض كل القطارات الآن</button>
   </div>
 
   <div class="card" id="linesCard">
@@ -326,7 +362,7 @@ const STATIONS = {
   "Nabeul":[36.4561,10.7376], "Hammamet":[36.4000,10.6167],
   // Branche Métlaoui - Moulares - Redeyef (coordonnées très approximatives)
   "Selja":[34.28,8.30], "Tabeddit 1er arrêt":[34.25,8.25], "Tabeddit 2ème arrêt":[34.22,8.20],
-  "Moulares":[34.15,8.15], "Redeyef":[34.3833,8.1500], "Magroun":[34.30,8.10], "El Ayoun":[34.25,8.08],
+  "Moulares":[34.1667,8.1500], "Redeyef":[34.3833,8.1500], "Magroun":[34.30,8.10], "El Ayoun":[34.25,8.08],
   // Ligne L6 Tunis - Kalaâ Khasba (Le Kef) - coordonnées approximatives par interpolation
   "Jebel Jelloud":[36.765,10.124], "Bir Kassaa":[36.737,10.064], "Naassen":[36.710,10.003],
   "Khelidia":[36.682,9.943], "Oudna":[36.663,9.902], "Cheylus":[36.636,9.842],
@@ -387,11 +423,11 @@ const DEFAULT_TRAINS = [
  {id:'t5-22-77', name:'5-22/77 — Tunis → Mahdia',
   stopsText:"Tunis@14:45, Grombalia@15:36, Bir Bou Regba@15:54, Enfidha@16:22, Kalaâ Seghira@16:56, Sousse Arrivée@17:08, Sousse Départ@17:17, Messadine@17:36, Monastir@18:15, Mahdia@19:21"},
  {id:'t5-12-79', name:'5-12/79(A) — Tunis → Sousse (sauf sam. et veilles fêtes)',
-  stopsText:"Tunis@15:15, Hammam Lif@15:45, Grombalia@16:09, Bou Argoub@16:18, Bir Bou Regba@16:29, Bouficha@16:46, Enfidha@17:03, Kalaâ Kebira@17:33, Kalaâ Seghira@17:42, Sousse Arrivée@17:54"},
+  stopsText:"Tunis@15:15, Hammam Lif@15:45, Grombalia@16:09, Bouargoub@16:18, Bir Bou Regba@16:29, Bouficha@16:46, Enfidha@17:03, Kalaâ Kebira@17:33, Kalaâ Seghira@17:42, Sousse Arrivée@17:54"},
  {id:'t5-87', name:'5/87 — Tunis → Gabès',
-  stopsText:"Tunis@17:20, Hammam Lif@17:50, Grombalia@18:14, Bou Argoub@18:23, Bir Bou Regba@18:34, Bouficha@18:49, Enfidha@19:06, Kalaâ Kebira@19:34, Kalaâ Seghira@19:43, Sousse Arrivée@19:55, Sousse Départ@20:05, Messadine@20:23, El Jem@21:13, Sakiet Ezzit@21:53, Sfax Arrivée@22:18"},
+  stopsText:"Tunis@17:20, Hammam Lif@17:50, Grombalia@18:14, Bouargoub@18:23, Bir Bou Regba@18:34, Bouficha@18:49, Enfidha@19:06, Kalaâ Kebira@19:34, Kalaâ Seghira@19:43, Sousse Arrivée@19:55, Sousse Départ@20:05, Messadine@20:23, El Jem@21:13, Sakiet Ezzit@21:53, Sfax Arrivée@22:18"},
  {id:'t5-97', name:'5/97 — Tunis → Gabès (nuit)',
-  stopsText:"Tunis@21:15, Bir Bou Regba@22:24, Sousse Arrivée@23:36, Sousse Départ@23:50, El Jem@00:58, Sfax Arrivée@01:57, Sfax Départ@02:15, Maharès@02:49, Ghraiba@03:09, Gabes@04:25"},
+  stopsText:"Tunis@21:15, Hammam Lif@21:43, Grombalia@22:05, Bouargoub@22:14, Bir Bou Regba@22:24, Sousse Arrivée@23:36, Sousse Départ@23:50, El Jem@00:58, Sfax Arrivée@01:57, Sfax Départ@02:15, Maharès@02:49, Ghraiba@03:09, Gabes@04:25"},
  {id:'t15-77', name:'15/77 — Métlaoui → Redeyef', stopsText:"Metlaoui@17:10, Redeyef@19:27"},
  {id:'t16-60', name:'16/60 — Redeyef → Métlaoui', stopsText:"Redeyef@04:30, Metlaoui@06:46"},
 
@@ -923,6 +959,105 @@ function redrawTracks(){
   });
 }
 
+// ---------- عرض جميع المحطات على الخريطة مع تأكيد عدد المحطات المكتشفة ----------
+let stationsLayer = null;
+let stationsVisible = false;
+function buildStationUsage(){
+  const usage = {};
+  trains.forEach(t=>{
+    parseStops(t.stopsText).forEach(s=>{
+      if(!usage[s.name]) usage[s.name] = new Set();
+      usage[s.name].add(t.name);
+    });
+  });
+  return usage;
+}
+let stationsDetectedInfo = {detected:0, total:0};
+function buildStationMarkersLayer(){
+  const layer = L.layerGroup();
+  const usage = buildStationUsage();
+  const usedNames = Object.keys(usage);
+  stationsDetectedInfo.detected = usedNames.filter(n=>STATIONS[n]).length;
+  stationsDetectedInfo.total = usedNames.length;
+  Object.keys(STATIONS).forEach(name=>{
+    const coord = STATIONS[name];
+    const count = usage[name] ? usage[name].size : 0;
+    const icon = L.divIcon({
+      className:'station-icon',
+      html:'<div style="width:14px;height:14px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#ffe566,#ffcc00 75%);box-shadow:0 0 6px rgba(255,215,0,.9),0 0 0 2px rgba(2,11,46,.9);"></div>',
+      iconSize:[14,14], iconAnchor:[7,7]
+    });
+    const marker = L.marker([coord[0],coord[1]],{icon}).bindPopup(`<b>${name}</b><br>${count} قطار يتوقف هنا`);
+    layer.addLayer(marker);
+  });
+  return layer;
+}
+function updateToggleStationsLabel(){
+  const btn = document.getElementById('toggleStationsBtn');
+  const {detected,total} = stationsDetectedInfo;
+  btn.textContent = stationsVisible
+    ? `🚉 إخفاء المحطات (${detected}/${total} مكتشفة)`
+    : `🚉 عرض جميع المحطات (${detected}/${total} مكتشفة)`;
+}
+document.getElementById('toggleStationsBtn').onclick = ()=>{
+  if(!stationsLayer){ stationsLayer = buildStationMarkersLayer(); }
+  stationsVisible = !stationsVisible;
+  if(stationsVisible){ stationsLayer.addTo(map); } else { map.removeLayer(stationsLayer); }
+  updateToggleStationsLabel();
+};
+
+// ---------- عرض جميع القطارات النشطة الآن على الخريطة (يعيد استعمال trainPositionNow) ----------
+let allTrainsLayer = null;
+let allTrainsVisible = false;
+let allTrainsTimer = null;
+let allTrainsActiveCount = 0;
+function buildAllTrainsLayer(){
+  const layer = L.layerGroup();
+  allTrainsActiveCount = 0;
+  trains.forEach(t=>{
+    const pos = trainPositionNow(t);
+    if(!pos) return;
+    allTrainsActiveCount++;
+    const icon = L.divIcon({
+      className:'train-icon-all',
+      html:'<div style="width:22px;height:22px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#ff7a7a,#e60000 75%);display:flex;align-items:center;justify-content:center;box-shadow:0 0 6px rgba(230,0,0,.9),0 0 0 2px rgba(255,255,255,.9);"><span style="font-size:12px;line-height:1;filter:grayscale(1) brightness(2)">🚆</span></div>',
+      iconSize:[22,22], iconAnchor:[11,11]
+    });
+    const delayTxt = pos.delayMin ? ` (+${pos.delayMin} د تأخير)` : '';
+    const matricule = t.name.split('—')[0].trim();
+    L.marker([pos.lat,pos.lon],{icon})
+      .bindTooltip(matricule, {permanent:true, direction:'top', offset:[0,-12], className:'train-label'})
+      .bindPopup(`<b>${t.name}</b><br>${pos.fromStation} → ${pos.toStation}${delayTxt}`)
+      .addTo(layer);
+  });
+  return layer;
+}
+function updateToggleAllTrainsLabel(){
+  const btn = document.getElementById('toggleAllTrainsBtn');
+  btn.textContent = allTrainsVisible
+    ? `🚆 إخفاء كل القطارات (${allTrainsActiveCount} نشط الآن)`
+    : '🚆 عرض كل القطارات الآن';
+}
+function refreshAllTrainsLayer(){
+  if(!allTrainsVisible) return;
+  const newLayer = buildAllTrainsLayer();
+  if(allTrainsLayer) map.removeLayer(allTrainsLayer);
+  allTrainsLayer = newLayer;
+  allTrainsLayer.addTo(map);
+  updateToggleAllTrainsLabel();
+}
+document.getElementById('toggleAllTrainsBtn').onclick = ()=>{
+  allTrainsVisible = !allTrainsVisible;
+  if(allTrainsVisible){
+    refreshAllTrainsLayer();
+    if(!allTrainsTimer) allTrainsTimer = setInterval(refreshAllTrainsLayer, 15000);
+  } else {
+    if(allTrainsLayer){ map.removeLayer(allTrainsLayer); allTrainsLayer=null; }
+    if(allTrainsTimer){ clearInterval(allTrainsTimer); allTrainsTimer=null; }
+    updateToggleAllTrainsLabel();
+  }
+};
+
 // ---------- Overpass fetch ----------
 document.getElementById('fetchLinesBtn').onclick = fetchNearbyRailways;
 function fetchNearbyRailways(){
@@ -1426,10 +1561,8 @@ function trainPositionNow(train){
   const delayMin = getLiveDelayForTrain(train) || 0;
   const now = new Date(Date.now() - delayMin*60000); // القطار المتأخر بـD دقائق هو فعلياً حيث كان يجب أن يكون قبل D دقائق حسب الجدول
   const times = stops.map(s=>todayAt(s.time));
-  const first = times[0].getTime() - INACTIVE_MARGIN_MIN*60000;
-  const last = times[times.length-1].getTime() + INACTIVE_MARGIN_MIN*60000;
   const t = now.getTime();
-  if(t<first || t>last) return null;
+  // لا نتوقف عن إعطاء موقع تقديري أبداً ما دام القطار مؤكداً فعلياً عبر SNCFT Live — الأفضل تقدير تقريبي (أقرب محطة) من إخفاء القطار تماماً بسبب تأخير كبير لم يُكتشف رقمياً
   for(let i=0;i<stops.length-1;i++){
     const t0=times[i].getTime(), t1=times[i+1].getTime();
     if(t>=t0 && t<=t1){
@@ -1441,10 +1574,59 @@ function trainPositionNow(train){
       };
     }
   }
-  // avant premier arrêt ou après dernier arrêt, مais dans la marge de tolérance
+  // avant premier arrêt ou après dernier arrêt (بلا حد أقصى للهامش، ما دام مؤكداً عبر Live)
   if(t<times[0].getTime()) return {lat:stops[0].lat, lon:stops[0].lon, fromStation:stops[0].name, toStation:stops[0].name, delayMin};
   const lastS=stops[stops.length-1];
   return {lat:lastS.lat, lon:lastS.lon, fromStation:lastS.name, toStation:lastS.name, delayMin};
+}
+// ---------- الوحدة 1: المسار العادي حسب الجدول فقط (بدون أي تصحيح بالتأخير) ----------
+// نفس منطق trainPositionNow تماماً، لكن بتجاهل كامل لأي تأخير مباشر — تمثّل "التطور الطبيعي للقطار في مساره" كما يحدده جدول SNCFT وحده
+function trainPositionScheduleOnly(train){
+  const stops = parseStops(train.stopsText).filter(s=>!s.unknown && s.time);
+  if(stops.length<2) return null;
+  const now = new Date();
+  const times = stops.map(s=>todayAt(s.time));
+  const t = now.getTime();
+  // نفس المبدأ: لا نُخفي القطار المؤكد فعلياً عبر SNCFT Live بسبب هامش زمني، بل نُعطي أقرب تقدير ممكن دوماً
+  for(let i=0;i<stops.length-1;i++){
+    const t0=times[i].getTime(), t1=times[i+1].getTime();
+    if(t>=t0 && t<=t1){
+      const frac = t1===t0 ? 0 : (t-t0)/(t1-t0);
+      return {
+        lat: stops[i].lat + (stops[i+1].lat-stops[i].lat)*frac,
+        lon: stops[i].lon + (stops[i+1].lon-stops[i].lon)*frac,
+        fromStation: stops[i].name, toStation: stops[i+1].name, delayMin:0
+      };
+    }
+  }
+  if(t<times[0].getTime()) return {lat:stops[0].lat, lon:stops[0].lon, fromStation:stops[0].name, toStation:stops[0].name, delayMin:0};
+  const lastS=stops[stops.length-1];
+  return {lat:lastS.lat, lon:lastS.lon, fromStation:lastS.name, toStation:lastS.name, delayMin:0};
+}
+// ---------- الوحدة 3: الموقع المباشر من بيانات SNCFT Live (المحطة الحالية/التالية المُبلَّغ عنها فعلياً) ----------
+// مستقلة كلياً عن الجدول والأوقات: تعتمد فقط على ما يُبلّغه SNCFT Live الآن عن مكان القطار — تفيد كتحقّق مستقل حتى لو اختلّ حساب الوقت أو الجدول
+function trainPositionLiveDirect(train){
+  if(!isLiveDataFresh()) return null;
+  const stops = parseStops(train.stopsText).filter(s=>!s.unknown && s.time);
+  if(stops.length<2) return null;
+  let match=null;
+  liveTrains.forEach(lt=>{
+    if(!trainNumberMatches(train.name, lt.num)) return;
+    const curIdx = stops.findIndex(s=>stationNamesMatch(s.name, lt.curFr));
+    const nextIdx = stops.findIndex(s=>stationNamesMatch(s.name, lt.nextFr));
+    if(curIdx===-1 && nextIdx===-1) return;
+    match = {lt, curIdx, nextIdx};
+  });
+  if(!match) return null;
+  const {curIdx, nextIdx} = match;
+  const delayMin = Number(match.lt.delay)||0;
+  // إن تطابقت المحطة الحالية والتالية معاً وهما متتاليتان فعلاً في الجدول، نفترض الوضع الأكثر تحفظاً (الأخطر أمنياً): القطار في منتصف القطعة بينهما تماماً الآن
+  if(curIdx!==-1 && nextIdx!==-1 && Math.abs(nextIdx-curIdx)===1){
+    const a=stops[curIdx], b=stops[nextIdx];
+    return {lat:(a.lat+b.lat)/2, lon:(a.lon+b.lon)/2, fromStation:a.name, toStation:b.name, delayMin};
+  }
+  const s = curIdx!==-1 ? stops[curIdx] : stops[nextIdx];
+  return {lat:s.lat, lon:s.lon, fromStation:s.name, toStation:s.name, delayMin};
 }
 // المسافة الدنيا الممكنة بين موقع المستخدم وكامل مسار هذا القطار: بين كل محطة والتي تليها (القطار يسير على السكة بينهما أيضاً، لا يقفز من محطة لمحطة)
 const NEVER_CLOSE_THRESHOLD_M = 300;
@@ -1454,28 +1636,44 @@ function trainRouteMinDistance(userPos, train){
   const coords = stops.map(s=>[s.lat,s.lon]);
   return nearestOnTrack(userPos, coords).dist;
 }
-function computeRisk(userPos){
-  let best={risk:0,lineName:'--',dist:Infinity,trainPos:null,trainId:null,noLiveData:!isLiveDataFresh()};
+// وحدة بحث واحدة مستقلة: تفحص كل القطارات المؤكدة عبر SNCFT Live وتُرجع الأقرب/الأخطر منها حسب طريقة حساب الموقع المُعطاة فقط —
+// كل وحدة تعمل بمفردها تماماً، بدون أي اطلاع على نتيجة الوحدتين الأخريين، لتفادي أن يُخفي خطأ في وحدة واحدة خطراً حقيقياً
+function computeRiskModule(userPos, positionFn, methodLabel){
+  let best={risk:0,lineName:'--',dist:Infinity,trainPos:null,trainId:null,method:methodLabel};
   trains.forEach(train=>{
     // شرط "لا قطارات شبح": القطار يجب أن يكون مؤكداً فعلياً عبر SNCFT Live الآن، وليس فقط موجوداً في الجدول النظري
     if(!isTrainLiveConfirmed(train)) return;
-    const pos = trainPositionNow(train);
+    const pos = positionFn(train);
     if(!pos) return;
     const dist = haversine(userPos,[pos.lat,pos.lon]);
-    const risk = Math.round(Math.max(0, 1 - dist/RISK_THRESHOLD_M)*100);
     if(dist<best.dist){
-      const delayTxt = pos.delayMin ? (' — متأخر '+pos.delayMin+' د (موقع مصحّح)') : '';
-      best = {risk, dist, lineName: train.name+' ('+pos.fromStation+' → '+pos.toStation+')'+delayTxt, trainPos:{lat:pos.lat,lon:pos.lon}, trainId: train.name, noLiveData:false};
+      const risk = Math.round(Math.max(0, 1 - dist/RISK_THRESHOLD_M)*100);
+      const delayTxt = pos.delayMin ? (' — متأخر '+pos.delayMin+' د') : '';
+      best = {risk, dist, lineName: train.name+' ('+pos.fromStation+' → '+pos.toStation+')'+delayTxt, trainPos:{lat:pos.lat,lon:pos.lon}, trainId: train.name, method:methodLabel};
     }
   });
+  return best;
+}
+// ثلاث وحدات بحث مستقلة تعمل بالتوازي، كل واحدة بمفردها بلا أي دمج مع الأخريين — ثلاث تنبيهات منفصلة إن لزم، وليس نتيجة واحدة مُختلَطة:
+// 1) الجدول العادي فقط (بدون أي تصحيح) 2) الجدول مصحَّحاً بالتأخير المباشر 3) الموقع المباشر المُبلَّغ من SNCFT Live
+function computeRisk(userPos){
+  const noLive = !isLiveDataFresh();
+  const modules = [
+    computeRiskModule(userPos, trainPositionScheduleOnly, 'الجدول العادي'),
+    computeRiskModule(userPos, trainPositionNow, 'مصحَّح بالتأخير'),
+    computeRiskModule(userPos, trainPositionLiveDirect, 'SNCFT Live مباشر')
+  ];
   // info visuelle: distance à la voie ferrée la plus proche (OSM), indépendant du risque train
   let trackInfo=null;
   osmTracks.forEach(track=>{
     const near = nearestOnTrack(userPos, track.coords);
     if(!trackInfo || near.dist<trackInfo.dist) trackInfo={dist:near.dist,name:track.name};
   });
-  best.trackInfo = trackInfo;
-  return best;
+  // "الأخطر" = أعلى نسبة خطر بين الوحدات الثلاث المستقلة (وليس مزيجاً بينها) — يُستعمل فقط لتغذية العرض الرئيسي القديم (البطاقة/الجدول الزمني)
+  // أما التنبيه نفسه فيعتمد على كل وحدة على حِدة (أنظر recalcAndDisplay) وليس فقط على هذه القيمة المجمّعة
+  let worst = modules[0];
+  modules.forEach(m=>{ if(m.risk>worst.risk || (m.risk===worst.risk && m.dist<worst.dist)) worst=m; });
+  return { ...worst, lineName: worst.trainId ? worst.lineName+' ['+worst.method+']' : worst.lineName, noLiveData:noLive, modules, trackInfo };
 }
 
 // ---------- geolocation watch ----------
@@ -1706,8 +1904,26 @@ function recalcAndDisplay(){
   updateGauge(result.risk);
   updateTrainMarker(result.trainPos);
   renderScheduleStrip(result, lastPos);
+  renderModulesPanel(result.modules);
   lastRisk = result.risk;
-  if(result.risk>=80 && !alertActive){ triggerAlert(result); }
+  // كل وحدة تُنبِّه بمفردها: يكفي أن تتجاوز وحدة واحدة فقط من الثلاث نسبة 80% لتنطلق صفارة الخطر — أفضل تنبيه خاطئ من قطار يدهسك
+  const dangerousModules = (result.modules||[]).filter(m=>m.risk>=80);
+  if(dangerousModules.length>0 && !alertActive){ triggerAlert(result, dangerousModules); }
+}
+// يعرض الثلاث وحدات كل واحدة بمفردها (نسبة خطر + قطار + مسافة) — بدون أي دمج بينها، حتى يرى المستخدم فعلياً كل الوحدات الثلاث في نفس الوقت
+function renderModulesPanel(modules){
+  if(!modules) return;
+  modules.forEach((m,i)=>{
+    const row = document.getElementById('modRow'+i), val = document.getElementById('modVal'+i);
+    if(!val) return;
+    if(!m.trainId){ val.textContent='--'; if(row) row.style.color=''; return; }
+    val.textContent = m.risk+'% — '+m.lineName+' ('+formatDist(m.dist)+')';
+    if(row){
+      if(m.risk>=80){ row.style.color='#ff4d4d'; row.style.fontWeight='700'; }
+      else if(m.risk>=40){ row.style.color='#f1c40f'; row.style.fontWeight='600'; }
+      else { row.style.color='#7ee787'; row.style.fontWeight='400'; }
+    }
+  });
 }
 // يعرض جدول توقفات القطار الأقرب (المؤكد فقط عبر SNCFT Live) بشكل أفقي، مع تمييز المحطات الماضية/الحالية/القادمة
 // ويوضح موقع القطار النظري الحالي = موقعه الحقيقي عند آخر محطة مؤكدة + الوقت المنقضي منذ ذلك، محسوباً وفق التأخير المرصود مباشرة
@@ -1777,20 +1993,41 @@ function updateGauge(risk){
   if(risk<40){ fill.style.background='linear-gradient(90deg,#2ecc71,#a8e063)'; label.style.color='#2ecc71'; }
   else if(risk<80){ fill.style.background='linear-gradient(90deg,#f1c40f,#ff9800)'; label.style.color='#f1c40f'; }
   else { fill.style.background='linear-gradient(90deg,#ff5722,#ff1744)'; label.style.color='#ff1744'; }
+  updateTrafficLights(risk);
+}
+// فِعّالة كالمصابيح على جانبَي الساعة، لون واحد يبقى ثابتاً مضيئاً (بدون أي وميض) حسب نسبة الخطر الحالية: أخضر (هادئ) ← أصفر/برتقالي (تنبّه) ← أحمر (خطر)
+function updateTrafficLights(risk){
+  const activeColor = risk>=80 ? 'red' : (risk>=40 ? 'orange' : 'green');
+  ['trafficLightL','trafficLightR'].forEach(id=>{
+    const box = document.getElementById(id);
+    if(!box) return;
+    box.querySelectorAll('.lamp').forEach(l=>{
+      l.classList.toggle('active', l.dataset.lamp===activeColor);
+      l.style.opacity = ''; // إلغاء أي تحكم سابق بالوميض، اللون النشط يبقى ثابتاً دوماً عبر CSS
+    });
+  });
 }
 
 // ---------- alert system ----------
-function triggerAlert(result){
+function triggerAlert(result, dangerousModules){
   alertActive=true;
   document.getElementById('alertOverlay').style.display='flex';
+  const mods = result.modules || [];
+  const linesHtml = mods.map((m,i)=>{
+    const isDanger = m.risk>=80;
+    const label = ['1️⃣ الجدول العادي','2️⃣ مصحَّح بالتأخير','3️⃣ SNCFT Live مباشر'][i]||m.method;
+    const color = isDanger ? '#ff4d4d' : (m.trainId ? '#f1c40f' : '#888');
+    const txt = m.trainId ? (m.risk+'% — '+m.lineName+' ('+Math.round(m.dist)+' م)') : 'لا يوجد قطار مؤكد لهذه الوحدة الآن';
+    return '<div style="color:'+color+';font-weight:'+(isDanger?'700':'400')+';margin:4px 0;">'+label+': '+txt+'</div>';
+  }).join('');
   document.getElementById('alertText').innerHTML =
-    'أنت قرب <b>'+result.lineName+'</b> (المسافة: '+Math.round(result.dist)+' م)<br>نسبة الخطر: '+result.risk+'%<br>ابتعد فوراً عن المسار!';
+    '<div>خطر تصادم محتمل — نتيجة كل وحدة بحث بمفردها (ثلاث تنبيهات مستقلة):</div>'+linesHtml+'<div style="margin-top:8px;">ابتعد فوراً عن المسار!</div>';
   startSiren();
   if(navigator.vibrate) navigator.vibrate([400,150,400,150,400,150,800]);
   try{
     if(Notification && Notification.permission==='granted'){
       new Notification('🚨 خطر تصادم محتمل!',{
-        body:'أنت قرب سكة حديدية وتوقيت قطار متطابق تقريباً. ابتعد فوراً.',
+        body:'أنت قرب سكة حديدية وتوقيت قطار متطابق تقريباً (وحدة واحدة أو أكثر من ثلاث). ابتعد فوراً.',
         requireInteraction:true, tag:'qitari-alert'
       });
     }
@@ -1803,7 +2040,11 @@ window.dismissAlert=function(){
 };
 document.getElementById('testAlertBtn').onclick = ()=>{
   unlockAudio();
-  triggerAlert({lineName:'اختبار — خط تجريبي', dist:42, risk:95});
+  triggerAlert({modules:[
+    {risk:95,lineName:'اختبار — خط تجريبي 1',dist:42,trainId:'t1'},
+    {risk:60,lineName:'اختبار — خط تجريبي 2',dist:120,trainId:'t2'},
+    {risk:88,lineName:'اختبار — خط تجريبي 3',dist:38,trainId:'t3'}
+  ]});
 };
 function startSiren(){
   if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
@@ -1950,7 +2191,7 @@ function qitariHandleTripQuery(d){
 function qitariHandleRiskQuery(d){
   if(!lastPos){ return {type:'qitari_risk_result', requestId:d.requestId, hasPos:false}; }
   const result = computeRisk(lastPos);
-  return {type:'qitari_risk_result', requestId:d.requestId, hasPos:true, risk:result.risk, lineName:result.lineName, dist:result.dist};
+  return {type:'qitari_risk_result', requestId:d.requestId, hasPos:true, risk:result.risk, lineName:result.lineName, dist:result.dist, modules:result.modules};
 }
 window.addEventListener('message', function(ev){
   const d = ev.data || {};
@@ -1975,6 +2216,7 @@ if(window.self !== window.top && navigator.geolocation){
 function initStationClock(){
   const clock = document.getElementById('stationClock');
   if(!clock) return;
+  updateTrafficLights(0); // حالة ابتدائية هادئة (أخضر) قبل بدء المراقبة
   const romans = ['XII','I','II','III','IV','V','VI','VII','VIII','IX','X','XI'];
   for(let i=0;i<60;i++){
     const tick = document.createElement('div');
