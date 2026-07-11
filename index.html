@@ -1686,10 +1686,11 @@ function computeRisk(userPos){
     const near = nearestOnTrack(userPos, track.coords);
     if(!trackInfo || near.dist<trackInfo.dist) trackInfo={dist:near.dist,name:track.name};
   });
-  // "الأخطر" = أعلى نسبة خطر بين الوحدات الثلاث المستقلة (وليس مزيجاً بينها) — يُستعمل فقط لتغذية العرض الرئيسي القديم (البطاقة/الجدول الزمني)
+  // "الأقرب فعلياً" = أقل مسافة حقيقية بين الوحدات الثلاث المستقلة (وليس أعلى نسبة خطر) — لكي لا يتغيّر القطار المعروض
+  // إلى قطار آخر أبعد فقط لأن وحدة حسابه أعطته نسبة خطر أعلى في هذه اللحظة. يُستعمل فقط لتغذية العرض الرئيسي القديم (البطاقة/الجدول الزمني)
   // أما التنبيه نفسه فيعتمد على كل وحدة على حِدة (أنظر recalcAndDisplay) وليس فقط على هذه القيمة المجمّعة
   let worst = modules[0];
-  modules.forEach(m=>{ if(m.risk>worst.risk || (m.risk===worst.risk && m.dist<worst.dist)) worst=m; });
+  modules.forEach(m=>{ if(m.dist<worst.dist) worst=m; });
   return { ...worst, lineName: worst.trainId ? worst.lineName+' ['+worst.method+']' : worst.lineName, noLiveData:noLive, modules, trackInfo };
 }
 
@@ -1726,7 +1727,18 @@ function computeZoneDailyTimeline(userPos, zoneRadiusM){
     if(!ca || ca.dist>zoneRadiusM) return;
     const risk = Math.round(Math.max(0, 1-ca.dist/RISK_THRESHOLD_M)*100);
     const timeMin = ((ca.timeMin%1440)+1440)%1440; // بعض القطارات تنطلق قرب منتصف الليل — نُطبّع الوقت بين 0 و1440
-    events.push({train, dist:ca.dist, timeMin, fromStation:ca.fromStation, toStation:ca.toStation, risk});
+    // الرقم الثاني المستقل: إن كان هذا القطار مؤكداً فعلياً عبر SNCFT Live الآن، نحسب موقعه الحقيقي الحالي (مصحَّحاً بالتأخير المرصود)
+    // ومسافته الفعلية من موقعك في هذه اللحظة بالضبط — مستقل تماماً عن الرقم الأول (أقرب نقطة نظرية عبر كامل مساره اليوم)
+    let liveDist=null, liveRisk=null, delayMin=null;
+    if(isTrainLiveConfirmed(train)){
+      delayMin = getLiveDelayForTrain(train) || 0;
+      const posNow = trainPositionNow(train);
+      if(posNow){
+        liveDist = haversine(userPos,[posNow.lat,posNow.lon]);
+        liveRisk = Math.round(Math.max(0, 1-liveDist/RISK_THRESHOLD_M)*100);
+      }
+    }
+    events.push({train, dist:ca.dist, timeMin, fromStation:ca.fromStation, toStation:ca.toStation, risk, delayMin, liveDist, liveRisk});
   });
   events.sort((a,b)=>a.timeMin-b.timeMin);
   const hourly = new Array(24).fill(0);
@@ -1756,7 +1768,7 @@ function renderZoneRiskCurve(hourly){
     + '<text x="'+pad+'" y="12" font-size="9" fill="var(--gold3)">أقصى خطر لكل ساعة (%)</text>'
     + '</svg>';
 }
-document.getElementById('computeZoneRiskBtn').onclick = ()=>{
+function computeAndRenderZoneTimeline(){
   const pos = zoneOriginPos();
   const note = document.getElementById('zoneRiskNote');
   const listEl = document.getElementById('zoneRiskList');
@@ -1775,15 +1787,38 @@ document.getElementById('computeZoneRiskBtn').onclick = ()=>{
   const dangerCount = events.filter(e=>e.risk>=80).length;
   note.textContent = 'عدد القطارات المعنيّة بمنطقتك اليوم: '+events.length
     + (dangerCount>0 ? (' — منها '+dangerCount+' بخطر مرتفع (≥80%)') : '') + '. مرتّبة حسب وقت المرور:';
+  // تنبيه فوري: رقمان مستقلان، كل واحد يكفي بمفرده لإطلاق الصفارة — 1) الأقرب النظري عبر كامل المسار اليوم 2) الموقع الحقيقي الحالي المؤكد عبر Live
+  const zoneDangerSched = events.filter(e=>e.dist<100 && e.risk>=80);
+  const zoneDangerLive = events.filter(e=>e.liveDist!=null && e.liveDist<100 && e.liveRisk>=80);
+  if((zoneDangerSched.length>0 || zoneDangerLive.length>0) && !alertActive){
+    const seg = e=>e.fromStation===e.toStation?e.fromStation:(e.fromStation+' → '+e.toStation);
+    const zoneModules = [
+      ...zoneDangerSched.map(e=>({
+        risk:e.risk, dist:e.dist, trainId:e.train.name, lineName:e.train.name+' ('+seg(e)+')',
+        method:'خط الزمن اليومي — نظري', customLabel:'📅 خط الزمن اليومي (نظري)'
+      })),
+      ...zoneDangerLive.map(e=>({
+        risk:e.liveRisk, dist:e.liveDist, trainId:e.train.name, lineName:e.train.name+' ('+seg(e)+')'+(e.delayMin?(' — متأخر '+e.delayMin+' د'):''),
+        method:'خط الزمن اليومي — Live مباشر', customLabel:'📅 خط الزمن اليومي (Live مباشر)'
+      }))
+    ];
+    triggerAlert({modules:zoneModules}, zoneModules);
+  }
   listEl.innerHTML = events.map(e=>{
     const c = zoneRiskColor(e.risk);
     const timeTxt = minsToHHMM(Math.round(e.timeMin));
     const seg = e.fromStation===e.toStation ? e.fromStation : (e.fromStation+' → '+e.toStation);
+    const estTimeTxt = e.delayMin ? (' — الوقت الفعلي المتوقع: '+minsToHHMM(Math.round(((e.timeMin+e.delayMin)%1440+1440)%1440)) + ' (متأخر '+e.delayMin+' د)') : '';
+    const liveTxt = e.liveDist!=null
+      ? ('<br><span style="font-size:11px;color:'+zoneRiskColor(e.liveRisk)+';">🔴 Live الآن: '+e.liveRisk+'% — '+formatDist(e.liveDist)+estTimeTxt+'</span>')
+      : '';
     return '<div class="row" style="padding:6px 0;">'
-      +'<span style="color:'+c+'">🕐 '+timeTxt+' — '+e.train.name+'<br><span style="font-size:11px;opacity:.75;">قرب '+seg+'</span></span>'
+      +'<span style="color:'+c+'">🕐 '+timeTxt+' — '+e.train.name+'<br><span style="font-size:11px;opacity:.75;">قرب '+seg+'</span>'+liveTxt+'</span>'
       +'<b style="color:'+c+'">'+e.risk+'%<br><span style="font-size:11px;font-weight:400;">'+formatDist(e.dist)+'</span></b></div>';
   }).join('');
-};
+}
+document.getElementById('computeZoneRiskBtn').onclick = computeAndRenderZoneTimeline;
+setInterval(computeAndRenderZoneTimeline, 20000); // تحديث تلقائي كل 20 ثانية، بلا حاجة للضغط على الزر يدوياً كل مرة
 
 // ---------- geolocation watch ----------
 document.getElementById('startBtn').onclick = startWatch;
@@ -2121,7 +2156,7 @@ function triggerAlert(result, dangerousModules){
   const mods = result.modules || [];
   const linesHtml = mods.map((m,i)=>{
     const isDanger = m.risk>=80;
-    const label = ['1️⃣ الجدول العادي','2️⃣ مصحَّح بالتأخير','3️⃣ SNCFT Live مباشر'][i]||m.method;
+    const label = m.customLabel || ['1️⃣ الجدول العادي','2️⃣ مصحَّح بالتأخير','3️⃣ SNCFT Live مباشر'][i]||m.method;
     const color = isDanger ? '#ff4d4d' : (m.trainId ? '#f1c40f' : '#888');
     const txt = m.trainId ? (m.risk+'% — '+m.lineName+' ('+Math.round(m.dist)+' م)') : 'لا يوجد قطار مؤكد لهذه الوحدة الآن';
     return '<div style="color:'+color+';font-weight:'+(isDanger?'700':'400')+';margin:4px 0;">'+label+': '+txt+'</div>';
