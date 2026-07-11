@@ -224,7 +224,6 @@ body{
     <div class="row"><span>⏱️ منطقة آمنة لمدة</span><b id="safeTimeZone">--</b></div>
     <div class="row"><span>السرعة الحالية</span><b id="speedNow">--</b></div>
     <button class="btn" id="startBtn">▶️ تشغيل المراقبة</button>
-    <button class="btn secondary" id="stopBtn" style="display:none">⏸️ إيقاف المراقبة</button>
   </div>
 
   <div class="card" id="riskCard">
@@ -246,6 +245,24 @@ body{
     <div id="scheduleStripWrap" style="overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;margin-top:8px;padding-bottom:6px;">
       <div id="scheduleStrip" style="display:flex;gap:0;align-items:flex-start;min-width:max-content;"></div>
     </div>
+  </div>
+
+  <div class="card" id="zoneRiskCard">
+    <h3>🕐 خط الزمن اليومي لمنطقتك</h3>
+    <div class="small-note">
+      يعتمد فقط على <b style="color:var(--gold)">الجدول الرسمي</b> لكل القطارات (بلا حاجة لتأكيد SNCFT Live) —
+      يفحص كل قطار مبرمج اليوم، يحسب أقرب نقطة تمر منها سكته من موقعك ووقت مرورها بالضبط،
+      ثم يرسم <b style="color:var(--gold)">منحنى الخطر المطلق لكل ساعة</b> من اليوم لهذه المنطقة تحديداً.
+    </div>
+    <div class="row" style="border:none;padding:4px 0 8px">
+      <span>نطاق المنطقة حول موقعك (متر)</span>
+      <input type="number" id="zoneRadiusInput" value="800" min="100" max="5000" step="100"
+        style="width:90px;background:rgba(0,0,0,.3);border:1px solid var(--glass-b);color:#fff;border-radius:6px;padding:6px;text-align:center;font-family:'Tajawal',sans-serif;">
+    </div>
+    <button class="btn" id="computeZoneRiskBtn">📊 احسب خط الزمن لمنطقتي</button>
+    <div id="zoneRiskCurveWrap" style="margin-top:12px;"></div>
+    <div class="small-note" id="zoneRiskNote" style="margin-top:6px;"></div>
+    <div id="zoneRiskList" style="margin-top:6px;display:flex;flex-direction:column;gap:6px;"></div>
   </div>
 
   <div class="card" id="mapCard">
@@ -1676,9 +1693,100 @@ function computeRisk(userPos){
   return { ...worst, lineName: worst.trainId ? worst.lineName+' ['+worst.method+']' : worst.lineName, noLiveData:noLive, modules, trackInfo };
 }
 
+// ---------- خط الزمن اليومي لمنطقة معيّنة (يعتمد فقط على الجدول الرسمي SNCFT، بلا حاجة لتأكيد Live) ----------
+// الفكرة: نأخذ موقع GPS الحالي (أو النقطة اليدوية إن وُجدت)، ونعتبره "منطقة" — ثم نفحص كل قطار مبرمج اليوم على
+// كامل خطوطه، ونحسب لكل قطار أقرب نقطة تمر منها سكته الحديدية من هذه المنطقة + الوقت الدقيق لذلك المرور
+// (بالاستيفاء الخطي بين محطتين متتاليتين، مسافةً ووقتاً معاً). كل قطار تقترب سكته بما يكفي من المنطقة
+// يُعتبر "معنياً بها"، ويُبنى منه سطر في الجدول + نقطة في منحنى الخطر بالساعة.
+function zoneOriginPos(){
+  return lastPos || manualOrigin || null;
+}
+// أقرب اقتراب لقطار معيّن من نقطة معيّنة، عبر كل قطعة من قطعات مساره (محطة ← التي تليها)، مع الوقت المقابل لتلك النقطة بالضبط
+function trainClosestApproach(userPos, train){
+  const stops = parseStops(train.stopsText).filter(s=>!s.unknown && s.time);
+  if(stops.length<2) return null;
+  let best = null;
+  for(let i=0;i<stops.length-1;i++){
+    const A=[stops[i].lat,stops[i].lon], B=[stops[i+1].lat,stops[i+1].lon];
+    const t = projectT(userPos, A, B);
+    const px = A[0]+(B[0]-A[0])*t, py = A[1]+(B[1]-A[1])*t;
+    const d = haversine(userPos,[px,py]);
+    if(!best || d<best.dist){
+      const tA = minutesOf(stops[i].time), tB = minutesOf(stops[i+1].time);
+      best = {dist:d, timeMin: tA + t*(tB-tA), fromStation:stops[i].name, toStation:stops[i+1].name};
+    }
+  }
+  return best;
+}
+// نفس عتبة الخطر المستعملة في المحرك الرئيسي (150م = 100%)، لكي يبقى المعنى موحّداً في كل التطبيق
+function computeZoneDailyTimeline(userPos, zoneRadiusM){
+  const events = [];
+  trains.forEach(train=>{
+    const ca = trainClosestApproach(userPos, train);
+    if(!ca || ca.dist>zoneRadiusM) return;
+    const risk = Math.round(Math.max(0, 1-ca.dist/RISK_THRESHOLD_M)*100);
+    const timeMin = ((ca.timeMin%1440)+1440)%1440; // بعض القطارات تنطلق قرب منتصف الليل — نُطبّع الوقت بين 0 و1440
+    events.push({train, dist:ca.dist, timeMin, fromStation:ca.fromStation, toStation:ca.toStation, risk});
+  });
+  events.sort((a,b)=>a.timeMin-b.timeMin);
+  const hourly = new Array(24).fill(0);
+  events.forEach(e=>{ const h=Math.floor(e.timeMin/60)%24; if(e.risk>hourly[h]) hourly[h]=e.risk; });
+  return {events, hourly};
+}
+function zoneRiskColor(r){ return r>=80 ? '#ff4d4d' : (r>=40 ? '#f1c40f' : '#7ee787'); }
+// منحنى/أعمدة SVG بسيطة (24 عموداً، واحد لكل ساعة) — بدون أي مكتبة خارجية، بنفس هوية ألوان التطبيق
+function renderZoneRiskCurve(hourly){
+  const w=320,h=120,pad=18, barGap=2, barW=(w-2*pad)/24;
+  const nowH = new Date().getHours();
+  let bars='', labels='';
+  for(let i=0;i<24;i++){
+    const r=hourly[i];
+    const barH = Math.max(2,(r/100)*(h-2*pad-14));
+    const x = pad + i*barW;
+    const y = h-pad-14-barH;
+    const isNow = i===nowH;
+    bars += '<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+(barW-barGap).toFixed(1)+'" height="'+barH.toFixed(1)+'" fill="'+zoneRiskColor(r)+'" rx="2"'
+      + (isNow ? ' stroke="var(--gold)" stroke-width="1.5"' : '') + '></rect>';
+    if(i%3===0) labels += '<text x="'+(x+barW/2).toFixed(1)+'" y="'+(h-4)+'" font-size="8" fill="#a9b3e0" text-anchor="middle">'+i+'</text>';
+  }
+  const axisY = h-pad-14;
+  return '<svg viewBox="0 0 '+w+' '+h+'" style="width:100%;height:auto;background:rgba(0,0,0,.25);border:1px solid var(--glass-b);border-radius:10px;">'
+    + '<line x1="'+pad+'" y1="'+axisY+'" x2="'+(w-pad)+'" y2="'+axisY+'" stroke="rgba(255,255,255,.15)"></line>'
+    + bars + labels
+    + '<text x="'+pad+'" y="12" font-size="9" fill="var(--gold3)">أقصى خطر لكل ساعة (%)</text>'
+    + '</svg>';
+}
+document.getElementById('computeZoneRiskBtn').onclick = ()=>{
+  const pos = zoneOriginPos();
+  const note = document.getElementById('zoneRiskNote');
+  const listEl = document.getElementById('zoneRiskList');
+  const curveWrap = document.getElementById('zoneRiskCurveWrap');
+  if(!pos){
+    note.textContent = '⚠️ فعّل GPS (زر "تشغيل المراقبة") أو حدّد نقطة يدوياً من الخريطة أولاً، ثم أعد المحاولة.';
+    curveWrap.innerHTML=''; listEl.innerHTML=''; return;
+  }
+  const radius = Math.max(100, Math.min(5000, Number(document.getElementById('zoneRadiusInput').value)||800));
+  const {events, hourly} = computeZoneDailyTimeline(pos, radius);
+  curveWrap.innerHTML = renderZoneRiskCurve(hourly);
+  if(events.length===0){
+    note.textContent = '✅ حسب الجدول الرسمي، لا يمر أي قطار خلال '+radius+' م من موقعك طوال اليوم.';
+    listEl.innerHTML=''; return;
+  }
+  const dangerCount = events.filter(e=>e.risk>=80).length;
+  note.textContent = 'عدد القطارات المعنيّة بمنطقتك اليوم: '+events.length
+    + (dangerCount>0 ? (' — منها '+dangerCount+' بخطر مرتفع (≥80%)') : '') + '. مرتّبة حسب وقت المرور:';
+  listEl.innerHTML = events.map(e=>{
+    const c = zoneRiskColor(e.risk);
+    const timeTxt = minsToHHMM(Math.round(e.timeMin));
+    const seg = e.fromStation===e.toStation ? e.fromStation : (e.fromStation+' → '+e.toStation);
+    return '<div class="row" style="padding:6px 0;">'
+      +'<span style="color:'+c+'">🕐 '+timeTxt+' — '+e.train.name+'<br><span style="font-size:11px;opacity:.75;">قرب '+seg+'</span></span>'
+      +'<b style="color:'+c+'">'+e.risk+'%<br><span style="font-size:11px;font-weight:400;">'+formatDist(e.dist)+'</span></b></div>';
+  }).join('');
+};
+
 // ---------- geolocation watch ----------
 document.getElementById('startBtn').onclick = startWatch;
-document.getElementById('stopBtn').onclick = stopWatch;
 function startWatch(){
   if(!navigator.geolocation){ alert('الموقع الجغرافي غير مدعوم'); return; }
   unlockAudio();
@@ -1688,7 +1796,6 @@ function startWatch(){
     enableHighAccuracy:true, maximumAge:2000, timeout:15000
   });
   document.getElementById('startBtn').style.display='none';
-  document.getElementById('stopBtn').style.display='block';
   document.getElementById('gpsDot').className='status-dot on';
 }
 function stopWatch(){
@@ -1696,7 +1803,6 @@ function stopWatch(){
   watchId=null;
   if(recalcTimer){ clearInterval(recalcTimer); recalcTimer=null; }
   document.getElementById('startBtn').style.display='block';
-  document.getElementById('stopBtn').style.display='none';
   document.getElementById('gpsDot').className='status-dot off';
   releaseWakeLock();
 }
@@ -2206,9 +2312,8 @@ function qitariNotifyReady(){
   try{ if(window.parent && window.parent!==window) window.parent.postMessage({type:'qitari_ready'}, '*'); }catch(e){}
 }
 qitariNotifyReady();
-// si قِطاري est chargée en caché dans une iframe (ex: Farhoum), on démarre le suivi GPS
-// automatiquement pour que le risque de collision soit toujours disponible en arrière-plan.
-if(window.self !== window.top && navigator.geolocation){
+// démarrage automatique du suivi GPS dès le chargement (plus besoin de cliquer sur le bouton)
+if(navigator.geolocation){
   setTimeout(function(){ try{ startWatch(); }catch(e){} }, 800);
 }
 
