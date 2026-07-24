@@ -52,6 +52,11 @@
  *    automatiquement si hébergé sur *.github.io)
  *   data-repo     : "user/repo" — force le repo (sinon deviné depuis l'URL)
  *   data-path     : dossier à surveiller dans le repo (default "assets")
+ *   data-exclude  : noms de fichiers à ignorer, séparés par "," — pratique si ton
+ *                   dossier "assets" contient aussi des vidéos utilisées ailleurs
+ *                   par ton app (splash screen, animations...) que tu ne veux
+ *                   PAS dans la boucle de fond.
+ *                   Ex: data-exclude="splash.mp4,ghost.mp4,trainTap.mp4"
  *   data-branch   : branche à lire (default "main")
  *   data-src      : chemin/s ta3 el video(s), separés b "," (playlist) — mode manuel
  *   data-pattern  : modèle de nom avec {n} ou {n:3} — mode manuel, utilisé avec data-range
@@ -106,6 +111,12 @@
     repo: attr("data-repo", ""),
     path: attr("data-path", "assets"),
     branch: attr("data-branch", "main"),
+    exclude: attr("data-exclude", "")
+      .split(",")
+      .map(function (s) {
+        return s.trim().toLowerCase();
+      })
+      .filter(Boolean),
   };
 
   // ---- ZÉRO CONFIG: devine owner/repo depuis l'URL si hébergé sur github.io ----
@@ -165,7 +176,11 @@
       .then(function (files) {
         var list = files
           .filter(function (f) {
-            return f.type === "file" && VIDEO_EXT.test(f.name);
+            return (
+              f.type === "file" &&
+              VIDEO_EXT.test(f.name) &&
+              config.exclude.indexOf(f.name.toLowerCase()) === -1
+            );
           })
           .map(function (f) {
             return config.path + "/" + f.name;
