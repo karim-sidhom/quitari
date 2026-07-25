@@ -1536,6 +1536,11 @@ let kaAudioEl=null, kaWakeLockTimer=null;
 // هذا القفل مستقل تماماً عن حساب "أقرب قطار" في كل الوحدات الأخرى (لا يُغيَّر فيها شيء).
 const ALARM_POST_PASSAGE_GRACE_MS = 30*60*1000; // 30 دقيقة
 let alarmLockTrain=null, alarmLockToStation=null, alarmLockConfirmedAt=null;
+// طلب المستخدم: القفل الصلب (الذي يمنع إيقاف الإنذار يدوياً) لا يُفعَّل على قراءة GPS واحدة شاذة —
+// يتطلب عدة قراءات متتالية متسقة (نفس القطار المسبِّب) قبل التفعيل. الصفارة/الشاشة نفسها تنطلق فوراً بلا أي تأخير كما كان —
+// هذا التأخير يخص فقط لحظة تحوّل الإنذار إلى "غير قابل للإيقاف يدوياً"، وليس لحظة انطلاقه.
+let lockConfirmTrainId=null, lockConfirmCount=0;
+const LOCK_CONFIRM_READINGS = 3; // عدد القراءات المتتالية المطابقة المطلوبة لتفعيل القفل الصلب
 let alarmMinDistSeen = Infinity; // أدنى مسافة رُصدت أثناء الإنذار — تُستعمل لإعلان "مرّ على بعد X متراً" عند الابتعاد
 // ---------- عرض مباشر للمسافة + عدّاد وقت الوصول التقديري + بيب صوتي + تصعيد آخر دقيقة — للإنذار الرئيسي (alertOverlay) فقط ----------
 // الوقت التقديري يُحتسَب من سرعة الاقتراب الفعلية (تغيّر المسافة الحقيقية بمرور الزمن)، وليس من أي جدول نظري —
@@ -5320,7 +5325,7 @@ function onPos(pos){
     }
   }
   recalcAndDisplay();
-  if(!recalcTimer) recalcTimer = setInterval(recalcAndDisplay, 5000); // le train bouge même si l'utilisateur est immobile
+  if(!recalcTimer) recalcTimer = setInterval(recalcAndDisplay, 2000); // طلب المستخدم: تحديث كامل كل ثانيتين، حتى لو كان المستخدم ثابتاً (القطار يتحرك بمفرده)
 }
 function formatDist(m){
   if(!isFinite(m)) return '--';
@@ -5532,6 +5537,12 @@ function recalcAndDisplay(){
     if(!isProximityAlertMuted()) triggerAlert(result, dangerousModules);
     else fallbackMutedVibration();
   }
+  // يستمر تأكيد القفل الصلب في كل دورة حتى بعد انطلاق الصفارة (الإنذار مفعّل فعلاً) — لأن القراءة الأولى وحدها (عند triggerAlert) لا تكفي للقفل
+  if(dangerousModules.length>0){
+    tryConfirmAlarmLock(result, dangerousModules);
+  } else {
+    lockConfirmTrainId=null; lockConfirmCount=0; // لا خطر في هذه الدورة — إعادة تصفير عدّاد التأكيد لحدث لاحق جديد
+  }
   // إنذار إضافي مستقل تماماً: يعمل بالتوازي مع الإنذار أعلاه، بلا أي اعتماد عليه ولا تأثير منه أو عليه — انظر checkLiveOnlyAlarm أدناه
   checkLiveOnlyAlarm(result);
   // المُعلن الصوتي للمسافة: يتكلم فوراً بمجرد أن تصل المسافة إلى 150م أو أقل، حسب أي وحدة من الوحدات الأربع (وليس بالضرورة كلها معاً) —
@@ -5626,6 +5637,7 @@ function forceStopAlarm(){
   stopSiren();
   stopMainAlarmTicker(); // يوقف عرض المسافة/العدّاد والبيب الصوتي ويزيل تصعيد آخر دقيقة
   alarmLockTrain=null; alarmLockToStation=null; alarmLockConfirmedAt=null;
+  lockConfirmTrainId=null; lockConfirmCount=0; // تصفير عدّاد تأكيد القفل لحدث الإنذار القادم
   alarmMinDistSeen = Infinity;
   const el = document.getElementById('alertGraceStatus'); if(el) el.textContent='';
 }
@@ -7348,14 +7360,21 @@ sl_initLocation();
 setInterval(()=>{ if (lastPos) sl_refreshForPosition(lastPos[0], lastPos[1]); }, 15*60*1000); // إعادة حساب دورية كل 15 دقيقة (يتحدث الموقع ومسجد الأقرب والإقامة)
 
 // ---------- alert system ----------
-function triggerAlert(result, dangerousModules){
-  alertActive=true;
-  sl_stopAdhan(); // إنذار خطر القطار يوقف الأذان فوراً — الأولوية المطلقة للسلامة
-  // تحديد القطار المسبِّب للإنذار ومحطته التالية (بعد مروره بالراجل) — لقفل الـ30 دقيقة فقط، دون أي تأثير على حساب الخطر نفسه.
-  // لا يُعاد تحديد القفل إن كان قائماً بالفعل من دورة سابقة لنفس حلقة الإنذار.
-  if(!alarmLockTrain){
-    const culpritId = result.trainId || (dangerousModules && dangerousModules[0] && dangerousModules[0].trainId);
-    const culpritTrain = culpritId ? trains.find(t=>t.name===culpritId) : null;
+// يُستدعى في كل دورة تحديث (سواء كان الإنذار مفعّلاً بالفعل أو لا يزال في طور التأكيد) — لا ينتظر بدء الصفارة لكي يبدأ العدّ.
+// يقفل فقط بعد LOCK_CONFIRM_READINGS قراءة متتالية مطابقة لنفس القطار المسبِّب — قراءة GPS شاذة عابرة واحدة لا تكفي لتفعيل القفل الصلب.
+// لا علاقة له بانطلاق الصفارة/الشاشة نفسها (تظل فورية كما كانت) — فقط بلحظة تحوّل الإنذار إلى "غير قابل للإيقاف يدوياً".
+function tryConfirmAlarmLock(result, dangerousModules){
+  if(alarmLockTrain) return; // القفل مُفعَّل بالفعل من حلقة سابقة، لا حاجة لإعادة التأكيد
+  const culpritId = result.trainId || (dangerousModules && dangerousModules[0] && dangerousModules[0].trainId);
+  if(!culpritId){ lockConfirmTrainId=null; lockConfirmCount=0; return; }
+  if(culpritId===lockConfirmTrainId){
+    lockConfirmCount++;
+  } else {
+    lockConfirmTrainId=culpritId;
+    lockConfirmCount=1;
+  }
+  if(lockConfirmCount>=LOCK_CONFIRM_READINGS){
+    const culpritTrain = trains.find(t=>t.name===culpritId);
     if(culpritTrain){
       const pos = trainPositionNow(culpritTrain);
       alarmLockTrain = culpritTrain;
@@ -7364,6 +7383,13 @@ function triggerAlert(result, dangerousModules){
       alarmMinDistSeen = Infinity; // إعادة ضبط أدنى مسافة لهذا الحدث الجديد
     }
   }
+}
+function triggerAlert(result, dangerousModules){
+  alertActive=true;
+  sl_stopAdhan(); // إنذار خطر القطار يوقف الأذان فوراً — الأولوية المطلقة للسلامة
+  // تأكيد القفل الصلب يتم عبر tryConfirmAlarmLock في recalcAndDisplay على عدة قراءات متتالية، وليس هنا فوراً —
+  // هذا الاستدعاء يحتسب فقط القراءة الأولى من القراءات المطلوبة، والصفارة/الشاشة تنطلقان بلا أي تأخير رغم ذلك.
+  tryConfirmAlarmLock(result, dangerousModules);
   ann_stopForAlarm(); // الإنذار يقطع فوراً أي إعلان صوتي جارٍ ويعيد صوت الإذاعة لمستواه الطبيعي
   document.getElementById('alertOverlay').style.display='flex';
   startMainAlarmTicker(); // يبدأ عرض المسافة المباشرة + عدّاد الوقت التقديري + البيب الصوتي + تصعيد آخر دقيقة
