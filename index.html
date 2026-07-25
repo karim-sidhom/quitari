@@ -147,6 +147,14 @@ body{
 #alertOverlay h1{font-size:34px;margin-bottom:14px;}
 #alertOverlay p{font-size:16px;margin-bottom:22px;line-height:1.8;}
 #alertOverlay .btn{max-width:280px;}
+/* عرض المسافة والعدّاد المباشرين للقطار المسبِّب للإنذار الرئيسي — يُحدَّثان كل ثانية عبر mainAlarmTick، مستقلان عن أي وحدة أخرى */
+#alertDistance{font-size:19px;font-weight:800;margin-bottom:6px;text-shadow:0 0 12px rgba(255,255,255,.5);}
+#alertCountdown{font-size:16px;margin-bottom:18px;}
+#alertCountdown .cdNum{display:inline-block;font-size:40px;font-weight:900;color:#fff;text-shadow:0 0 22px rgba(255,255,255,.75);}
+/* تصعيد بصري قوي عند بلوغ آخر دقيقة قبل وصول القطار (حسب سرعة الاقتراب الفعلية) */
+#alertOverlay.criticalMinute{animation:pulse 0.22s infinite;}
+#alertOverlay.criticalMinute #alertCountdown .cdNum{color:#ff1744;animation:countdownPulse .45s infinite;}
+#alertOverlay.criticalMinute #alertDistance{color:#ff1744;}
 /* عدّاد تنازلي على كامل الشاشة — يظهر فقط خلال آخر 60 ثانية قبل مرور القطار، وبشرط أن يكون المستخدم ضمن 150م من السكة. يعلو فوق كل شيء ولا يمكن إغلاقه يدوياً. */
 #countdownOverlay{
   position:fixed;inset:0;background:rgba(0,0,0,.94);z-index:10000;
@@ -1123,25 +1131,6 @@ var RADIO_TRACKS = [
     <button class="btn" id="startBtn">▶️ تشغيل المراقبة</button>
   </div>
 
-  <div class="card" id="sndtrCard">
-    <h3>🎙️🚆 كاشف صوتي — الميكروفون دائم التشغيل بلا أي شرط مسافة</h3>
-    <div class="small-note">
-      الميكروفون الآن <b style="color:var(--gold)">يعمل دوماً منذ فتح التطبيق</b>، بلا أي بوابة مسافة أو GPS أو أي قياس آخر —
-      حتى لو كان القطار غير مدرج إطلاقاً في الجدول ولا في SNCFT Live، أو كان GPS معطلاً تماماً.
-      لا يعتمد على عتبة صوت ثابتة (تلتقط أي ضجيج مستمر كالمكيّف أو الموسيقى)، بل يبحث عن
-      <b style="color:var(--gold)">توقيع "مرور" فعلي</b>: صعود تدريجي في الترددات المنخفضة ثم قمة ثم عودة تقريبية لمستوى الضجيج المحيط
-      خلال مدة معقولة (3 إلى 25 ثانية) — نفس شكل اقتراب وابتعاد جسم حقيقي، وليس ضجيجاً ثابتاً. عند اكتمال هذه الدورة فعلاً،
-      <b style="color:var(--gold)">يُطلق إنذاراً مستقلاً بحتاً (🎙️🚨 أعلى الشاشة)</b> مبنياً فقط على ما يسمعه الميكروفون —
-      بلا أي شرط مسافة أو حساب آخر، ويمكن إيقافه يدوياً (يعيد التسلّح تلقائياً عند مرور جديد).
-      <br>بالتوازي، يراقب الكاشف أيضاً نطاق <b style="color:var(--gold)">نفير القطار (Avertisseur، 300-660Hz)</b> —
-      وهو نطاق مصمَّم أصلاً ليُسمع لمسافات بعيدة (عدة كيلومترات في الريف)، فيُعطي إشارة أعلى ثقة تُطلق نفس الإنذار البحت
-      فور رصده لثوانٍ قليلة، دون الحاجة لانتظار دورة الصعود-النزول الكاملة.
-      <br>بالتوازي أيضاً، ولا علاقة له بما سبق، يبقى <b style="color:var(--gold)">الإنذار القديم المبني على مسافة GPS إلى السكة (150م)</b> يعمل كما كان — إنذاران/ثلاثة مستقلة تماماً.
-    </div>
-    <button class="btn" id="sndtrToggleBtn">🎙️ فعّل إذن الميكروفون الآن (يُفضَّل مرة واحدة عند فتح التطبيق)</button>
-    <div class="row"><span>حالة الميكروفون (دائم)</span><b id="sndtrStatus">متوقف — بانتظار الاقتراب من السكة</b></div>
-  </div>
-
   <div class="card" id="mapCard">
     <h3>🗺️ الخريطة والقطارات على السكة</h3>
     <div class="small-note">تُعرض خطوط السكة الحديدية وكل القطارات النشطة عند <b style="color:var(--gold)">موقعها النظري حسب الجدول الرسمي</b>، ويتم تصحيح الموقع تلقائياً كل بضع ثوانٍ إذا أعطت بيانات <b style="color:var(--gold)">SNCFT Live</b> مؤشراً مختلفاً (تأخير أو موقعاً فعلياً آخر).</div>
@@ -1465,6 +1454,8 @@ const GHOST_VIDEO_SRC = 'data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yY
 <div id="alertOverlay">
   <h1>🚨 خطر! 🚨</h1>
   <p id="alertText">أنت على مقربة من سكة حديدية وقطار متوقع بنفس التوقيت تقريباً!<br>ابتعد فوراً عن المسار.</p>
+  <div id="alertDistance"></div>
+  <div id="alertCountdown"></div>
   <button class="btn" onclick="dismissAlert()">فهمت، توقف عن الصوت</button>
   <p id="alertGraceStatus" style="font-size:13px;margin-top:12px;opacity:.85;"></p>
 </div>
@@ -1546,6 +1537,12 @@ let kaAudioEl=null, kaWakeLockTimer=null;
 const ALARM_POST_PASSAGE_GRACE_MS = 30*60*1000; // 30 دقيقة
 let alarmLockTrain=null, alarmLockToStation=null, alarmLockConfirmedAt=null;
 let alarmMinDistSeen = Infinity; // أدنى مسافة رُصدت أثناء الإنذار — تُستعمل لإعلان "مرّ على بعد X متراً" عند الابتعاد
+// ---------- عرض مباشر للمسافة + عدّاد وقت الوصول التقديري + بيب صوتي + تصعيد آخر دقيقة — للإنذار الرئيسي (alertOverlay) فقط ----------
+// الوقت التقديري يُحتسَب من سرعة الاقتراب الفعلية (تغيّر المسافة الحقيقية بمرور الزمن)، وليس من أي جدول نظري —
+// يُصحَّح عند كل تحديث GPS فعلي، ويُنقَص ثانية بثانية بين التحديثات عبر setInterval منفصل حتى يبقى العدّاد سلساً.
+let mainAlarmCurrentDist = Infinity;
+let mainAlarmLastDist = null, mainAlarmLastDistAt = null, mainAlarmEtaMs = null;
+let mainAlarmTickId = null, mainAlarmPipTick = 0, mainAlarmCritical = false;
 // ---------- حالة الإنذار الإضافي المستقل (SNCFT Live فقط) — متغيّرات منفصلة تماماً عن الإنذار الرئيسي أعلاه، بلا أي تشارك ----------
 let liveAlarmActive=false, liveSirenOsc=null;
 const LIVE_ALARM_POST_PASSAGE_GRACE_MS = 30*60*1000; // 30 دقيقة، نفس مدة الإنذار الرئيسي لكن بمتغيّرات مستقلة
@@ -5576,7 +5573,28 @@ function alarmLockedTrainDistance(){
   if(!pos) return Infinity;
   const d = haversine(lastPos, [pos.lat, pos.lon]);
   if(isFinite(d) && d < alarmMinDistSeen) alarmMinDistSeen = d; // نتتبّع أدنى مسافة فعلية للإعلان عنها لاحقاً عند الابتعاد
+  mainAlarmUpdateEta(d); // تحديث تقدير وقت الوصول لعرضه في نافذة الإنذار الرئيسي
   return d;
+}
+// يُقدِّر الوقت المتبقي (مللي ثانية) حتى وصول القطار عبر سرعة الاقتراب الفعلية بين قراءتي مسافة متتاليتين —
+// إن كان القطار ثابتاً أو يبتعد (سرعة اقتراب ≤ صفر تقريباً)، لا يُعرض أي وقت (mainAlarmEtaMs = null) بدل رقم مضلِّل.
+function mainAlarmUpdateEta(distNow){
+  if(!isFinite(distNow)){
+    mainAlarmCurrentDist = Infinity; mainAlarmLastDist = null; mainAlarmLastDistAt = null; mainAlarmEtaMs = null;
+    return;
+  }
+  mainAlarmCurrentDist = distNow;
+  const now = Date.now();
+  if(mainAlarmLastDist!==null && mainAlarmLastDistAt!==null){
+    const dtSec = (now - mainAlarmLastDistAt) / 1000;
+    if(dtSec >= 1){ // نتجنّب الحساب على فارق زمني ضئيل جداً يشوّه السرعة المقدَّرة
+      const closingSpeed = (mainAlarmLastDist - distNow) / dtSec; // م/ثانية، موجب = القطار يقترب فعلاً
+      mainAlarmEtaMs = (closingSpeed > 0.3) ? (distNow / closingSpeed) * 1000 : null;
+      mainAlarmLastDist = distNow; mainAlarmLastDistAt = now;
+    }
+  } else {
+    mainAlarmLastDist = distNow; mainAlarmLastDistAt = now;
+  }
 }
 // شرطا فكّ القفل (أيهما يتحقق أولاً يكفي):
 // 1) مرّت 30 دقيقة على تأكيد SNCFT Live بوصول القطار لمحطته التالية بعد مروره بالراجل.
@@ -5606,9 +5624,72 @@ function forceStopAlarm(){
   alertActive=false;
   document.getElementById('alertOverlay').style.display='none';
   stopSiren();
+  stopMainAlarmTicker(); // يوقف عرض المسافة/العدّاد والبيب الصوتي ويزيل تصعيد آخر دقيقة
   alarmLockTrain=null; alarmLockToStation=null; alarmLockConfirmedAt=null;
   alarmMinDistSeen = Infinity;
   const el = document.getElementById('alertGraceStatus'); if(el) el.textContent='';
+}
+// ---------- عدّاد/بيب/تصعيد الإنذار الرئيسي (alertOverlay) — يعمل كل ثانية طالما الإنذار نشط ----------
+// مستقل تماماً عن صفارة الخطر (sirenOsc) وعن عدّاد خط الزمن (kz_/countdownOverlay) — لا يوقف أحدهما الآخر ولا يتأثر به.
+function startMainAlarmTicker(){
+  stopMainAlarmTicker();
+  mainAlarmPipTick = 0;
+  mainAlarmTick();
+  mainAlarmTickId = setInterval(mainAlarmTick, 1000);
+}
+function stopMainAlarmTicker(){
+  if(mainAlarmTickId){ clearInterval(mainAlarmTickId); mainAlarmTickId=null; }
+  mainAlarmCritical=false;
+  mainAlarmCurrentDist = Infinity; mainAlarmLastDist=null; mainAlarmLastDistAt=null; mainAlarmEtaMs=null;
+  const ov = document.getElementById('alertOverlay'); if(ov) ov.classList.remove('criticalMinute');
+  const dEl = document.getElementById('alertDistance'); if(dEl) dEl.textContent='';
+  const cEl = document.getElementById('alertCountdown'); if(cEl) cEl.innerHTML='';
+}
+function mainAlarmTick(){
+  if(!alertActive) return;
+  const dEl = document.getElementById('alertDistance');
+  if(dEl) dEl.textContent = isFinite(mainAlarmCurrentDist) ? ('📍 القطار على بعد '+formatDist(mainAlarmCurrentDist)+' منك الآن') : '';
+  const cEl = document.getElementById('alertCountdown');
+  const ov = document.getElementById('alertOverlay');
+  let remainSec = null;
+  if(mainAlarmEtaMs!==null && isFinite(mainAlarmEtaMs)){
+    mainAlarmEtaMs = Math.max(0, mainAlarmEtaMs - 1000); // نُنقص العدّاد ثانية بثانية بين تحديثات GPS الفعلية أيضاً، حتى يبقى سلساً
+    remainSec = Math.round(mainAlarmEtaMs/1000);
+  }
+  if(cEl){
+    if(remainSec!==null){
+      const mm = Math.floor(remainSec/60), ss = remainSec%60;
+      cEl.innerHTML = '⏱ الوصول المتوقع خلال <span class="cdNum">'+mm+':'+String(ss).padStart(2,'0')+'</span>';
+    } else {
+      cEl.innerHTML='';
+    }
+  }
+  const isCritical = (remainSec!==null && remainSec<=60); // طلب صريح: تصعيد قوي عند بلوغ آخر دقيقة قبل الوصول
+  if(isCritical && !mainAlarmCritical){ mainAlarmCritical=true; if(ov) ov.classList.add('criticalMinute'); }
+  if(!isCritical && mainAlarmCritical){ mainAlarmCritical=false; if(ov) ov.classList.remove('criticalMinute'); }
+  if(isCritical){
+    playAlarmPip(true); // بيب قوي كل ثانية في آخر دقيقة
+    if(navigator.vibrate) navigator.vibrate([300,100,300]);
+  } else if(mainAlarmPipTick % 3 === 0){
+    playAlarmPip(false); // بيب عادي كل 3 ثوانٍ خارج آخر دقيقة (أو حين لا يوجد تقدير وقت متاح)
+  }
+  mainAlarmPipTick++;
+}
+// نغمة بيب قصيرة مستقلة تماماً عن صفارة الخطر (sirenOsc) — نغمة أعلى وأقوى تلقائياً في آخر دقيقة قبل الوصول
+function playAlarmPip(strong){
+  try{
+    if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    if(audioCtx.state==='suspended') audioCtx.resume();
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type='square';
+    o.frequency.value = strong ? 1400 : 1000;
+    g.gain.value = strong ? 0.35 : 0.22;
+    o.connect(g).connect(audioCtx.destination);
+    o.start();
+    const dur = strong ? 0.16 : 0.1;
+    g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime+dur);
+    o.stop(audioCtx.currentTime+dur+0.02);
+  }catch(e){}
 }
 // هل انقضت فعلاً فترة السماح (30 د بعد تأكيد الوصول)؟ يُستعمل لمنع الإيقاف اليدوي المبكر عبر زر "فهمت"
 function alarmGraceElapsed(){
@@ -7285,6 +7366,7 @@ function triggerAlert(result, dangerousModules){
   }
   ann_stopForAlarm(); // الإنذار يقطع فوراً أي إعلان صوتي جارٍ ويعيد صوت الإذاعة لمستواه الطبيعي
   document.getElementById('alertOverlay').style.display='flex';
+  startMainAlarmTicker(); // يبدأ عرض المسافة المباشرة + عدّاد الوقت التقديري + البيب الصوتي + تصعيد آخر دقيقة
   const mods = [...(result.modules || [])];
   // الأقرب نظرياً بلا تأكيد SNCFT Live: يُضاف كسطر خامس في نافذة التنبيه فقط إذا كان قطاراً فعلياً موجوداً، بالتوازي مع الأربع وحدات أعلاه
   if(result.theoBest && result.theoBest.trainId){
@@ -8418,6 +8500,9 @@ function checkPeacockHour(){
   let pta_muet = false;
   let pta_trainSuivi = null;
   let pta_ctx=null, pta_osc=null, pta_gain=null, pta_sirenTimer=null, pta_vibrateTimer=null;
+  // ---------- تتبّع المسافة عبر الزمن لتقدير "وقت الوصول" (horaire d'impact) — طلب صريح من المستخدم ----------
+  // يُعاد ضبطه عند تغيّر القطار المتابَع أو عند خروج كل القطارات من نطاق 150م، حتى لا تُحتسَب سرعة اقتراب مضلِّلة بين قطارين مختلفين
+  let pta_lastDist = null, pta_lastDistAt = null, pta_lastNum = null, pta_etaSec = null;
 
   // يجمع كل القطارات "ذات مشكلة" النشطة الآن فقط (نفس معايير قائمة "القطارات ذات مشكلة" في مكتشف القطارات)
   function pta_collectProblemTrainsNow(){
@@ -8480,12 +8565,12 @@ function checkPeacockHour(){
     }catch(e){}
   }
 
-  function pta_demarrer(entry){
+  function pta_demarrer(entry, distTxt, impactTxt){
     if(pta_trainSuivi !== entry.num) pta_muet = false; // حالة جديدة (قطار مختلف) → إعادة تسلّح حتى لو كان الإنذار السابق موقوفاً
     pta_trainSuivi = entry.num;
 
     const txt = document.getElementById('ptaAlarmeBanniereTxt');
-    if(txt) txt.textContent = 'القطار '+(entry.num||'—')+' — '+entry.name+' — السبب: '+entry.sabab;
+    if(txt) txt.textContent = 'القطار '+(entry.num||'—')+' — '+entry.name+' — السبب: '+entry.sabab+(distTxt||'')+(impactTxt||'');
 
     if(pta_muet) return;
     if(pta_active) return;
@@ -8553,6 +8638,7 @@ function checkPeacockHour(){
       const badgeEl = document.getElementById('ptaStatusBadge');
       if(typeof lastPos==='undefined' || !Array.isArray(lastPos)){
         pta_arreter(); pta_muet=false; pta_trainSuivi=null;
+        pta_lastDist = null; pta_lastDistAt = null; pta_lastNum = null; pta_etaSec = null;
         if(statusEl) statusEl.innerHTML = '⏳ بانتظار تحديد الموقع (فعّل GPS)...';
         if(badgeEl) badgeEl.textContent = '—';
         return;
@@ -8568,16 +8654,41 @@ function checkPeacockHour(){
         pta_arreter();
         pta_muet = false;
         pta_trainSuivi = null;
+        pta_lastDist = null; pta_lastDistAt = null; pta_lastNum = null; pta_etaSec = null;
         if(statusEl) statusEl.innerHTML = '<span style="color:#7ee787">✅ لا يوجد أي قطار إشكالي ضمن 150 متراً من موقعك حالياً — مقطعك سليم</span>';
         if(badgeEl){ badgeEl.textContent = '0'; }
         return;
       }
 
+      // ---------- تحديث تقدير وقت الوصول (horaire d'impact) من سرعة الاقتراب الفعلية بين قراءتي مسافة متتاليتين ----------
+      const pta_now = Date.now();
+      if(meilleur.entry.num !== pta_lastNum){
+        pta_lastNum = meilleur.entry.num;
+        pta_lastDist = meilleur.dist; pta_lastDistAt = pta_now; pta_etaSec = null;
+      } else if(pta_lastDist!==null && pta_lastDistAt!==null){
+        const dtSec = (pta_now-pta_lastDistAt)/1000;
+        if(dtSec>=1){
+          const closingSpeed = (pta_lastDist-meilleur.dist)/dtSec; // م/ثانية، موجب = القطار يقترب فعلاً
+          pta_etaSec = (closingSpeed>0.3) ? Math.round(meilleur.dist/closingSpeed) : null;
+          pta_lastDist = meilleur.dist; pta_lastDistAt = pta_now;
+        }
+      }
+      const pta_distTxt = ' — على بعد '+Math.round(meilleur.dist)+'م منك';
+      let pta_impactTxt = '';
+      if(pta_etaSec!==null && isFinite(pta_etaSec)){
+        const impactDate = new Date(pta_now + pta_etaSec*1000);
+        const hh = String(impactDate.getHours()).padStart(2,'0');
+        const mm = String(impactDate.getMinutes()).padStart(2,'0');
+        const ss = String(impactDate.getSeconds()).padStart(2,'0');
+        const mmSS = Math.floor(pta_etaSec/60), ssSS = pta_etaSec%60;
+        pta_impactTxt = ' — ⏱ وقت الوصول المتوقع: '+hh+':'+mm+':'+ss+' (خلال '+mmSS+':'+String(ssSS).padStart(2,'0')+')';
+      }
+
       if(statusEl){
-        statusEl.innerHTML = '<span style="color:#ff8888">⚠️ يوجد قطار إشكالي في مقطعك الآن: القطار '+(meilleur.entry.num||'—')+' — '+escAttr(meilleur.entry.name)+'<br><span style="font-weight:400;">السبب: '+escAttr(meilleur.entry.sabab)+' — على بعد '+Math.round(meilleur.dist)+'م منك</span></span>';
+        statusEl.innerHTML = '<span style="color:#ff8888">⚠️ يوجد قطار إشكالي في مقطعك الآن: القطار '+(meilleur.entry.num||'—')+' — '+escAttr(meilleur.entry.name)+'<br><span style="font-weight:400;">السبب: '+escAttr(meilleur.entry.sabab)+pta_distTxt+pta_impactTxt+'</span></span>';
       }
       if(badgeEl){ badgeEl.textContent = '1'; }
-      pta_demarrer(meilleur.entry);
+      pta_demarrer(meilleur.entry, pta_distTxt, pta_impactTxt);
     }catch(e){}
   }
 
@@ -9457,513 +9568,9 @@ function checkPeacockHour(){
 // ========== FIN إنذار "150 متر مطلق" ==========
 
 // ================================================================
-// ========== كاشف صوتي تكميلي للقطار — يعتمد على نفس حساب مسافة السكة في التطبيق ==========
-// المطلوب بالضبط: حساب المسافة إلى السكة هو نفسه المستخدم في بقية التطبيق (kz_nearestRailDistanceM،
-// أي نفس "نموذج اقتراب السكة")، لا حساب منفصل مبني على الصوت. عند وصول تلك المسافة إلى ≈500م يُفعَّل
-// الميكروفون تلقائياً مع تنبيه صوتي «تم رصد قطار على بعد 500 متر، انتبه»، ثم يستمر بالاستماع بشكل دائم
-// في الخلفية. عند وصول نفس المسافة (GPS) إلى 150م — بنفس منطق الهستيريسيس المستخدم في باقي الإنذارات
-// المستقلة — يُطلق إنذاراً مستقلاً تماماً، بغضّ النظر عن أي إنذار آخر في التطبيق.
-// دور الميكروفون هنا تكميلي فقط: يحاول تمييز صوت يشبه دمدمة قطار ليضيف تأكيداً 🔊 على الإنذار، لكنه
-// لا يشترط لإطلاقه؛ فالإنذار الأساسي مبني دوماً على مسافة GPS كبقية إنذارات التطبيق، حتى لو رُفض إذن
-// الميكروفون. Module 100% indépendant : préfixe sndtr_.
-// ================================================================
-(function(){
-  'use strict';
-
-  const SNDTR_CYCLE_MS = 1500;          // فحص المسافة (GPS) — نفس وتيرة باقي الإنذارات المستقلة
-  const SNDTR_MIC_CYCLE_MS = 150;       // فحص الميكروفون — خُفِّض من 300 إلى 150ms لضمان التقاط نفير قصير (~300-500ms) بدقة كافية لتصنيفه
-
-  const SNDTR_SEUIL_500_START = 500;    // بدء تفعيل الميكروفون + التنبيه الصوتي
-  const SNDTR_SEUIL_500_STOP  = 520;    // هستيريسيس لإيقاف الميكروفون عند الابتعاد
-  const SNDTR_SEUIL_150_START = 150;    // بدء الإنذار المستقل
-  const SNDTR_SEUIL_150_STOP  = 160;    // هستيريسيس لإيقاف الإنذار
-
-  const SNDTR_BASS_MIN_HZ = 20;         // نطاق الترددات المنخفضة المميزة لدمدمة القطار
-  const SNDTR_BASS_MAX_HZ = 250;
-
-  // ---------- نفير القطار (Avertisseur) — نطاق 300-660Hz، مصمَّم في الأصل ليقطع مسافات طويلة (عدة كيلومترات في الريف) ----------
-  // إشارة أعلى ثقة من دمدمة السكة العامة أعلاه: النفير صوت متعمَّد وحاد ومركّز في هذا النطاق تحديداً. بدل مجرد
-  // "صوت مستمر لعيّنتين" (غير حصري إطلاقاً)، نقطّع الصوت إلى نفيرات منفصلة (نبضات)، نصنّف كل واحدة طويلة "—" أو
-  // قصيرة "o" حسب مدتها، ثم نقارن التسلسل الأخير بأكواد السفير الرسمية في نظام السير SNCFT — هذا يرفع الثقة كثيراً
-  // مقارنة بمجرد "سُمع صوت في هذا النطاق"، ويقلّل الإنذارات الكاذبة من بوق سيارة عابر (نمط مختلف عادةً).
-  const SNDTR_HORN_MIN_HZ = 300;
-  const SNDTR_HORN_MAX_HZ = 660;
-  // طلب المستخدم: رفع عتبات الكشف 4.5 أضعاف لتقليل الإنذارات الكاذبة (القيمة الأصلية بين قوسين).
-  // القيمة القصوى الممكنة لهذا المقياس هي 255 (بيانات صوتية 0-255)، لذا 100×4.5=450 تم تحديدها عند 250 (الحد العملي الأقصى تقريباً).
-  const SNDTR_HORN_SEUIL_ON = 250;   // شدة (0-255) لبدء نفيرة — أعلى من عتبة الدمدمة لأن النفير صوت حاد ومركّز في نطاقه (أصلياً: 100، ×4.5 لكن محدودة بحد 255)
-  const SNDTR_HORN_SEUIL_OFF = 220;   // شدة لاعتبار النفيرة قد انتهت (أصلياً: 60 ×4.5=270، محدودة بحد أقل من SEUIL_ON)
-  const SNDTR_HORN_MIN_PULSE_MS = 120;     // أقل مدة نفيرة تُحتسب (أقصر من هذا = ضجيج عابر، يُهمَل)
-  const SNDTR_HORN_LONG_MS = 700;          // ابتداءً من هذه المدة تُصنَّف النفيرة "طويلة —"، وإلا "قصيرة o" (تقدير أولي، يحتاج معايرة ميدانية)
-  const SNDTR_HORN_PROLONGED_MS = 1500;    // نفيرة طويلة "مطوَّلة جداً" (انطلاق قطار / دخول نفق) — أطول من كود التحذير العادي
-  const SNDTR_HORN_MAX_GAP_MS = 1800;      // أقصى فراغ بين نفيرتين متتاليتين ليُعتبرا جزءاً من نفس "الجملة" الصوتية
-  const SNDTR_HORN_PHRASE_MAX_AGE_MS = 15000; // ننسى أي نفيرة أقدم من هذا عند تجميع الجملة
-
-  // ---------- جدول تردد نفير كل عائلة عتاد ركاب SNCFT — يُستعمل فقط لتخمين "نوع القطار" تكميلياً، لا يشترط لإطلاق الإنذار ----------
-  // النطاقات متداخلة جزئياً بين العائلات (طبيعي، فهي أرقام تقريبية من التوثيق)، لذا عند التداخل نختار الأقرب لمركز نطاق كل عائلة
-  const SNDTR_HORN_FAMILIES = [
-    {id:'emd',     label:'جرار ديزل خطوط رئيسية (EMD GT18LC-2 / GT18CU-2)', min:300, max:370},
-    {id:'alsthom', label:'جرار ديزل خطوط رئيسية (Alsthom / Traction Export)', min:350, max:420},
-    {id:'caf',     label:'أوتوريال ذاتي الدفع (CAF / CFD)', min:400, max:480},
-    {id:'rotem',   label:'رمة كهربائية ضاحوية (Hyundai Rotem)', min:450, max:520},
-    {id:'ganz',    label:'أوتوريال جهوي/تاريخي (Ganz-Mávag)', min:320, max:380},
-  ];
-
-  // ---------- آلة حالة "صعود ثم قمة ثم نزول" — توقيع مرور جسم فعلي، وليس مجرد تجاوز عتبة ثابتة ----------
-  // الفكرة: صوت المكيّف أو الموسيقى يبقى شبه ثابت لفترة طويلة (لا صعود/نزول واضح)، بينما القطار المار
-  // فعلياً يعطي منحنى "جرس": صعود تدريجي ثم قمة ثم عودة تقريباً لمستوى الضجيج المحيط، خلال مدة معقولة.
-  const SNDTR_BASELINE_ALPHA = 0.02;     // سرعة تحديث خط الأساس (ضجيج محيط بطيء التغيّر) — فقط أثناء الهدوء
-  // طلب المستخدم: رفع عتبات الكشف 4.5 أضعاف لتقليل الإنذارات الكاذبة (القيمة الأصلية بين قوسين)
-  const SNDTR_RISE_DELTA = 112.5;        // كم يجب أن يرتفع الصوت فوق خط الأساس ليُعتبر "بداية صعود" (أصلياً: 25 ×4.5)
-  const SNDTR_FALL_BACK_DELTA = 15;      // كم يجب أن ينخفض من قمّته ليُعتبر "بدأ النزول فعلاً"
-  const SNDTR_MIN_RISE_AMPLITUDE = 180;  // أقل فرق (قمة - خط الأساس) يُعتبر ارتفاعاً حقيقياً وليس تذبذباً عشوائياً (أصلياً: 40 ×4.5)
-  const SNDTR_MIN_DURATION_MS = 3000;    // أقل مدة صعود+نزول معاً (يستبعد الأصوات القصيرة المفاجئة كصفقة باب)
-  const SNDTR_MAX_DURATION_MS = 25000;   // أقصى مدة معقولة لمرور قطار قريب (يستبعد ضجيجاً مستمراً كمكيّف يشتغل لدقائق)
-
-  let sndtr_micOn = false;              // الميكروفون نشط فعلياً الآن (دائم، بلا أي بوابة مسافة)
-  let sndtr_alertOn = false;            // الإنذار المسافي (GPS، 150م) مفعَّل
-  let sndtr_announced500 = false;       // لضمان تنبيه صوتي واحد فقط لكل اقتراب مسافي
-  let sndtr_soundDetected = false;      // تبقى true لفترة قصيرة بعد اكتشاف "مرور" فعلي (وليس مجرد صوت عالٍ الآن)
-  let sndtr_pureActive = false, sndtr_pureMuted = false; // حالة الإنذار الصوتي البحت (بلا أي شرط مسافة)
-
-  // متغيرات آلة الحالة نفسها
-  let sndtr_phase = 'baseline';   // 'baseline' | 'rising' | 'falling'
-  let sndtr_baseline = null;      // خط أساس الضجيج المحيط (EMA بطيء)
-  let sndtr_riseStartAt = 0;
-  let sndtr_peakVal = 0;
-  let sndtr_soundDetectedTimer = null; // يُعيد sndtr_soundDetected إلى false بعد مهلة قصيرة من اكتشاف المرور
-  let sndtr_hornPulseOn = false;        // هل نحن الآن داخل نفيرة (فوق العتبة)
-  let sndtr_hornPulseStartAt = 0;
-  let sndtr_hornPulsePeakVal = 0;       // أعلى شدة رُصدت أثناء النفيرة الحالية (لتحديد التردد المهيمن عندها)
-  let sndtr_hornPulsePeakFreq = 0;      // التردد المهيمن عند تلك القمة (Hz) — يُستعمل لتخمين عائلة العتاد
-  let sndtr_hornPulses = [];            // سجل النفيرات الأخيرة: {type:'long'|'short', startAt, endAt, family}
-  let sndtr_dernierMotif = '';          // 'rumble' | 'horn' — لتخصيص نص بانر الإنذار الصوتي البحت فقط
-  let sndtr_dernierHornLabel = '';      // وصف الكود المتعرَّف عليه (أو "غير مصنَّف") — يُستعمل في نص البانر
-  let sndtr_dernierHornFamily = '';     // تخمين عائلة العتاد (تكميلي فقط، غير مضمون) — نص فارغ إن لم يُحدَّد
-
-  let sndtr_stream=null, sndtr_ctx=null, sndtr_source=null, sndtr_analyser=null, sndtr_freqData=null, sndtr_micLoopTimer=null;
-  let sndtr_alarmCtx=null, sndtr_alarmOsc=null, sndtr_alarmGain=null, sndtr_alarmTimer=null, sndtr_vibrateTimer=null;
-  let sndtr_pureCtx=null, sndtr_pureOsc=null, sndtr_pureGain=null, sndtr_pureSirenTimer=null, sndtr_pureVibrateTimer=null;
-
-  function sndtr_maj(txt){
-    const el = document.getElementById('sndtrStatus');
-    if(el) el.textContent = txt;
-  }
-
-  // طلب المستخدم: عند 500م، إعلان "راديو" بأسلوب روائي/ملحمي (لا نص جاف) — يُذكر فيه رصد القطار،
-  // ثم يوصف صفيره (طويل/قصير) إن كان قد رُصد فعلاً، وطراز العتاد المُقدَّر إن أمكن تخمينه. يُنطَق مرة
-  // واحدة فقط لكل اقتراب (sndtr_announced500 يمنع التكرار)، وينعكس أيضاً على نص الحالة.
-  function sndtr_annoncer500(){
-    if(sndtr_announced500) return;
-    sndtr_announced500 = true;
-    let phrase = 'يا سيدي، رصدنا قطاراً يقترب من على بعد خمسمائة متر';
-    if(sndtr_dernierMotif==='horn' && sndtr_dernierHornLabel){
-      const dureeLongue = /مطوَّلة|طويلة/.test(sndtr_dernierHornLabel);
-      phrase += dureeLongue
-        ? '، وقد أطلق للتوّ صفيراً طويلاً يشقّ عنان الصمت'
-        : '، وقد أطلق للتوّ صفيراً قصيراً حاداً يقطع الهواء';
-    } else {
-      phrase += '، ودمدمته الخافتة البعيدة تنذر باقترابه رويداً رويداً';
-    }
-    phrase += sndtr_dernierHornFamily
-      ? ('، ويُقدَّر أنه من طراز '+sndtr_dernierHornFamily+'، عتادٌ يشقّ الأرض بخطى ثقيلة')
-      : '، أما طرازه فيبقى الآن لغزاً يلفّه الغموض';
-    phrase += '. فاحترس أيها المسافر، فالخطر يقترب!';
-    sndtr_maj('📻 '+phrase);
-    // طلب المستخدم: إلغاء النطق الصوتي لهذا الإعلان حالياً — يبقى النص المعروض أعلاه فقط
-    // if(typeof kz_speakArabic==='function') kz_speakArabic(phrase);
-  }
-
-  function sndtr_creerBanniere(){
-    if(document.getElementById('sndtrBanniere')) return;
-    const style = document.createElement('style');
-    style.textContent = `
-      #sndtrBanniere{
-        position:fixed; left:50%; top:50%; transform:translate(-50%,-50%);
-        z-index:10021; width:min(92vw,380px);
-        background:linear-gradient(180deg,rgba(150,70,0,.97),rgba(70,20,0,.97));
-        color:#fff; padding:18px 20px 20px; text-align:center; border-radius:16px;
-        display:none; box-shadow:0 0 40px rgba(255,140,0,.6);
-        animation:sndtrPulseBg .6s infinite; font-family:inherit;
-      }
-      @keyframes sndtrPulseBg{0%,100%{box-shadow:0 0 40px rgba(255,140,0,.6)}50%{box-shadow:0 0 60px rgba(255,180,60,.95)}}
-      #sndtrBanniere h3{margin:0 0 8px;font-size:17px;color:#ffe8d0}
-      #sndtrBanniere p{margin:0;font-size:13px;line-height:1.7}
-    `;
-    document.head.appendChild(style);
-    const div = document.createElement('div');
-    div.id = 'sndtrBanniere';
-    div.innerHTML = '<h3>🔴🚆 إنذار مستقل — قطار على بعد 150م</h3><p id="sndtrTexte"></p>';
-    document.body.appendChild(div);
-  }
-
-  // ---------- الميكروفون: يعمل دوماً بلا أي بوابة مسافة أو GPS أو أي قياس آخر ----------
-  function sndtr_bassEnergy(){
-    sndtr_analyser.getByteFrequencyData(sndtr_freqData);
-    const binHz = sndtr_ctx.sampleRate / sndtr_analyser.fftSize;
-    const lowBin = Math.max(1, Math.round(SNDTR_BASS_MIN_HZ / binHz));
-    const highBin = Math.min(sndtr_freqData.length-1, Math.max(lowBin+1, Math.round(SNDTR_BASS_MAX_HZ / binHz)));
-    let sum=0, n=0;
-    for(let i=lowBin;i<=highBin;i++){ sum+=sndtr_freqData[i]; n++; }
-    return n ? sum/n : 0;
-  }
-  // نفس المبدأ لكن على نطاق النفير (300-660Hz) بدل نطاق الدمدمة (20-250Hz) — يعيد استعمال نفس sndtr_freqData المجلوبة بالفعل
-  function sndtr_hornEnergy(){
-    const binHz = sndtr_ctx.sampleRate / sndtr_analyser.fftSize;
-    const lowBin = Math.max(1, Math.round(SNDTR_HORN_MIN_HZ / binHz));
-    const highBin = Math.min(sndtr_freqData.length-1, Math.max(lowBin+1, Math.round(SNDTR_HORN_MAX_HZ / binHz)));
-    let sum=0, n=0;
-    for(let i=lowBin;i<=highBin;i++){ sum+=sndtr_freqData[i]; n++; }
-    return n ? sum/n : 0;
-  }
-  // يجد التردد المهيمن (أعلى شدة) داخل نطاق النفير فقط — يُستعمل لتخمين عائلة العتاد، وليس لقرار الإطلاق نفسه
-  function sndtr_hornDominantFreqNow(){
-    const binHz = sndtr_ctx.sampleRate / sndtr_analyser.fftSize;
-    const lowBin = Math.max(1, Math.round(SNDTR_HORN_MIN_HZ / binHz));
-    const highBin = Math.min(sndtr_freqData.length-1, Math.max(lowBin+1, Math.round(SNDTR_HORN_MAX_HZ / binHz)));
-    let bestBin = lowBin, bestVal = -1;
-    for(let i=lowBin;i<=highBin;i++){ if(sndtr_freqData[i] > bestVal){ bestVal = sndtr_freqData[i]; bestBin = i; } }
-    return bestBin * binHz;
-  }
-  // يطابق تردداً مهيمناً بعائلة عتاد SNCFT الأقرب (تكميلي تماماً — لا يشترط لإطلاق أي إنذار ولا لتصنيف الكود)
-  function sndtr_hornMatchFamily(freqHz){
-    const matches = SNDTR_HORN_FAMILIES.filter(f=> freqHz>=f.min && freqHz<=f.max);
-    if(!matches.length) return null;
-    if(matches.length===1) return matches[0];
-    let best = matches[0], bestDist = Infinity; // عدة عائلات متداخلة على نفس التردد: نختار الأقرب لمركز نطاقها
-    matches.forEach(f=>{
-      const center = (f.min+f.max)/2, d = Math.abs(freqHz-center);
-      if(d<bestDist){ bestDist=d; best=f; }
-    });
-    return best;
-  }
-
-  // يُشغَّل حين تكتمل دورة "صعود ثم نزول" كاملة ضمن مدة معقولة — هذا وحده يُعتبر "مرور جسم فعلي" ويُبقي sndtr_soundDetected=true لمدة قصيرة
-  function sndtr_signalerPassageDetecte(motif){
-    sndtr_dernierMotif = motif; // 'rumble' أو 'horn' — لتخصيص نص البانر فقط
-    const etaitDetecte = sndtr_soundDetected;
-    sndtr_soundDetected = true;
-    if(!etaitDetecte) sndtr_pureMuted = false; // مرور جديد → إعادة تسلّح تلقائية حتى لو أُوقف الإنذار يدوياً سابقاً
-    if(sndtr_soundDetectedTimer) clearTimeout(sndtr_soundDetectedTimer);
-    sndtr_soundDetectedTimer = setTimeout(function(){ sndtr_soundDetected = false; }, 6000); // يبقى "مرصوداً" لـ6 ثوانٍ فقط بعد اكتمال المرور
-  }
-
-  // ---------- مطابقة أكواد نفير SNCFT (نظام السير) — تُشغَّل بعد كل نفيرة مكتملة ----------
-  // ننسى أي نفيرة أقدم من SNDTR_HORN_PHRASE_MAX_AGE_MS، ثم نأخذ فقط "الجملة الأخيرة المتقاربة زمنياً"
-  // (فراغ ≤ SNDTR_HORN_MAX_GAP_MS بين كل نفيرتين متتاليتين) لمقارنتها بالأكواد الرسمية.
-  function sndtr_hornTrimPulses(now){
-    sndtr_hornPulses = sndtr_hornPulses.filter(p => (now - p.endAt) <= SNDTR_HORN_PHRASE_MAX_AGE_MS);
-  }
-  function sndtr_hornTailRun(){
-    const arr = sndtr_hornPulses;
-    if(!arr.length) return [];
-    let start = arr.length-1;
-    for(let i=arr.length-1;i>0;i--){
-      if((arr[i].startAt - arr[i-1].endAt) <= SNDTR_HORN_MAX_GAP_MS) start = i-1;
-      else break;
-    }
-    return arr.slice(start);
-  }
-  function sndtr_hornClassifierMatch(){
-    const run = sndtr_hornTailRun();
-    const types = run.map(p=>p.type);
-    const n = types.length;
-    // 1) عند الاقتراب من معبر مستوى بلا حواجز أو برؤية محدودة (لوحة S): — — o — (يتكرر حتى الاجتياز، نكتفي برصده مرة واحدة)
-    if(n>=4 && types.slice(n-4).join(',')==='long,long,short,long'){
-      return {code:'— — o —', label:'⚠️ نفير خطر عند معبر مستوى (لوحة S) — احذر عائقاً أو تصادماً محتملاً'};
-    }
-    // 2) أشخاص أو حيوانات على السكة: سلسلة نفيرات قصيرة متتالية وسريعة (4 فأكثر، بفواصل قصيرة جداً)
-    if(n>=4 && types.every(t=>t==='short') && run.every((p,i)=> i===0 || (p.startAt-run[i-1].endAt)<=500)){
-      return {code:'o o o o', label:'🚨 نفير طوارئ — أشخاص أو حيوانات على السكة'};
-    }
-    // 3) مناورة: رجوع للخلف — 3 نفيرات قصيرة بالضبط
-    if(n===3 && types.every(t=>t==='short')){
-      return {code:'o o o', label:'🔙 نفير مناورة — القطار يرجع للخلف'};
-    }
-    // 4) نفيرة طويلة واحدة مطوَّلة جداً (أطول من كود التحذير العادي): انطلاق من محطة أو دخول نفق/منطقة رؤية محجوبة
-    if(n===1 && types[0]==='long' && run[0].duree>=SNDTR_HORN_PROLONGED_MS){
-      return {code:'—', label:'🚆 نفير طويل مطوَّل — انطلاق قطار من محطة أو دخول نفق'};
-    }
-    return null; // لا يطابق أي كود رسمي معروف بعد — يبقى نفيراً "غير مصنَّف" (أنظر sndtr_dernierHornLabel)
-  }
-
-  function sndtr_micCycle(){
-    if(!sndtr_micOn || !sndtr_analyser) return;
-    // منع "التغذية الراجعة الصوتية" (الميكروفون يسمع نغمات إنذاراتنا نفسها الخارجة من السماعة فيُعيد إطلاقها في حلقة لا تنتهي):
-    // طالما أحد إنذارينا الصوتيين (البحت أو المسافي 150م) يُصدر نغمته الآن، نُجمّد تحليل الميكروفون تماماً لهذه الدورة
-    if(sndtr_pureActive || sndtr_alertOn) return;
-    let val;
-    try{ val = sndtr_bassEnergy(); }catch(e){ return; }
-    const now = Date.now();
-
-    if(sndtr_baseline===null) sndtr_baseline = val; // أول قراءة: نبدأ منها كخط أساس
-
-    if(sndtr_phase==='baseline'){
-      sndtr_baseline = sndtr_baseline*(1-SNDTR_BASELINE_ALPHA) + val*SNDTR_BASELINE_ALPHA; // تحديث بطيء لخط الأساس فقط أثناء الهدوء
-      if(val > sndtr_baseline + SNDTR_RISE_DELTA){
-        sndtr_phase = 'rising';
-        sndtr_riseStartAt = now;
-        sndtr_peakVal = val;
-      }
-    } else if(sndtr_phase==='rising'){
-      if(val > sndtr_peakVal) sndtr_peakVal = val; // لا يزال يصعد أو يتذبذب قرب القمة
-      if(val < sndtr_peakVal - SNDTR_FALL_BACK_DELTA) sndtr_phase = 'falling'; // بدأ ينزل فعلياً عن قمّته
-      if(now - sndtr_riseStartAt > SNDTR_MAX_DURATION_MS){
-        // صعود طويل جداً بلا نزول (مثلاً مكيّف اشتغل لدقائق): ليس مروراً، إعادة ضبط خط الأساس على المستوى الحالي
-        sndtr_phase = 'baseline'; sndtr_baseline = val;
-      }
-    } else if(sndtr_phase==='falling'){
-      if(val > sndtr_peakVal){ sndtr_peakVal = val; sndtr_phase = 'rising'; } // قمة جديدة أعلى: لا يزال نفس الحدث، عاد للصعود
-      else if(val <= sndtr_baseline + SNDTR_FALL_BACK_DELTA){
-        // اكتمل النزول تقريباً إلى خط الأساس: نحكم الآن هل هذه فعلاً دورة "مرور" صالحة
-        const duration = now - sndtr_riseStartAt;
-        const amplitude = sndtr_peakVal - sndtr_baseline;
-        if(amplitude >= SNDTR_MIN_RISE_AMPLITUDE && duration >= SNDTR_MIN_DURATION_MS && duration <= SNDTR_MAX_DURATION_MS){
-          sndtr_signalerPassageDetecte('rumble');
-        }
-        sndtr_phase = 'baseline';
-        sndtr_baseline = val;
-      }
-      if(now - sndtr_riseStartAt > SNDTR_MAX_DURATION_MS){
-        sndtr_phase = 'baseline'; sndtr_baseline = val;
-      }
-    }
-
-    // ---- نفير القطار (Avertisseur، 300-660Hz): نقسّمه إلى نفيرات منفصلة (طويلة/قصيرة) ثم نقارن آخر جملة صوتية بأكواد نظام السير SNCFT ----
-    let hornVal = 0;
-    try{ hornVal = sndtr_hornEnergy(); }catch(e){}
-    if(!sndtr_hornPulseOn && hornVal>=SNDTR_HORN_SEUIL_ON){
-      sndtr_hornPulseOn = true;
-      sndtr_hornPulseStartAt = now;
-      sndtr_hornPulsePeakVal = hornVal;
-      try{ sndtr_hornPulsePeakFreq = sndtr_hornDominantFreqNow(); }catch(e){ sndtr_hornPulsePeakFreq = 0; }
-    } else if(sndtr_hornPulseOn && hornVal>=SNDTR_HORN_SEUIL_ON && hornVal>sndtr_hornPulsePeakVal){
-      // لا يزال ضمن نفس النفيرة وبشدة أعلى: نحدّث القمة والتردد المهيمن عندها (الأكثر تمثيلاً لصوت هذا النفير)
-      sndtr_hornPulsePeakVal = hornVal;
-      try{ sndtr_hornPulsePeakFreq = sndtr_hornDominantFreqNow(); }catch(e){}
-    } else if(sndtr_hornPulseOn && hornVal<SNDTR_HORN_SEUIL_OFF){
-      sndtr_hornPulseOn = false;
-      const duree = now - sndtr_hornPulseStartAt;
-      if(duree >= SNDTR_HORN_MIN_PULSE_MS){ // نُهمل أي نفيرة أقصر من هذا كضجيج عابر
-        const famille = sndtr_hornMatchFamily(sndtr_hornPulsePeakFreq); // تخمين تكميلي فقط — لا يشترط لإطلاق أي إنذار
-        sndtr_hornPulses.push({type: duree>=SNDTR_HORN_LONG_MS?'long':'short', startAt:sndtr_hornPulseStartAt, endAt:now, duree, family:famille});
-        sndtr_hornTrimPulses(now);
-        const match = sndtr_hornClassifierMatch();
-        sndtr_dernierHornLabel = match ? match.label : '🔊 نفير قطار غير مصنَّف حسب أكواد SNCFT (رُصد فعلاً لكن التسلسل لا يطابق كوداً معروفاً بعد)';
-        sndtr_dernierHornFamily = famille ? famille.label : '';
-        sndtr_signalerPassageDetecte('horn'); // أي نفيرة مؤكَّدة تُطلق الإنذار — التصنيف يزيد الثقة والوضوح، لكن لا يشترط لإطلاقه (الأمان أولاً)
-      }
-    }
-
-    // ---- إنذار صوتي بحت: مبني فقط على ما رصده الميكروفون فعلاً (دمدمة بنمط صعود-نزول، أو نفير مصنَّف حسب كود SNCFT)، بلا أي شرط مسافة/GPS/جدول إطلاقاً ----
-    if(sndtr_soundDetected) sndtr_pureDemarrer(); else sndtr_pureArreter();
-
-    const phaseTxt = sndtr_phase==='rising' ? '📈 صعود...' : (sndtr_phase==='falling' ? '📉 نزول...' : '🎚️ هدوء');
-    const detTxt = sndtr_soundDetected ? (sndtr_dernierMotif==='horn' ? ' — '+sndtr_dernierHornLabel+(sndtr_dernierHornFamily?' — نمط الصوت يقارب: '+sndtr_dernierHornFamily:'') : ' — 🔊 مرور جسم فعلي مرصود (صعود+نزول مكتمل)') : '';
-    sndtr_maj('🎙️ الميكروفون نشط، جاري الاستماع باستمرار — '+phaseTxt+detTxt);
-  }
-
-  async function sndtr_activerMicrophone(){
-    if(sndtr_stream) return; // مفعَّل مسبقاً
-    try{
-      // نُفعِّل نموذج إلغاء الصدى الصوتي (Echo Cancellation) المدمج في المتصفح + تقليل الضجيج، بدل صوت خام غير معالَج،
-      // لتفادي أن يسمع الميكروفون نغمات إنذاراتنا نفسها الخارجة من سماعة الجهاز فيدخل في حلقة تغذية راجعة (Larsen) لا تنتهي
-      sndtr_stream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true, noiseSuppression:true, autoGainControl:true}});
-    }catch(e){
-      sndtr_maj('⚠️ تعذّر تفعيل الميكروفون (إذن مرفوض) — الإنذار المسافي (GPS) عند 150م يبقى يعمل، لكن الإنذار الصوتي البحت لن يعمل بلا ميكروفون');
-      return;
-    }
-    try{
-      sndtr_ctx = new (window.AudioContext||window.webkitAudioContext)();
-      sndtr_source = sndtr_ctx.createMediaStreamSource(sndtr_stream);
-      sndtr_analyser = sndtr_ctx.createAnalyser();
-      sndtr_analyser.fftSize = 2048;
-      sndtr_analyser.smoothingTimeConstant = 0.6;
-      sndtr_source.connect(sndtr_analyser);
-      sndtr_freqData = new Uint8Array(sndtr_analyser.frequencyBinCount);
-      sndtr_micOn = true;
-      sndtr_micLoopTimer = setInterval(sndtr_micCycle, SNDTR_MIC_CYCLE_MS);
-      const btn = document.getElementById('sndtrToggleBtn');
-      if(btn){ btn.textContent = '🎙️ الميكروفون مفعَّل ويعمل الآن باستمرار'; btn.disabled = true; }
-      sndtr_maj('🎙️ الميكروفون نشط، جاري الاستماع باستمرار');
-    }catch(e){}
-  }
-
-  // ---------- الإنذار الصوتي البحت: يعتمد فقط على sndtr_soundDetected — بلا أي شرط مسافة أو GPS ----------
-  function sndtr_pureCreerBanniere(){
-    if(document.getElementById('sndtrPureBanniere')) return;
-    const style = document.createElement('style');
-    style.textContent = `
-      #sndtrPureBanniere{
-        position:fixed; left:0; right:0; top:0; z-index:10022;
-        background:linear-gradient(180deg,rgba(0,90,120,.97),rgba(0,40,55,.97));
-        color:#fff; padding:14px 18px 18px; text-align:center;
-        display:none; box-shadow:0 6px 24px rgba(0,0,0,.5);
-        animation:sndtrPurePulseBg .8s infinite; font-family:inherit;
-      }
-      @keyframes sndtrPurePulseBg{0%,100%{background:linear-gradient(180deg,rgba(0,90,120,.97),rgba(0,40,55,.97))}50%{background:linear-gradient(180deg,rgba(0,150,190,.97),rgba(0,70,95,.97))}}
-      #sndtrPureBanniere h3{margin:0 0 6px;font-size:16px;color:#c9f3ff}
-      #sndtrPureBanniere p{margin:0 0 10px;font-size:13px;line-height:1.7}
-      #sndtrPureBanniere button{ background:#00b7eb;color:#00232e;border:none;border-radius:10px;padding:9px 22px;font-weight:800;font-size:13px; }
-    `;
-    document.head.appendChild(style);
-    const div = document.createElement('div');
-    div.id = 'sndtrPureBanniere';
-    div.innerHTML = '<h3>🎙️🚨 إنذار صوتي بحت — بلا أي شرط مسافة</h3>'
-      + '<p id="sndtrPureBanniereTxt">رُصد صوت يشبه دمدمة قطار عبر الميكروفون فعلاً الآن — بغضّ النظر عن الجدول أو SNCFT Live أو حتى GPS.</p>'
-      + '<button type="button">فهمت، أوقف هذا الإنذار</button>';
-    div.querySelector('button').addEventListener('click', sndtr_pureCouperManuel);
-    document.body.appendChild(div);
-  }
-
-  function sndtr_pureDemarrer(){
-    if(sndtr_pureMuted) return;
-    if(sndtr_pureActive) return;
-    sndtr_pureActive = true;
-    sndtr_pureCreerBanniere();
-    const b = document.getElementById('sndtrPureBanniere');
-    const txt = document.getElementById('sndtrPureBanniereTxt');
-    if(txt) txt.textContent = sndtr_dernierMotif==='horn'
-      ? sndtr_dernierHornLabel+' (نطاق 300-660Hz)'+(sndtr_dernierHornFamily?' — نمط الصوت يقارب: '+sndtr_dernierHornFamily+' (تخمين تكميلي، غير مضمون)':'')
-      : '🔊 رُصد صوت يشبه دمدمة قطار (صعود ثم نزول كاملان) عبر الميكروفون فعلاً الآن — بغضّ النظر عن الجدول أو SNCFT Live أو حتى GPS.';
-    if(b) b.style.display='block';
-    // طلب المستخدم: إلغاء الإنذار الصوتي/الاهتزاز لهذا الكاشف حالياً (يبقى العرض المرئي فقط أعلاه)
-    /* try{
-      sndtr_pureCtx = new (window.AudioContext||window.webkitAudioContext)();
-      sndtr_pureGain = sndtr_pureCtx.createGain();
-      sndtr_pureGain.gain.value = .5;
-      sndtr_pureGain.connect(sndtr_pureCtx.destination);
-      sndtr_pureOsc = sndtr_pureCtx.createOscillator();
-      sndtr_pureOsc.type = 'triangle'; // نغمة مختلفة عن كل الإنذارات الأخرى لتمييزه صوتياً كإنذار قائم بذاته
-      sndtr_pureOsc.frequency.value = 600;
-      sndtr_pureOsc.connect(sndtr_pureGain);
-      sndtr_pureOsc.start();
-      sndtr_pureSirenTimer = setInterval(function(){
-        if(!sndtr_pureOsc) return;
-        sndtr_pureOsc.frequency.value = (sndtr_pureOsc.frequency.value < 650) ? 950 : 600;
-      }, 250);
-    }catch(e){} */
-    /* if(navigator.vibrate){
-      navigator.vibrate([300,100,300,100,300]);
-      sndtr_pureVibrateTimer = setInterval(function(){ if(navigator.vibrate) navigator.vibrate([300,100,300,100,300]); }, 2500);
-    } */
-    // طلب المستخدم: إلغاء التنبيه الصوتي المنطوق لهذا الكاشف حالياً
-    // if(typeof kz_speakArabic==='function') kz_speakArabic(sndtr_dernierMotif==='horn' ? ('تنبيه، '+sndtr_dernierHornLabel.replace(/[⚠️🚨🔙🚆🔊]/g,'').trim()) : 'تنبيه، صوت يشبه قطاراً رُصد فعلياً عبر الميكروفون');
-  }
-
-  function sndtr_pureArreter(){
-    if(!sndtr_pureActive) return;
-    sndtr_pureActive = false;
-    const b = document.getElementById('sndtrPureBanniere');
-    if(b) b.style.display='none';
-    if(sndtr_pureSirenTimer){ clearInterval(sndtr_pureSirenTimer); sndtr_pureSirenTimer=null; }
-    if(sndtr_pureVibrateTimer){ clearInterval(sndtr_pureVibrateTimer); sndtr_pureVibrateTimer=null; }
-    if(navigator.vibrate) navigator.vibrate(0);
-    try{
-      if(sndtr_pureOsc){ sndtr_pureOsc.stop(); sndtr_pureOsc.disconnect(); sndtr_pureOsc=null; }
-      if(sndtr_pureGain){ sndtr_pureGain.disconnect(); sndtr_pureGain=null; }
-      if(sndtr_pureCtx){ sndtr_pureCtx.close(); sndtr_pureCtx=null; }
-    }catch(e){}
-  }
-
-  // زر إيقاف يدوي: يوقف الآن فقط، ويعيد التسلّح تلقائياً عند رصد صوتي جديد (نفس منطق كل الإنذارات المستقلة الأخرى)
-  function sndtr_pureCouperManuel(){
-    sndtr_pureMuted = true;
-    sndtr_pureArreter();
-  }
-  window.sndtrPureCouperManuel = sndtr_pureCouperManuel;
-
-  // ---------- الإنذار المستقل عند 150م (يبقى يعمل كما كان، مبنياً فقط على مسافة GPS — منفصل تماماً عن الإنذار الصوتي البحت أعلاه) ----------
-  function sndtr_declencherAlerte(dist){
-    sndtr_creerBanniere();
-    const b = document.getElementById('sndtrBanniere');
-    const t = document.getElementById('sndtrTexte');
-    // طلب المستخدم: عند 150م، الإنذار "يبرد/يزأر من كل صوب" — نص درامي بدل الصياغة التقنية الجافة
-    if(t) t.textContent = 'اقترب الخطر! ها هو القطار يزأر من كل حدبٍ وصوب، على بعد '+formatDist(dist)+' فقط'+(sndtr_soundDetected ? ' — وصفيره يؤكد اقترابه' : '')+'. ابتعد فوراً أيها المسافر!';
-    if(b) b.style.display='block';
-    sndtr_maj('🔴 إنذار: قطار قريب ('+formatDist(dist)+')'+(sndtr_soundDetected ? ' — 🔊 مؤكَّد صوتياً' : ''));
-    if(sndtr_alertOn) return; // الصوت/الاهتزاز مستمران أصلاً، فقط حدّثنا النص أعلاه
-    sndtr_alertOn = true;
-    // طلب المستخدم: إلغاء الصوت المنطوق، الصفارة، والاهتزاز لهذا الإنذار حالياً — يبقى العرض المرئي (البانر ونص الحالة) فقط
-    /* speakDanger150();
-    try{
-      sndtr_alarmCtx = new (window.AudioContext||window.webkitAudioContext)();
-      sndtr_alarmGain = sndtr_alarmCtx.createGain();
-      sndtr_alarmGain.gain.value = .5;
-      sndtr_alarmGain.connect(sndtr_alarmCtx.destination);
-      sndtr_alarmOsc = sndtr_alarmCtx.createOscillator();
-      sndtr_alarmOsc.type = 'sawtooth'; // نغمة مختلفة تماماً عن باقي الإنذارات لتمييزها صوتياً
-      sndtr_alarmOsc.frequency.value = 700;
-      sndtr_alarmOsc.connect(sndtr_alarmGain);
-      sndtr_alarmOsc.start();
-      sndtr_alarmTimer = setInterval(function(){
-        if(!sndtr_alarmOsc) return;
-        sndtr_alarmOsc.frequency.value = (sndtr_alarmOsc.frequency.value < 750) ? 850 : 700;
-      }, 220);
-    }catch(e){}
-    if(navigator.vibrate){
-      navigator.vibrate([150,60,150,60,150,60,400]);
-      sndtr_vibrateTimer = setInterval(function(){
-        if(navigator.vibrate) navigator.vibrate([150,60,150,60,150,60,400]);
-      }, 2200);
-    } */
-  }
-
-  function sndtr_arreterAlerte(){
-    if(!sndtr_alertOn) return;
-    sndtr_alertOn = false;
-    const b = document.getElementById('sndtrBanniere');
-    if(b) b.style.display='none';
-    if(sndtr_alarmTimer){ clearInterval(sndtr_alarmTimer); sndtr_alarmTimer=null; }
-    if(sndtr_vibrateTimer){ clearInterval(sndtr_vibrateTimer); sndtr_vibrateTimer=null; }
-    if(navigator.vibrate) navigator.vibrate(0);
-    try{
-      if(sndtr_alarmOsc){ sndtr_alarmOsc.stop(); sndtr_alarmOsc.disconnect(); sndtr_alarmOsc=null; }
-      if(sndtr_alarmGain){ sndtr_alarmGain.disconnect(); sndtr_alarmGain=null; }
-      if(sndtr_alarmCtx){ sndtr_alarmCtx.close(); sndtr_alarmCtx=null; }
-    }catch(e){}
-  }
-
-  // ---------- الحلقة الرئيسية: مسافة GPS إلى السكة — تتحكم فقط بالإنذار المسافي (150م)، ولا علاقة لها بتشغيل/إيقاف الميكروفون إطلاقاً ----------
-  function sndtr_cycle(){
-    try{
-      if(typeof lastPos==='undefined' || !Array.isArray(lastPos)){ sndtr_arreterAlerte(); sndtr_announced500=false; return; }
-      if(typeof kz_nearestRailDistanceM!=='function'){ return; }
-      const dist = kz_nearestRailDistanceM(lastPos);
-      if(dist===null || !isFinite(dist)){ sndtr_arreterAlerte(); sndtr_announced500=false; return; }
-
-      const seuilAlerte = sndtr_alertOn ? SNDTR_SEUIL_150_STOP : SNDTR_SEUIL_150_START;
-      const seuil500     = SNDTR_SEUIL_500_START;
-
-      if(dist<=seuilAlerte){
-        sndtr_annoncer500();
-        sndtr_declencherAlerte(dist);
-      } else if(dist<=seuil500){
-        sndtr_annoncer500();
-        sndtr_arreterAlerte();
-      } else {
-        sndtr_arreterAlerte();
-        sndtr_announced500 = false;
-      }
-    }catch(e){}
-  }
-
-  setInterval(sndtr_cycle, SNDTR_CYCLE_MS);
-
-  // الميكروفون يُفعَّل فوراً عند تحميل الوحدة، بلا انتظار أي مسافة أو GPS (قد يحتاج لفتة مستخدم أولى في بعض المتصفحات، ولهذا الزر اليدوي يبقى متاحاً كبديل)
-  sndtr_activerMicrophone();
-
-  document.getElementById('sndtrToggleBtn').addEventListener('click', function(){
-    sndtr_activerMicrophone();
-  });
-
-  window.sndtr_activerMicrophone = sndtr_activerMicrophone; // يُستخدم من شاشة الإعداد الموحّدة (onboarding)
-})();
-// ========== FIN الكاشف الصوتي — ميكروفون دائم بلا شرط مسافة + إنذار صوتي بحت مستقل ==========
-
-// ================================================================
-// ========== شاشة إعداد موحّدة — تطلب كل الأذونات (GPS + صوت + إشعارات + ميكروفون) دفعة واحدة عند أول فتح فقط ==========
+// ========== شاشة إعداد موحّدة — تطلب كل الأذونات (GPS + صوت + إشعارات) دفعة واحدة عند أول فتح فقط ==========
 // طلب المستخدم: تفادي تشتت طلبات الأذونات عبر التطبيق، وتجميعها في شاشة واحدة تظهر مرة واحدة فقط في
-// حياة التطبيق على هذا الجهاز (محفوظة عبر localStorage)، بلمسة واحدة تُفعِّل GPS + الصوت + الإشعارات + الميكروفون معاً.
+// حياة التطبيق على هذا الجهاز (محفوظة عبر localStorage)، بلمسة واحدة تُفعِّل GPS + الصوت + الإشعارات معاً.
 // ================================================================
 (function(){
   'use strict';
@@ -9981,9 +9588,6 @@ function checkPeacockHour(){
   function onboarding_activerTout(){
     try{
       if(typeof watchId==='undefined' || !watchId){ startWatch(); } // يشمل GPS + unlockAudio + WakeLock + الإشعارات
-    }catch(e){}
-    try{
-      if(typeof window.sndtr_activerMicrophone==='function') window.sndtr_activerMicrophone(); // الميكروفون
     }catch(e){}
     try{ localStorage.setItem(ONBOARDING_KEY, '1'); }catch(e){}
     onboarding_masquer();
@@ -10003,8 +9607,8 @@ function checkPeacockHour(){
     try{ dejaFait = localStorage.getItem(ONBOARDING_KEY)==='1'; }catch(e){}
     if(!dejaFait) onboarding_afficher();
     const btn = document.getElementById('onboardingStartBtn');
-    if(btn && !btn.dataset.sndtrBound){
-      btn.dataset.sndtrBound = '1';
+    if(btn && !btn.dataset.onboardingBound){
+      btn.dataset.onboardingBound = '1';
       btn.addEventListener('click', onboarding_activerTout);
     }
   }
@@ -10029,7 +9633,6 @@ document.getElementById('toggleStationsBtn').click(); // نعرض كل المح�
       <li>📍 <b>الموقع الجغرافي (GPS)</b> — لحساب المسافة إلى السكة والقطارات</li>
       <li>🔊 <b>الصوت والاهتزاز</b> — لتشغيل الإنذارات عند الاقتراب</li>
       <li>🔔 <b>الإشعارات</b> — لتنبيهك حتى لو غادرت الصفحة</li>
-      <li>🎙️ <b>الميكروفون</b> — لكاشف صوت القطار التكميلي (500م/150م)</li>
     </ul>
     <button class="btn" id="onboardingStartBtn">✅ تفعيل كل شيء والبدء</button>
     <div class="small-note">تُطلب هذه الأذونات مرة واحدة فقط؛ لن تظهر هذه الشاشة مجدداً بعد الضغط.</div>
