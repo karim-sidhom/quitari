@@ -1432,6 +1432,24 @@ const GHOST_VIDEO_SRC = 'data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yY
     </div>
   </div>
 
+  <div class="card" id="trainTrackCard">
+    <h3>🚆 تتبّع قطار واحد <span style="font-size:11px;color:#c9d2ff;font-weight:400;">Suivi par train</span></h3>
+    <div class="small-note">
+      مرّر إصبعك على القائمة أدناه واختر القطار مباشرة، أو اكتب رقمه/اسمه في الحقل. يظهر جدول كامل بكل معطيات القطار المطابق:
+      رقم القطار، محطة الانطلاق، المسار الكامل (كل المحطات)، محطة الوصول، الموقع الحالي المصحَّح عبر SNCFT Live، التأخير، حالة التأكيد، والحالة العامة الآن.
+    </div>
+    <select id="trainTrackSelect" style="width:100%;margin:10px 0;padding:10px;border-radius:8px;border:1px solid var(--gold);background:#12131c;color:#fff;font-size:15px;">
+      <option value="">— مرّر واختر قطاراً من القائمة —</option>
+    </select>
+    <div style="display:flex;gap:8px;margin:10px 0;flex-wrap:wrap;">
+      <input type="text" id="trainTrackInput" placeholder="أو اكتب رقم القطار أو اسم المسار..." style="flex:1;min-width:180px;padding:8px 10px;border-radius:8px;border:1px solid var(--gold);background:#12131c;color:#fff;">
+      <button class="btn" id="trainTrackSearchBtn">🔍 بحث</button>
+    </div>
+    <div id="trainTrackResultCount" class="small-note"></div>
+    <div style="overflow-x:auto;max-height:460px;overflow-y:auto;margin-top:8px;"><table class="comparatif-table" id="trainTrackTable"></table></div>
+    <div class="small-note" id="trainTrackUpdatedAt" style="margin-top:6px;"></div>
+  </div>
+
   <div class="card">
     <h3>ℹ️ ملاحظة هامة</h3>
     <div class="small-note">
@@ -1569,54 +1587,54 @@ let dist150VoiceAnnounced=false; // يضمن أن الإعلان الصوتي ع
 
 // ---------- stations database (coordonnées approximatives, corrige si besoin) ----------
 const STATIONS = {
-  "Tozeur":[33.9186,8.1231], "Elouediane":[34.15,8.28], "Metlaoui":[34.3314,8.3992],
-  "Gafsa":[34.3956,8.8008], "Sened":[34.4628,9.0381], "Maknassy":[34.5833,9.6000],
-  "Gabes":[33.8844,10.0994], "Ghraiba":[34.5261,10.2014], "Maharès":[34.5333,10.5000],
+  "Tozeur":[33.92464,8.13391], "Elouediane":[34.15236,8.2901], "Metlaoui":[34.33204,8.39963],
+  "Gafsa":[34.39404,8.80123], "Sened":[34.46497,9.03756], "Maknassy":[34.60095,9.59087],
+  "Gabes":[33.8842,10.09937], "Ghraiba":[34.49823,10.20517], "Maharès":[34.52727,10.50192],
   // Gares ajoutées depuis le tableau "Ligne Grand Sud & Bassin Miniers" (coordonnées fournies par l'utilisateur)
-  "Skhira":[34.3008,10.0708], "Ghannouch":[33.9317,10.0633], "Zannouch":[34.4319,8.9328],
-  "El Ksar":[34.3853,8.7889], "Dégache":[33.9786,8.2114],
-  "Sfax Arrivée":[34.7398,10.7600], "Sfax Départ":[34.7398,10.7600],
-  "Sakiet Ezzit":[34.79,10.72], "La Hencha":[34.86,10.53],
-  "El Jem":[35.2967,10.7150], "Kerker":[35.42,10.72], "Mahdia":[35.5047,11.0622],
-  "Monastir":[35.7780,10.8262], "Messadine":[35.73,10.63],
-  "Sousse Arrivée":[35.8256,10.6084], "Sousse Départ":[35.8256,10.6084],
-  "Kalaâ Seghira":[35.83,10.57], "Kalaâ Kebira":[35.87,10.53], "Enfidha":[36.13,10.38],
-  "Bouficha":[36.28,10.38], "Bir Bou Regba":[36.4167,10.5333], "Bouargoub":[36.50,10.52],
-  "Grombalia":[36.60,10.50], "Borj Cedria":[36.7167,10.3667], "Hammam Lif":[36.7333,10.3333],
-  "Tunis":[36.7930,10.1846],
-  "Nabeul":[36.4561,10.7376], "Hammamet":[36.4000,10.6167],
+  "Skhira":[34.30156,10.06956], "Ghannouch":[33.93508,10.06558], "Zannouch":[34.44377,8.92933],
+  "El Ksar":[34.38557,8.78835], "Dégache":[33.98283,8.2081],
+  "Sfax Arrivée":[34.73996,10.76388], "Sfax Départ":[34.73996,10.76388],
+  "Sakiet Ezzit":[34.78892,10.76036], "La Hencha":[34.838,10.76552],
+  "El Jem":[35.29722,10.71333], "Kerker":[35.41534,10.71288], "Mahdia":[35.50083,11.06441],
+  "Monastir":[35.75796,10.8095], "Messadine":[35.73478,10.60512],
+  "Sousse Arrivée":[35.82853,10.60592], "Sousse Départ":[35.82853,10.60592],
+  "Kalaâ Seghira":[35.83153,10.56637], "Kalaâ Kebira":[35.8723,10.54935], "Enfidha":[36.12882,10.38278],
+  "Bouficha":[36.25869,10.4334], "Bir Bou Regba":[36.40551,10.53877], "Bouargoub":[36.51622,10.56179],
+  "Grombalia":[36.59875,10.49593], "Borj Cedria":[36.71481,10.36601], "Hammam Lif":[36.7304,10.33206],
+  "Tunis":[36.7924,10.18101],
+  "Nabeul":[36.45103,10.7351], "Hammamet":[36.40599,10.61609],
   // Branche Métlaoui - Moulares - Redeyef (coordonnées très approximatives)
-  "Selja":[34.28,8.30], "Tabeddit 1er arrêt":[34.25,8.25], "Tabeddit 2ème arrêt":[34.22,8.20],
-  "Moulares":[34.4842,8.2678], "Redeyef":[34.3828,8.1558], "Magroun":[34.30,8.10], "El Ayoun":[34.25,8.08],
+  "Selja":[34.24692,8.35457], "Tabeddit 1er arrêt":[34.19995,8.32186], "Tabeddit 2ème arrêt":[34.1787,8.30706],
+  "Moulares":[34.48067,8.27244], "Redeyef":[34.38801,8.15249], "Magroun":[34.38801,8.15249], "El Ayoun":[34.38801,8.15249],
   // Ligne L6 Tunis - Kalaâ Khasba (Le Kef) - coordonnées approximatives par interpolation
-  "Jebel Jelloud":[36.765,10.124], "Bir Kassaa":[36.737,10.064], "Naassen":[36.710,10.003],
-  "Khelidia":[36.682,9.943], "Oudna":[36.663,9.902], "Cheylus":[36.636,9.842],
-  "Bir M'Cherga":[36.608,9.781], "Depienne":[36.580,9.720], "Pont du Fahs":[36.543,9.639],
-  "Bou Arada":[36.488,9.518], "El Aroussa":[36.441,9.417], "Sidi Ayed":[36.404,9.336],
-  "Gaafour":[36.367,9.255], "El Akhouat":[36.330,9.175], "El Krib":[36.293,9.094],
-  "Sidi Bou Rouis":[36.237,8.973], "Trika":[36.200,8.892], "Le Sers":[36.163,8.811],
-  "Les Salines":[36.126,8.730], "Les Zouarines":[36.089,8.649], "Dahmani":[36.052,8.568],
-  "Le Kef":[36.1742,8.7048], "Ain Mesria":[36.006,8.467], "Fej et Tameur":[35.969,8.386],
-  "Gouraïa":[35.932,8.305], "Oued Sarrath":[35.895,8.224], "Kalaâ Khasba":[35.8667,8.1667],
+  "Jebel Jelloud":[36.78578,10.16634], "Bir Kassaa":[36.81978,10.07619], "Naassen":[36.82541,10.03798],
+  "Khelidia":[36.8288,9.8877], "Oudna":[36.55202,10.04895], "Cheylus":[36.73545,9.69621],
+  "Bir M'Cherga":[36.69685,9.64739], "Depienne":[36.66216,9.60439], "Pont du Fahs":[36.66065,9.6009],
+  "Bou Arada":[36.37593,9.50865], "El Aroussa":[36.38364,9.43621], "Sidi Ayed":[36.34093,9.34709],
+  "Gaafour":[36.3331,9.33341], "El Akhouat":[36.25607,9.19015], "El Krib":[36.25079,9.17676],
+  "Sidi Bou Rouis":[36.15316,8.8914], "Trika":[36.16016,8.87022], "Le Sers":[36.15422,8.81126],
+  "Les Salines":[36.15009,8.74434], "Les Zouarines":[36.16673,8.70368], "Dahmani":[36.16673,8.70368],
+  "Le Kef":[36.16669,8.70427], "Ain Mesria":[35.85196,8.54596], "Fej et Tameur":[35.85196,8.54596],
+  "Gouraïa":[35.85196,8.54596], "Oued Sarrath":[35.85196,8.54596], "Kalaâ Khasba":[35.85196,8.54596],
   // Ligne Tunis - Béja - Jendouba - Ghardimaou - Souk Ahras - Annaba
-  "Manouba":[36.8083,10.0972], "Jedeida":[36.8500,9.9167], "Tebourba":[36.8333,9.8500],
-  "Borj Toum":[36.62,9.55], "Mejez El Bab":[36.6500,9.6167], "Oued Zarga":[36.7167,9.4167],
-  "Sidi M'Himech":[36.72,9.30], "Beja":[36.7256,9.1817], "Mastouta":[36.65,9.05],
-  "Sidi S'mail":[36.60,8.95], "Bousalem":[36.6167,8.9667], "Ben Bechir":[36.55,8.85],
-  "Jendouba":[36.5011,8.7802], "Oued Meliz":[36.45,8.65], "Ghardimaou Arrivée":[36.4514,8.4353],
-  "Ghardimaou Départ":[36.4514,8.4353], "Souk Ahras Arrivée":[36.2864,7.9511],
-  "Souk Ahras Départ":[36.2864,7.9511], "Annaba":[36.9,7.7667],
+  "Manouba":[36.81651,10.09841], "Jedeida":[36.84454,9.91939], "Tebourba":[36.82814,9.8487],
+  "Borj Toum":[36.66221,9.55942], "Mejez El Bab":[36.66216,9.60439], "Oued Zarga":[36.7042,9.40741],
+  "Sidi M'Himech":[36.7566,9.35261], "Beja":[36.72894,9.18573], "Mastouta":[36.60801,9.05764],
+  "Sidi S'mail":[36.60748,8.94834], "Bousalem":[36.61116,8.96674], "Ben Bechir":[36.56181,8.84419],
+  "Jendouba":[36.50242,8.778], "Oued Meliz":[36.45437,8.6515], "Ghardimaou Arrivée":[36.44796,8.43758],
+  "Ghardimaou Départ":[36.44796,8.43758], "Souk Ahras Arrivée":[36.41359,8.40712],
+  "Souk Ahras Départ":[36.41359,8.40712], "Annaba":[36.44112,8.42772],
   // Branche Tunis - Bizerte
-  "Sidi Othman":[36.85,9.95], "Chaouat":[36.87,9.90], "Ain Ghelal":[36.95,9.75],
-  "Mateur":[37.0392,9.6650], "Tinja":[37.1333,9.7333], "La Pecherie":[37.20,9.85],
-  "Bizerte":[37.2744,9.8739],
+  "Sidi Othman":[36.84751,9.94945], "Chaouat":[36.8562,9.93107], "Ain Ghelal":[37.00886,9.74651],
+  "Mateur":[37.03611,9.66429], "Tinja":[37.12889,9.74349], "La Pecherie":[37.25071,9.83077],
+  "Bizerte":[37.26644,9.8639],
   // Ligne D : Tunis - Gobaa (été 2026) - coordonnées approximatives, à corriger via l'éditeur
-  "Sayda Manoubia":[36.7930,10.1600], "Mellassine":[36.7930,10.1450], "Erraoudha":[36.7980,10.1300],
-  "Le Bardo":[36.8092,10.1397], "Elbortal":[36.8100,10.1150], "Les Orangers":[36.8150,10.0800],
-  "Gobaa":[36.8200,10.0400], "Gobaa Ville":[36.8250,10.0200],
+  "Sayda Manoubia":[36.7932,10.16024], "Mellassine":[36.79799,10.15299], "Erraoudha":[36.80799,10.13241],
+  "Le Bardo":[36.80658,10.13839], "Elbortal":[36.81194,10.11557], "Les Orangers":[36.81913,10.08061],
+  "Gobaa":[36.825,10.04074], "Gobaa Ville":[36.83079,10.02218],
   // Ligne E : Tunis - Bougatfa (été 2026) - coordonnées approximatives, à corriger via l'éditeur
-  "Ennajah":[36.7900,10.1550], "Etayarane":[36.7950,10.1350], "Ezzouhour 2":[36.8000,10.1150],
-  "Elhrayria":[36.8050,10.0900], "Bougatfa":[36.8100,10.0600]
+  "Ennajah":[36.79386,10.1597], "Etayarane":[36.80592,10.13987], "Ezzouhour 2":[36.81114,10.11829],
+  "Elhrayria":[36.81748,10.09184], "Bougatfa":[36.82191,10.06175]
 };
 // خطوط سكة اصطناعية قصيرة تُضاف تلقائياً تحت أي محطة بعيدة عن أي خط سكة حقيقي (SNCFT أو Overpass)
 // الهدف: ضمان وجود سكة أسفل كل محطة دوماً، حتى لو كانت بيانات الخط الحقيقي غير مكتملة قرب تلك المحطة
@@ -3962,6 +3980,7 @@ function renderLines(){
     </div>`;
   }).join('');
   populateStationSelects();
+  if(typeof populateTrainTrackSelect==='function') populateTrainTrackSelect();
 }
 
 // ---------- إخفاء/إظهار قائمة القطارات (بدون حذفها) ----------
@@ -4234,6 +4253,121 @@ document.getElementById('toggleTrainFinderBtn').onclick=()=>{
 };
 document.getElementById('refreshTrainFinderBtn').onclick=()=>{ renderTrainFinder(); };
 applyTrainFinderVisibility();
+
+// ---------- تتبّع قطار واحد (Suivi par train): بحث برقم/اسم القطار وعرض جدول كامل بكل معطياته ----------
+function searchTrainsByQuery(q){
+  q = (q||'').trim();
+  if(!q) return [];
+  const nq = normName(q);
+  return trains.filter(t=>{
+    const num = extractTrainNumber(t.name)||'';
+    if(num && (normName(num)===nq || normName(num).includes(nq))) return true;
+    return normName(t.name).includes(nq);
+  });
+}
+// يبني صف بيانات كامل لقطار واحد: الانطلاق/الوصول/المسار الكامل/الموقع المصحَّح بالتأخير الحقيقي عبر SNCFT Live/حالة التأكيد/الحالة العامة
+function trainTrackRowFor(t){
+  const stops = parseStops(t.stopsText).filter(s=>!s.unknown && s.time);
+  const num = extractTrainNumber(t.name)||'—';
+  if(stops.length<2){
+    return {t, num, stateTxt:'⚪ بيانات مسار غير كافية', dep:'—', arr:'—', itin:'—', posTxt:'— غير محدَّد —', delayTxt:'—', confirmHtml:'<span style="color:#8f96b8">—</span>'};
+  }
+  const status = trainFinderStatus(t);
+  const dep = stops[0].name+' ('+stops[0].time+')';
+  const arr = stops[stops.length-1].name+' ('+stops[stops.length-1].time+')';
+  const itin = stops.map(s=>s.name+' '+s.time).join(' ← ');
+  let stateTxt, posTxt, delayTxt, confirmHtml;
+  if(status.state==='not-started'){
+    stateTxt = '⏳ لم تنطلق بعد';
+    posTxt = 'الانطلاق من '+stops[0].name+' الساعة '+stops[0].time;
+    delayTxt = '—';
+    confirmHtml = '<span style="color:#8f96b8">—</span>';
+  } else if(status.state==='finished'){
+    stateTxt = '⚪ انتهت رحلتها اليوم';
+    posTxt = 'وصلت '+stops[stops.length-1].name;
+    delayTxt = '—';
+    confirmHtml = '<span style="color:#8f96b8">—</span>';
+  } else {
+    stateTxt = '🟢 نشطة الآن';
+    const raw = trainPositionNowRaw(t); // موقع مصحَّح فعلياً بالتأخير الحقيقي المرصود عبر SNCFT Live (وليس الجدول النظري وحده)
+    const delay = getLiveDelayForTrain(t);
+    posTxt = raw ? (raw.fromStation===raw.toStation ? 'متوقفة عند '+raw.fromStation : 'بين '+raw.fromStation+' ↔ '+raw.toStation) : '— غير محدَّد —';
+    delayTxt = (delay!==null && delay>0) ? ('+'+delay+' د') : (isLiveDataFresh() ? '0 د (في الوقت)' : '— بلا بيانات SNCFT Live —');
+    confirmHtml = isTrainLiveConfirmed(t) ? '<span style="color:#7ee787">✅ مؤكد عبر SNCFT Live</span>' : '<span style="color:#ffb300">⏳ لم يتأكد</span>';
+  }
+  return {t, num, stateTxt, dep, arr, itin, posTxt, delayTxt, confirmHtml};
+}
+function renderTrainTrackRows(matches, emptyLabel){
+  const tbl = document.getElementById('trainTrackTable');
+  const cnt = document.getElementById('trainTrackResultCount');
+  const updated = document.getElementById('trainTrackUpdatedAt');
+  if(!tbl) return;
+  if(!matches.length){
+    tbl.innerHTML = '<tr><th>النتيجة</th></tr><tr><td>'+escAttr(emptyLabel||'لا نتيجة')+'</td></tr>';
+    cnt.textContent = '0 نتيجة';
+    updated.textContent = '';
+    return;
+  }
+  cnt.textContent = matches.length+' نتيجة'+(matches.length>1?' مطابقة':'');
+  const rows = matches.map(t=>{
+    const r = trainTrackRowFor(t);
+    return `<tr>
+      <td>${escAttr(r.num)}</td>
+      <td style="direction:ltr;text-align:left">${escAttr(r.t.name)}</td>
+      <td style="direction:ltr;text-align:left">${escAttr(r.dep)}</td>
+      <td style="direction:ltr;text-align:left;white-space:normal;min-width:220px;">${escAttr(r.itin)}</td>
+      <td style="direction:ltr;text-align:left">${escAttr(r.arr)}</td>
+      <td style="direction:ltr;text-align:left">${escAttr(r.posTxt)}</td>
+      <td>${escAttr(r.delayTxt)}</td>
+      <td>${r.confirmHtml}</td>
+      <td>${escAttr(r.stateTxt)}</td>
+    </tr>`;
+  }).join('');
+  tbl.innerHTML = `<tr><th>رقم القطار</th><th>الاسم/المسار</th><th>محطة الانطلاق</th><th>المسار الكامل (كل المحطات)</th><th>محطة الوصول</th><th>الموقع الحالي (مصحَّح SNCFT Live)</th><th>التأخير</th><th>SNCFT Live</th><th>الحالة</th></tr>${rows}`;
+  updated.textContent = '🕓 آخر تحديث: '+new Date().toLocaleTimeString('ar-TN');
+}
+function renderTrainTrack(){
+  const inp = document.getElementById('trainTrackInput');
+  const tbl = document.getElementById('trainTrackTable');
+  const cnt = document.getElementById('trainTrackResultCount');
+  const updated = document.getElementById('trainTrackUpdatedAt');
+  if(!inp || !tbl) return;
+  const q = inp.value;
+  if(!q.trim()){
+    tbl.innerHTML = '';
+    cnt.textContent = 'اختر قطاراً من القائمة أعلاه، أو اكتب رقماً/اسماً ثم اضغط بحث.';
+    updated.textContent = '';
+    return;
+  }
+  const matches = searchTrainsByQuery(q);
+  renderTrainTrackRows(matches, 'لا يوجد أي قطار مطابق لـ "'+q+'"');
+}
+document.getElementById('trainTrackSearchBtn').onclick = renderTrainTrack;
+document.getElementById('trainTrackInput').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); renderTrainTrack(); } });
+// ---------- القائمة القابلة للتمرير: اختيار مباشر لقطار من كل القطارات المتوفرة (مرتّبة برقم القطار) ----------
+function populateTrainTrackSelect(){
+  const sel = document.getElementById('trainTrackSelect');
+  if(!sel) return;
+  const current = sel.value;
+  const sorted = trains.slice().sort((a,b)=> (a.name||'').localeCompare(b.name||'', 'fr', {numeric:true}));
+  sel.innerHTML = '<option value="">— مرّر واختر قطاراً من القائمة —</option>' +
+    sorted.map(t=>`<option value="${escAttr(t.name)}">${escAttr(extractTrainNumber(t.name)||'؟')} — ${escAttr(t.name)}</option>`).join('');
+  if(sorted.some(t=>t.name===current)) sel.value = current;
+}
+document.getElementById('trainTrackSelect').addEventListener('change', function(){
+  const val = this.value;
+  const inp = document.getElementById('trainTrackInput');
+  if(!val){
+    if(inp) inp.value = '';
+    renderTrainTrackRows([], '');
+    document.getElementById('trainTrackResultCount').textContent = 'اختر قطاراً من القائمة أعلاه، أو اكتب رقماً/اسماً ثم اضغط بحث.';
+    return;
+  }
+  const train = trains.find(t=>t.name===val);
+  if(inp) inp.value = val;
+  renderTrainTrackRows(train ? [train] : [], 'تعذّر إيجاد هذا القطار (ربما تغيّرت قائمة القطارات)');
+});
+populateTrainTrackSelect();
 
 // ---------- الاطلاع على التوقيت (حسب المحطة، رقم القطار، مدة الرحلة) ----------
 function minutesOf(hhmm){ const [h,m]=hhmm.split(':').map(Number); return h*60+m; }
@@ -5720,7 +5854,8 @@ function checkLiveOnlyAlarm(result){
   const liveOnlyModules = [];
   const modDirect = result.modules && result.modules[2]; // 3️⃣ SNCFT Live مباشر
   if(modDirect && modDirect.risk>=80) liveOnlyModules.push({...modDirect, customLabel:'📡 SNCFT Live مباشر'});
-  if(result.liveAnyBest && result.liveAnyBest.risk>=80) liveOnlyModules.push({...result.liveAnyBest, customLabel:'📡 SNCFT Live كامل (حتى غير المجدول)'});
+  // ملاحظة: حالة القطار "غير المبرمَج" (غير الموجود إطلاقاً في الجدول النظري) لها الآن إنذارها المستقل الخاص بها
+  // (انظر وحدة nonProg_ أسفل الملف) بنفس منطق بقية الوحدات المستقلة — شرط مزدوج مسافة+زمن، فلا داعي لتكرارها هنا
   if(liveOnlyModules.length>0 && !liveAlarmActive){
     if(!isProximityAlertMuted()) triggerLiveOnlyAlarm(liveOnlyModules);
   }
@@ -6240,6 +6375,20 @@ function kz_dismissGhostAlarm(prefix){
 document.addEventListener('touchstart', ()=>{ kz_dismissGhostAlarm('kz'); kz_dismissGhostAlarm('kzL'); }, {passive:true});
 document.addEventListener('click', ()=>{ kz_dismissGhostAlarm('kz'); kz_dismissGhostAlarm('kzL'); });
 document.addEventListener('keydown', ()=>{ kz_dismissGhostAlarm('kz'); kz_dismissGhostAlarm('kzL'); });
+// طلب المستخدم: إضافة تاريخ المرور (اليوم أو غداً بصيغة DD/MM/YYYY) بجانب "الوقت النظري المتوقع للوصول" في صندوق قطار شبح
+function kz_ghostPassageDateText(timeStr){
+  const m = (timeStr||'').match(/^(\d{1,2}):(\d{2})/);
+  if(!m) return '';
+  const schedMin = parseInt(m[1],10)*60 + parseInt(m[2],10);
+  const now = new Date();
+  const nowMin = now.getHours()*60 + now.getMinutes();
+  const isToday = schedMin >= nowMin;
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if(!isToday) d.setDate(d.getDate()+1);
+  const pad = n=>String(n).padStart(2,'0');
+  const dateStr = pad(d.getDate())+'/'+pad(d.getMonth()+1)+'/'+d.getFullYear();
+  return isToday ? ' — اليوم ('+dateStr+')' : ' — غداً ('+dateStr+')';
+}
 // يُحدِّث صندوق "قطار شبح" (بنفس المنطق لكل من الخط الأزرق والأخضر عبر prefix: 'kz' أو 'kzL') ويُشغِّل/يُدير وحدة إنذاره الخاصة
 function kz_updateGhostBox(prefix, fromStation, toStation, excludeTrain){
   const box = document.getElementById(prefix+'GhostBox');
@@ -6258,7 +6407,7 @@ function kz_updateGhostBox(prefix, fromStation, toStation, excludeTrain){
     }
     eventKey = prefix+'|ghostLive|'+ghost.num;
   } else {
-    if(timeEl) timeEl.textContent = '🕒 الوقت النظري المتوقع للوصول: '+(ghost.scheduledArrival||'--');
+    if(timeEl) timeEl.textContent = '🕒 الوقت النظري المتوقع للوصول: '+(ghost.scheduledArrival||'--')+kz_ghostPassageDateText(ghost.scheduledArrival);
     if(lastPos && ghost.train){
       const ca = kz_trainClosestApproach(lastPos, ghost.train);
       if(ca){
@@ -9451,6 +9600,178 @@ function checkPeacockHour(){
   setInterval(theoAny_cycle, THEOANY_CYCLE_MS);
 })();
 // ========== FIN إنذار "قطار نظري مصحَّح بالتأخير — مؤكَّداً أو لا" ==========
+
+// ================================================================
+// ========== إنذار مستقل جديد — قطار "غير مبرمَج" (Train non programmé): مرصود عبر SNCFT Live لكن بلا أي وجود إطلاقاً في الجدول النظري ==========
+// طلب المستخدم: يُحسب هذا الإنذار بنفس طريقة بقية الوحدات المستقلة للقطار النظري (theoNC_/corr_/theoAny_) بالضبط —
+// وحدة بحث own مستقلة تماماً، شرط مزدوج (مسافة ≤150م AND زمن وصول تقديري ≤3 دقائق حسب سرعة الاقتراب الفعلية)،
+// هستيريسيس 150م بدء / 170م توقف — بدل الاعتماد على result.liveAnyBest المشترك أو أي عتبة نسبة خطر (risk%).
+// Module 100% indépendant : préfixe nonProg_, propre bannière (bleu/cyan, distincte de toutes les
+// autres), propre son, même hystérésis et même condition double que les modules théoriques.
+// ================================================================
+(function(){
+  'use strict';
+
+  const NONPROG_CYCLE_MS = 2000;
+  const NONPROG_SEUIL_DEMARRAGE_M = 150;
+  const NONPROG_SEUIL_ARRET_M = 170; // نفس مبدأ الهستيريسيس المعتمد في بقية الوحدات
+  const NONPROG_TEMPS_MAX_MIN = 3; // aligné sur l'alarme principale : condition double (distance ET temps d'arrivée estimé)
+
+  let nonProg_active = false;
+  let nonProg_muet = false;
+  let nonProg_trainSuivi = null;
+  let nonProg_ctx=null, nonProg_osc=null, nonProg_gain=null, nonProg_sirenTimer=null, nonProg_vibrateTimer=null;
+  // ---------- تقدير سرعة الاقتراب والزمن المتبقي، بنفس طريقة بقية الوحدات المستقلة بالضبط ----------
+  let nonProg_lastDist=null, nonProg_lastTime=null, nonProg_lastTrainId=null;
+  function nonProg_estimerMinutesImpact(trainId, dist){
+    const maintenant = Date.now();
+    let minutesImpact = null;
+    if(nonProg_lastTrainId===trainId && nonProg_lastDist!=null && nonProg_lastTime!=null){
+      const dtSec = (maintenant-nonProg_lastTime)/1000;
+      if(dtSec>=1){
+        const deltaDist = dist - nonProg_lastDist;
+        if(deltaDist<0){
+          const vitesseMS = Math.abs(deltaDist)/dtSec;
+          if(vitesseMS>0.3) minutesImpact = (dist/vitesseMS)/60;
+        }
+        nonProg_lastDist = dist; nonProg_lastTime = maintenant;
+      }
+    } else {
+      nonProg_lastDist = dist; nonProg_lastTime = maintenant;
+    }
+    nonProg_lastTrainId = trainId;
+    return minutesImpact;
+  }
+
+  // نفس مبدأ computeRiskModuleLiveAny تماماً (موقع مسقَط على السكة عبر liveOnlyTrainPosition)، لكن مقصور فقط
+  // على القطارات التي لا مقابل رقمي لها إطلاقاً في الجدول النظري (trains[]) — أي "غير مبرمَجة" فعلاً
+  function nonProg_nearestModule(userPos){
+    let best = {dist:Infinity, lineName:'--', trainId:null};
+    if(!isLiveDataFresh()) return best;
+    liveTrains.forEach(lt=>{
+      if(!lt || !lt.num) return;
+      if(trains.some(t=>trainNumberMatches(t.name, lt.num))) return; // له مقابل نظري: ليس "غير مبرمَج"
+      const pos = liveOnlyTrainPosition(lt);
+      if(!pos) return;
+      const dist = haversine(userPos, [pos.lat, pos.lon]);
+      if(dist < best.dist){
+        best = {dist, lineName: 'قطار '+lt.num+' (غير موجود في الجدول النظري) ('+pos.fromStation+' → '+pos.toStation+')', trainId: 'LIVE-'+lt.num};
+      }
+    });
+    return best;
+  }
+
+  function nonProg_creerUI(){
+    if(document.getElementById('nonProgBanniere')) return;
+    const style = document.createElement('style');
+    style.textContent = `
+      #nonProgBanniere{
+        position:fixed; left:0; right:0; bottom:0; z-index:10011;
+        background:linear-gradient(180deg,rgba(0,90,110,.97),rgba(0,35,45,.97));
+        color:#fff; padding:14px 18px 18px; text-align:center;
+        display:none; box-shadow:0 -6px 24px rgba(0,0,0,.5);
+        animation:nonProgPulseBg .9s infinite; font-family:inherit;
+      }
+      @keyframes nonProgPulseBg{0%,100%{background:linear-gradient(180deg,rgba(0,90,110,.97),rgba(0,35,45,.97))}50%{background:linear-gradient(180deg,rgba(0,150,180,.97),rgba(0,55,70,.97))}}
+      #nonProgBanniere h3{margin:0 0 6px;font-size:16px;color:#c6faff}
+      #nonProgBanniere p{margin:0 0 10px;font-size:13px;line-height:1.7}
+      #nonProgBanniere button{
+        background:#00a8d8;color:#fff;border:none;border-radius:10px;
+        padding:9px 22px;font-weight:800;font-size:13px;
+      }
+    `;
+    document.head.appendChild(style);
+    const div = document.createElement('div');
+    div.id = 'nonProgBanniere';
+    div.innerHTML =
+      '<h3>🔵⚠️ إنذار مستقل — قطار غير مبرمَج (مرصود عبر SNCFT Live فقط)</h3>'
+      + '<p id="nonProgTexte"></p>'
+      + '<button type="button">فهمت، أوقف هذا الإنذار</button>';
+    div.querySelector('button').addEventListener('click', ()=>{ nonProg_muet = true; nonProg_arreter(); });
+    document.body.appendChild(div);
+  }
+
+  function nonProg_majTexte(info, minutesImpact){
+    const t = document.getElementById('nonProgTexte');
+    const tempsTxt = (minutesImpact!=null) ? (' — الوصول خلال ~'+minutesImpact.toFixed(1)+' د') : '';
+    if(t) t.textContent = info.lineName+' — على بعد '+formatDist(info.dist)+tempsTxt;
+  }
+
+  function nonProg_demarrer(info, minutesImpact){
+    if(nonProg_trainSuivi !== info.trainId){ nonProg_muet = false; }
+    nonProg_trainSuivi = info.trainId;
+    nonProg_majTexte(info, minutesImpact);
+    if(nonProg_muet) return;
+    if(nonProg_active) return;
+    nonProg_active = true;
+    const banniere = document.getElementById('nonProgBanniere');
+    if(banniere) banniere.style.display = 'block';
+    try{
+      nonProg_ctx = new (window.AudioContext||window.webkitAudioContext)();
+      nonProg_gain = nonProg_ctx.createGain();
+      nonProg_gain.gain.value = .4;
+      nonProg_gain.connect(nonProg_ctx.destination);
+      nonProg_osc = nonProg_ctx.createOscillator();
+      nonProg_osc.type = 'sawtooth';
+      nonProg_osc.frequency.value = 440;
+      nonProg_osc.connect(nonProg_gain);
+      nonProg_osc.start();
+      nonProg_sirenTimer = setInterval(function(){
+        if(!nonProg_osc) return;
+        nonProg_osc.frequency.value = (nonProg_osc.frequency.value < 600) ? 780 : 440;
+      }, 300);
+    }catch(e){}
+    speakDanger150();
+    if(navigator.vibrate){
+      navigator.vibrate([350,150,350,150,350]);
+      nonProg_vibrateTimer = setInterval(function(){
+        if(navigator.vibrate) navigator.vibrate([350,150,350,150,350]);
+      }, 3000);
+    }
+  }
+
+  function nonProg_arreter(){
+    if(!nonProg_active) return;
+    nonProg_active = false;
+    const banniere = document.getElementById('nonProgBanniere');
+    if(banniere) banniere.style.display = 'none';
+    if(nonProg_sirenTimer){ clearInterval(nonProg_sirenTimer); nonProg_sirenTimer=null; }
+    if(nonProg_vibrateTimer){ clearInterval(nonProg_vibrateTimer); nonProg_vibrateTimer=null; }
+    if(navigator.vibrate) navigator.vibrate(0);
+    try{
+      if(nonProg_osc){ nonProg_osc.stop(); nonProg_osc.disconnect(); nonProg_osc=null; }
+      if(nonProg_gain){ nonProg_gain.disconnect(); nonProg_gain=null; }
+      if(nonProg_ctx){ nonProg_ctx.close(); nonProg_ctx=null; }
+    }catch(e){}
+  }
+
+  function nonProg_cycle(){
+    try{
+      nonProg_creerUI();
+      if(typeof lastPos==='undefined' || !Array.isArray(lastPos)){
+        nonProg_arreter(); nonProg_muet=false; nonProg_trainSuivi=null;
+        nonProg_lastDist=null; nonProg_lastTime=null; nonProg_lastTrainId=null;
+        return;
+      }
+
+      const best = nonProg_nearestModule(lastPos);
+      const seuil = nonProg_active ? NONPROG_SEUIL_ARRET_M : NONPROG_SEUIL_DEMARRAGE_M;
+      const minutesImpact = best.trainId ? nonProg_estimerMinutesImpact(best.trainId, best.dist) : null;
+      const seuilTempsOk = (minutesImpact!==null && minutesImpact<=NONPROG_TEMPS_MAX_MIN);
+
+      if(best.trainId && best.dist<=seuil && seuilTempsOk){
+        nonProg_demarrer(best, minutesImpact);
+      } else {
+        nonProg_arreter();
+        nonProg_muet = false;
+        nonProg_trainSuivi = null;
+      }
+    }catch(e){}
+  }
+
+  setInterval(nonProg_cycle, NONPROG_CYCLE_MS);
+})();
+// ========== FIN إنذار "قطار غير مبرمَج" ==========
 
 // ================================================================
 // ========== إنذار مستقل سابع — 150 متر مطلق، بغضّ النظر عن الوحدة أو السرعة أو التأكيد ==========
