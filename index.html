@@ -2102,6 +2102,33 @@ let liveFetchTimer = null;
 let liveFetchAt = 0; // وقت آخر جلب ناجح للبيانات المباشرة (ms) — يُستعمل لمنع استعمال بيانات قديمة (مثلاً من الأمس)
 const LIVE_DATA_MAX_AGE_MS = 90*1000; // بعد 90 ثانية بدون تحديث ناجح، تُعتبر البيانات منتهية الصلاحية ولا تُستعمل إطلاقاً
 const MAX_STALE_DELAY_BUFFER_MIN = 10; // إن تجاوز الوقت الحالي توقيت المحطة المرصودة بأكثر من هذا الهامش، فالقطار قطعاً مرّ من هناك فعلاً — الخبر أصبح بلا فائدة ويُهمَل
+
+// ---------- استمرارية دون اتصال: حفظ آخر حالة معروفة على الهاتف واستعادتها فوراً عند فتح التطبيق ----------
+// الهدف: لو انقطع الإنترنت (أو أُغلق التطبيق أثناء الانقطاع)، يواصل قِطاري العمل بآخر بيانات محفوظة محلياً
+// بدل شاشة فارغة، ثم يُزامن تلقائياً بمجرد عودة الاتصال (أنظر offlineResyncSystem أسفل الملف)
+const OFFLINE_SNAPSHOT_KEY = 'qitari_offline_snapshot';
+function saveOfflineSnapshot(){
+  try{
+    localStorage.setItem(OFFLINE_SNAPSHOT_KEY, JSON.stringify({
+      lastPos: (typeof lastPos!=='undefined') ? lastPos : null,
+      liveTrains: liveTrains,
+      liveFetchOk: liveFetchOk,
+      liveFetchAt: liveFetchAt,
+      savedAt: Date.now()
+    }));
+  }catch(e){}
+}
+(function restoreOfflineSnapshot(){
+  try{
+    const raw = localStorage.getItem(OFFLINE_SNAPSHOT_KEY);
+    if(!raw) return;
+    const snap = JSON.parse(raw);
+    if(!snap) return;
+    if(snap.lastPos && typeof lastPos!=='undefined' && !lastPos) lastPos = snap.lastPos;
+    if(Array.isArray(snap.liveTrains) && snap.liveTrains.length) liveTrains = snap.liveTrains;
+    if(typeof snap.liveFetchAt === 'number'){ liveFetchOk = !!snap.liveFetchOk; liveFetchAt = snap.liveFetchAt; }
+  }catch(e){}
+})();
 function stripAccents(s){ return (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
 function normName(s){ return stripAccents(s).toUpperCase().trim(); }
 // تطابق مرن بين اسم محطة من الجدول واسم محطة قادم من البيانات المباشرة (قد يكون مختصراً)
@@ -2113,7 +2140,15 @@ function stationNamesMatch(a,b){
 }
 // تتحقق أن بيانات التأخير المباشرة حديثة فعلاً (وليست من جلسة قديمة/يوم سابق قد يكون التطبيق بقي مفتوحاً منذ ذلك الوقت)
 function isLiveDataFresh(){
-  return liveFetchOk && liveTrains.length>0 && (Date.now()-liveFetchAt) < LIVE_DATA_MAX_AGE_MS;
+  if(!liveFetchOk || liveTrains.length===0) return false;
+  const age = Date.now() - liveFetchAt;
+  if(age < LIVE_DATA_MAX_AGE_MS) return true;
+  // انقطع الإنترنت فعلاً (لا مجرد تأخر عادي في الخادم وهو متصل): لا نُسقط آخر بيانات مباشرة معروفة —
+  // القطار المؤكَّد سابقاً يبقى مؤكَّداً، والتأخير المرصود يبقى "مجمَّداً" ويُستعمل لمواصلة حساب موقعه والمنبّه بلا انقطاع.
+  // الحماية من الإطالة الوهمية موجودة أصلاً داخل كل دالة تستعمل التأخير (تنتهي صلاحيته آلياً بمجرد أن يكون القطار قد وصل فعلياً حسب جدوله + هامش)
+  // وبمجرد عودة الإنترنت، مستمع 'online' يُعيد الجلب فوراً فتتحدّث البيانات الحقيقية دون تأخير
+  if(navigator.onLine === false) return true;
+  return false;
 }
 // نص التاريخ والوقت الدقيق لآخر تحديث ناجح لبيانات SNCFT Live — يُستعمل بجانب كل معلومة مبنية على هذه البيانات
 function liveRefreshTimeText(){
@@ -2130,6 +2165,7 @@ async function fetchLiveTrains(){
     liveTrains = Array.isArray(data) ? data : [];
     liveFetchOk = true;
     liveFetchAt = Date.now();
+    saveOfflineSnapshot(); // حفظ محلي فوري: يتيح استئناف العمل من نفس النقطة لو انقطع الإنترنت لاحقاً أو أُغلق التطبيق
     updateLiveOnlyHistory(); // يحدّث سجل مراقبة القطارات الزرقاء (غير المجدولة) عند كل جلب ناجح، لكشف أي بيانات عالقة لاحقاً
     if(typeof renderComparatif === 'function' && !comparatifHidden) renderComparatif(); // تحديث تلقائي لجداول "مقارن" عند كل جلب ناجح
     const dot=document.getElementById('liveDot'), txt=document.getElementById('liveStatusTxt');
@@ -5447,6 +5483,7 @@ function stopWatch(){
 function onPos(pos){
   const {latitude,longitude,accuracy,speed}=pos.coords;
   lastPos=[latitude,longitude];
+  saveOfflineSnapshot(); // حفظ الموقع فوراً على الهاتف عند كل نبضة GPS، حتى يواصل التطبيق من نفس المكان لو انقطع الإنترنت أو أُغلق فجأة
   updateGpsWeather(latitude, longitude);
   document.getElementById('gpsAcc').textContent = Math.round(accuracy)+' م';
   let spKmh = speed? (speed*3.6).toFixed(1) : '0';
@@ -7687,6 +7724,45 @@ function stopKeepAlive(){
     if('mediaSession' in navigator) navigator.mediaSession.playbackState = 'none';
   }catch(e){}
 }
+
+// ---------- مؤشر حالة الاتصال + إعادة مزامنة فورية عند عودة الإنترنت ----------
+// أثناء الانقطاع: يبقى التطبيق يعمل بآخر بيانات محفوظة (GPS محلي + بيانات مباشرة محفوظة) بلا أي تجميد
+// عند عودة الاتصال: تحديث فوري لكل المصادر بدل انتظار الموقّت العادي (قد يصل لـ30 ثانية)
+(function offlineResyncSystem(){
+  let banner = null;
+  function ensureBanner(){
+    if(banner) return banner;
+    banner = document.createElement('div');
+    banner.id = 'connStatusBanner';
+    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;text-align:center;'+
+      'padding:9px 12px;font-weight:800;font-size:14px;font-family:inherit;color:#1a1200;'+
+      'box-shadow:0 2px 10px rgba(0,0,0,.35);transition:transform .35s ease;transform:translateY(-120%);';
+    document.body.appendChild(banner);
+    return banner;
+  }
+  function showBanner(text, bg){
+    const b = ensureBanner();
+    b.textContent = text;
+    b.style.background = bg;
+    b.style.transform = 'translateY(0)';
+  }
+  function hideBanner(){ if(banner) banner.style.transform = 'translateY(-120%)'; }
+  function goOffline(){
+    showBanner('📴 لا يوجد اتصال بالإنترنت — قِطاري يواصل العمل بآخر بيانات محفوظة على الهاتف', '#ffb300');
+  }
+  function goOnline(){
+    showBanner('🔄 عاد الاتصال — جارٍ تحديث كل البيانات...', '#3ddc84');
+    try{ if(typeof fetchLiveTrains==='function') fetchLiveTrains(); }catch(e){}
+    try{ if(typeof refreshAllTrainsLayer==='function') refreshAllTrainsLayer(); }catch(e){}
+    try{ if(typeof recalcAndDisplay==='function') recalcAndDisplay(); }catch(e){}
+    try{ if(typeof renderComparatif==='function' && !comparatifHidden) renderComparatif(); }catch(e){}
+    try{ if(typeof sl_refreshForPosition==='function' && typeof lastPos!=='undefined' && lastPos) sl_refreshForPosition(lastPos[0], lastPos[1]); }catch(e){}
+    setTimeout(hideBanner, 3500);
+  }
+  window.addEventListener('offline', goOffline);
+  window.addEventListener('online', goOnline);
+  if(!navigator.onLine) goOffline();
+})();
 
 // ---------- service worker (installability + offline shell cache) ----------
 // ملاحظة مهمة: الإصدار الجديد "network-first" — يحاول دوماً جلب أحدث نسخة من الشبكة أولاً،
