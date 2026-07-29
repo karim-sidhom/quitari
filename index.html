@@ -585,6 +585,21 @@ body{
 .wood-frame .wf-icon{font-size:15px;line-height:1;}
 .wood-frame .wf-value{font-size:13px;font-weight:700;color:var(--gold3);line-height:1.3;}
 .wood-frame .wf-label{font-size:9px;color:var(--gold3);opacity:.8;}
+.station-name-label{
+  background:rgba(13,26,110,.88);
+  color:#ffe566;
+  border:1px solid #ffd700;
+  border-radius:6px;
+  padding:1px 6px;
+  font-size:11px;
+  font-weight:700;
+  font-family:inherit;
+  box-shadow:0 1px 4px rgba(0,0,0,.5);
+  direction:rtl;
+  white-space:nowrap;
+}
+.station-name-label::before{ border-top-color:#ffd700; }
+.leaflet-tooltip.station-name-label{ pointer-events:none; }
 </style>
 </head>
 <body>
@@ -2470,31 +2485,115 @@ function snapToNearestTrack(lat, lon, maxDistM){
   return {lat:best.lat, lon:best.lon};
 }
 
-// ---------- أيقونات SVG مرسومة بشكل واقعي (محطة حقيقية / قطار حقيقي) بدل الدوائر البسيطة ----------
+// ---------- أيقونات SVG مرسومة بشكل واقعي وأنيق (محطة حقيقية / قطار حقيقي) بدل الدوائر البسيطة ----------
+function darkenHex(hex, amt){
+  hex = (hex||'#e60000').replace('#','');
+  if(hex.length===3) hex = hex.split('').map(c=>c+c).join('');
+  const n = parseInt(hex,16);
+  let r = Math.max(0,((n>>16)&255) + amt);
+  let g = Math.max(0,((n>>8)&255) + amt);
+  let b = Math.max(0,(n&255) + amt);
+  return '#'+[r,g,b].map(v=>Math.min(255,Math.round(v)).toString(16).padStart(2,'0')).join('');
+}
+let _iconGradSeq = 0;
 function stationIconSvg(size){
-  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" style="filter:drop-shadow(0 0 4px rgba(255,215,0,.85))">
-    <path d="M2 10.5 L12 2.8 L22 10.5 Z" fill="#ffd700" stroke="#0d1a6e" stroke-width="0.5"/>
-    <rect x="3.3" y="10.3" width="17.4" height="10.4" rx="1.3" fill="#ffe566" stroke="#0d1a6e" stroke-width="0.6"/>
-    <rect x="10" y="14.6" width="4" height="6.1" fill="#0d1a6e"/>
-    <rect x="5.6" y="12.4" width="2.9" height="2.9" rx="0.4" fill="#0d1a6e"/>
-    <rect x="15.5" y="12.4" width="2.9" height="2.9" rx="0.4" fill="#0d1a6e"/>
-    <rect x="0.5" y="20.9" width="23" height="1.5" fill="#c9d2ff"/>
+  const uid = 'st'+(_iconGradSeq++);
+  // محطة حجرية أنيقة: واجهة من الحجر الطبيعي المنحوت (مداميك متتالية)، قوس مدخل حجري، نافذة قوسية، وسقف كحلي فاخر
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" style="filter:drop-shadow(0 2px 3px rgba(0,0,0,.55)) drop-shadow(0 0 4px rgba(255,215,0,.55))">
+    <defs>
+      <linearGradient id="${uid}badge" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#fff6da"/>
+        <stop offset="0.55" stop-color="#ffd83e"/>
+        <stop offset="1" stop-color="#e0a300"/>
+      </linearGradient>
+      <linearGradient id="${uid}roof" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#28459e"/>
+        <stop offset="1" stop-color="#0d1a6e"/>
+      </linearGradient>
+      <linearGradient id="${uid}stone" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#f3ede1"/>
+        <stop offset="0.5" stop-color="#dcd0ba"/>
+        <stop offset="1" stop-color="#b6a789"/>
+      </linearGradient>
+      <linearGradient id="${uid}stoneDk" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#c9bb9e"/>
+        <stop offset="1" stop-color="#93816a"/>
+      </linearGradient>
+    </defs>
+    <ellipse cx="12" cy="21.2" rx="6.6" ry="1.5" fill="#000" opacity=".3"/>
+    <circle cx="12" cy="10.6" r="9.5" fill="url(#${uid}badge)" stroke="#0d1a6e" stroke-width="1"/>
+    <circle cx="12" cy="10.6" r="9.5" fill="none" stroke="#fff6da" stroke-width="0.6" opacity=".55"/>
+    <path d="M5.4 9.9 L12 4.8 L18.6 9.9 L17.35 11.7 L12 7.7 L6.65 11.7 Z" fill="url(#${uid}roof)" stroke="#081254" stroke-width="0.3" stroke-linejoin="round"/>
+    <rect x="9.9" y="3.2" width="1.5" height="2.1" fill="#0d1a6e"/>
+    <!-- واجهة حجرية -->
+    <rect x="6.5" y="9.9" width="11" height="7" rx="0.6" fill="url(#${uid}stone)" stroke="#8a7a5c" stroke-width="0.55"/>
+    <!-- مداميك الحجر (خطوط أفقية) -->
+    <line x1="6.5" y1="11.55" x2="17.5" y2="11.55" stroke="#8a7a5c" stroke-width="0.28" opacity=".65"/>
+    <line x1="6.5" y1="13.2" x2="17.5" y2="13.2" stroke="#8a7a5c" stroke-width="0.28" opacity=".65"/>
+    <line x1="6.5" y1="14.85" x2="17.5" y2="14.85" stroke="#8a7a5c" stroke-width="0.28" opacity=".65"/>
+    <!-- فواصل رأسية بين الكتل الحجرية -->
+    <line x1="9" y1="9.9" x2="9" y2="11.55" stroke="#8a7a5c" stroke-width="0.22" opacity=".55"/>
+    <line x1="13" y1="9.9" x2="13" y2="11.55" stroke="#8a7a5c" stroke-width="0.22" opacity=".55"/>
+    <line x1="15.3" y1="9.9" x2="15.3" y2="11.55" stroke="#8a7a5c" stroke-width="0.22" opacity=".55"/>
+    <line x1="8" y1="11.55" x2="8" y2="13.2" stroke="#8a7a5c" stroke-width="0.22" opacity=".5"/>
+    <line x1="16" y1="11.55" x2="16" y2="13.2" stroke="#8a7a5c" stroke-width="0.22" opacity=".5"/>
+    <!-- أحجار الزاوية (قواطع) -->
+    <rect x="6.5" y="9.9" width="1.05" height="7" fill="url(#${uid}stoneDk)" opacity=".55"/>
+    <rect x="16.45" y="9.9" width="1.05" height="7" fill="url(#${uid}stoneDk)" opacity=".55"/>
+    <!-- نافذة قوسية علوية -->
+    <path d="M10.3 11.3 a1.7 1.7 0 0 1 3.4 0 v0.55 h-3.4 Z" fill="#0d1a6e" stroke="#7d6c4c" stroke-width="0.25"/>
+    <path d="M10.3 11.3 a1.7 1.7 0 0 1 3.4 0 v0.15 h-3.4 Z" fill="#bfe3ff" opacity=".7"/>
+    <!-- مدخل مقوّس بحجر منحوت -->
+    <path d="M10.6 16.9 v-1.85 a1.4 1.4 0 0 1 2.8 0 v1.85 Z" fill="#0d1a6e" stroke="#7d6c4c" stroke-width="0.3"/>
+    <path d="M10.15 16.9 v-1.95 a1.85 1.85 0 0 1 3.7 0 v1.95" fill="none" stroke="#8a7a5c" stroke-width="0.4"/>
+    <!-- نوافذ جانبية صغيرة -->
+    <rect x="7.3" y="14.5" width="1.5" height="1.9" rx="0.7" fill="#0d1a6e" stroke="#7d6c4c" stroke-width="0.22"/>
+    <rect x="15.2" y="14.5" width="1.5" height="1.9" rx="0.7" fill="#0d1a6e" stroke="#7d6c4c" stroke-width="0.22"/>
   </svg>`;
 }
 function trainIconSvg(size, withSmoke, color){
   // color: يستعمل لتمييز قطارات SNCFT Live غير الموجودة إطلاقاً في الجدول النظري (أزرق) عن القطار الأحمر المعتاد — بدون أي تأثير على الاستعمال الافتراضي
   color = color || '#e60000';
+  const dark = darkenHex(color,-55);
+  const light = darkenHex(color, 45);
+  const uid = 'tr'+(_iconGradSeq++);
   const smoke = withSmoke ? '<div class="steam-smoke s4"></div><div class="steam-smoke s3"></div><div class="steam-smoke s2"></div><div class="steam-smoke"></div>' : '';
   return `<div style="position:relative;width:${size}px;height:${size}px;">${smoke}
-    <svg width="${size}" height="${size}" viewBox="0 0 32 24" style="filter:drop-shadow(0 0 5px ${color}99)">
-      <rect x="9" y="2.5" width="10" height="7" rx="1.4" fill="#ffe566" stroke="#0d1a6e" stroke-width="0.5"/>
-      <rect x="11.3" y="4.5" width="5.4" height="3.6" fill="#0d1a6e"/>
-      <rect x="1.5" y="9" width="27" height="9.4" rx="2.6" fill="${color}" stroke="#fff" stroke-width="0.8"/>
-      <rect x="26.3" y="6.2" width="3.6" height="6" rx="1" fill="${color}" stroke="#fff" stroke-width="0.6"/>
-      <rect x="3" y="11.2" width="4.4" height="3.2" rx="0.4" fill="#ffe566"/>
-      <circle cx="8" cy="19.8" r="2.7" fill="#0d1a6e" stroke="#ffd700" stroke-width="0.6"/>
-      <circle cx="16" cy="19.8" r="2.7" fill="#0d1a6e" stroke="#ffd700" stroke-width="0.6"/>
-      <circle cx="23" cy="19.8" r="2.7" fill="#0d1a6e" stroke="#ffd700" stroke-width="0.6"/>
+    <svg width="${size}" height="${size}" viewBox="0 0 32 24" style="filter:drop-shadow(0 2px 3px rgba(0,0,0,.5)) drop-shadow(0 0 5px ${color}99)">
+      <defs>
+        <linearGradient id="${uid}body" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="${light}"/>
+          <stop offset="0.5" stop-color="${color}"/>
+          <stop offset="1" stop-color="${dark}"/>
+        </linearGradient>
+        <linearGradient id="${uid}cab" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#fff9e0"/>
+          <stop offset="1" stop-color="#ffdd6a"/>
+        </linearGradient>
+        <radialGradient id="${uid}wheel" cx="0.35" cy="0.35" r="0.75">
+          <stop offset="0" stop-color="#3a4670"/>
+          <stop offset="1" stop-color="#0d1a6e"/>
+        </radialGradient>
+      </defs>
+      <ellipse cx="15.5" cy="21.3" rx="14" ry="1.6" fill="#000" opacity=".25"/>
+      <rect x="26.3" y="6.4" width="3.6" height="5.8" rx="1" fill="url(#${uid}body)" stroke="#fff" stroke-width="0.6"/>
+      <rect x="9" y="2.4" width="10.3" height="7.1" rx="1.5" fill="url(#${uid}cab)" stroke="#0d1a6e" stroke-width="0.55"/>
+      <rect x="11.1" y="4.3" width="5.9" height="3.7" rx="0.4" fill="#bfe3ff" stroke="#0d1a6e" stroke-width="0.4"/>
+      <rect x="11.1" y="4.3" width="5.9" height="1.6" fill="#ffffff" opacity=".55"/>
+      <path d="M1.6 9.1 h27.1 a2.7 2.7 0 0 1 2.7 2.7 v4.9 a2.7 2.7 0 0 1 -2.7 2.7 h-27.1 a2.4 2.4 0 0 1 -2.4 -2.4 v-5.5 a2.4 2.4 0 0 1 2.4 -2.4 Z" fill="url(#${uid}body)" stroke="#fff" stroke-width="0.7"/>
+      <rect x="1.6" y="9.1" width="29.4" height="2" fill="#fff" opacity=".22"/>
+      <rect x="3" y="12" width="17.4" height="1.5" rx="0.6" fill="#fff" opacity=".85"/>
+      <circle cx="4.1" cy="12.3" r="1.55" fill="#fff6d8" stroke="#c98f00" stroke-width="0.4"/>
+      <circle cx="4.1" cy="12.3" r="0.7" fill="#ffdf6b"/>
+      <rect x="0.3" y="16.4" width="4.6" height="2.2" rx="0.5" fill="${dark}" stroke="#fff" stroke-width="0.4"/>
+      <circle cx="8" cy="19.6" r="2.9" fill="url(#${uid}wheel)" stroke="#ffd700" stroke-width="0.55"/>
+      <circle cx="8" cy="19.6" r="1" fill="#ffd700"/>
+      <circle cx="16" cy="19.6" r="2.9" fill="url(#${uid}wheel)" stroke="#ffd700" stroke-width="0.55"/>
+      <circle cx="16" cy="19.6" r="1" fill="#ffd700"/>
+      <circle cx="23.2" cy="19.6" r="2.9" fill="url(#${uid}wheel)" stroke="#ffd700" stroke-width="0.55"/>
+      <circle cx="23.2" cy="19.6" r="1" fill="#ffd700"/>
+      <line x1="8" y1="19.6" x2="16" y2="19.6" stroke="#ffd700" stroke-width="0.6" opacity=".8"/>
+      <line x1="16" y1="19.6" x2="23.2" y2="19.6" stroke="#ffd700" stroke-width="0.6" opacity=".8"/>
     </svg>
   </div>`;
 }
@@ -2527,6 +2626,7 @@ function buildStationMarkersLayer(){
       iconSize:[22,22], iconAnchor:[11,20]
     });
     const marker = L.marker([coord[0],coord[1]],{icon}).bindPopup(`<b>${escAttr(name)}</b><br>${count} قطار يتوقف هنا`);
+    marker.bindTooltip(escAttr(name), {permanent:true, direction:'top', offset:[0,-18], className:'station-name-label'});
     marker.on('click', ()=> selectStation(name));
     layer.addLayer(marker);
   });
