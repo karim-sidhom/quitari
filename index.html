@@ -2295,7 +2295,14 @@ function trainLiveStatusText(trainName){
 // ---------- map init ----------
 let streetLayer=null, satelliteLayer=null, satelliteMode=false;
 function initMap(){
-  map = L.map('map',{zoomControl:false}).setView([36.8,10.18],7);
+  var tunisiaBounds = L.latLngBounds([[29.8,7.0],[37.7,12.2]]);
+  map = L.map('map',{
+    zoomControl:false,
+    maxBounds:tunisiaBounds,
+    maxBoundsViscosity:1.0,
+    minZoom:6
+  }).setView([36.8,10.18],7);
+  map.setMaxBounds(tunisiaBounds);
   streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18});
   satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19, attribution:'Esri'});
   streetLayer.addTo(map);
