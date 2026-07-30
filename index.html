@@ -5805,9 +5805,9 @@ function recalcAndDisplay(){
   lastRisk = result.risk;
   // كل وحدة تُنبِّه بمفردها: يكفي أن تتجاوز وحدة واحدة فقط من الأربع نسبة 80% لتنطلق صفارة الخطر — أفضل تنبيه خاطئ من قطار يدهسك
   // إلا إذا أوقف المستخدم تنبيه الاقتراب مؤقتاً بنفسه (بعد تأكيد صريح للمخاطرة) — عندها لا تنطلق الصفارة إطلاقاً حتى تنتهي المدة المختارة تلقائياً
-  const dangerousModules = (result.modules||[]).filter(m=>m.risk>=80);
+  const dangerousModules = (result.modules||[]).filter(m=>m.dist<=150);
   // بطلب صريح من المستخدم: الأقرب "نظرياً" (الجدول+التأخير) يُشغِّل الإنذار أيضاً بمفرده حتى بلا أي تأكيد SNCFT Live — لا يُخفى بعد الآن خلف اشتراط التأكيد
-  if(result.theoBest && result.theoBest.risk>=80){
+  if(result.theoBest && result.theoBest.dist<=150){
     dangerousModules.push(result.theoBest);
   }
   // حتى مع إيقاف تنبيه الاقتراب مؤقتاً، اهتزاز طويل ثلاثي إجباري لا يمكن تعطيله — حداً أدنى من الحماية للمستخدم ولمن حوله
@@ -5997,7 +5997,7 @@ function alarmGraceElapsed(){
 function checkLiveOnlyAlarm(result){
   const liveOnlyModules = [];
   const modDirect = result.modules && result.modules[2]; // 3️⃣ SNCFT Live مباشر
-  if(modDirect && modDirect.risk>=80) liveOnlyModules.push({...modDirect, customLabel:'📡 SNCFT Live مباشر'});
+  if(modDirect && modDirect.dist<=150) liveOnlyModules.push({...modDirect, customLabel:'📡 SNCFT Live مباشر'});
   // ملاحظة: حالة القطار "غير المبرمَج" (غير الموجود إطلاقاً في الجدول النظري) لها الآن إنذارها المستقل الخاص بها
   // (انظر وحدة nonProg_ أسفل الملف) بنفس منطق بقية الوحدات المستقلة — شرط مزدوج مسافة+زمن، فلا داعي لتكرارها هنا
   if(liveOnlyModules.length>0 && !liveAlarmActive){
@@ -9826,22 +9826,13 @@ function checkPeacockHour(){
     return minutesImpact;
   }
 
-  // نفس مبدأ computeRiskModuleLiveAny تماماً (موقع مسقَط على السكة عبر liveOnlyTrainPosition)، لكن مقصور فقط
-  // على القطارات التي لا مقابل رقمي لها إطلاقاً في الجدول النظري (trains[]) — أي "غير مبرمَجة" فعلاً
+  // بطلب صريح من المستخدم: لا إعادة تنفيذ منفصلة للمسافة بعد الآن — نستدعي مباشرة نفس دالة الإنذار الرئيسي
+  // (computeRiskModuleLiveAny، الوحدة 4) لضمان مسافة مطابقة تماماً لما يعتمده الإنذار الرئيسي، بمصدر واحد فقط.
+  // نُبقي النتيجة فقط إن كان الأقرب "غير مبرمَج" فعلاً (r.unscheduled)، وإلا فلا صلة بهذا الإنذار المستقل هنا.
   function nonProg_nearestModule(userPos){
-    let best = {dist:Infinity, lineName:'--', trainId:null};
-    if(!isLiveDataFresh()) return best;
-    liveTrains.forEach(lt=>{
-      if(!lt || !lt.num) return;
-      if(trains.some(t=>trainNumberMatches(t.name, lt.num))) return; // له مقابل نظري: ليس "غير مبرمَج"
-      const pos = liveOnlyTrainPosition(lt);
-      if(!pos) return;
-      const dist = haversine(userPos, [pos.lat, pos.lon]);
-      if(dist < best.dist){
-        best = {dist, lineName: 'قطار '+lt.num+' (غير موجود في الجدول النظري) ('+pos.fromStation+' → '+pos.toStation+')', trainId: 'LIVE-'+lt.num};
-      }
-    });
-    return best;
+    const r = computeRiskModuleLiveAny(userPos);
+    if(!r || !r.unscheduled || !isFinite(r.dist)) return {dist:Infinity, lineName:'--', trainId:null};
+    return {dist:r.dist, lineName:r.lineName, trainId:r.trainId};
   }
 
   function nonProg_creerUI(){
