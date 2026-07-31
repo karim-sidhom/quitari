@@ -10171,5 +10171,511 @@ document.getElementById('toggleStationsBtn').click(); // نعرض كل المح�
     <div id="nearestServicesContent"><div class="place-status">⏳ جاري التحميل...</div></div>
   </div>
 </div>
+
+<!-- ======================= جني فرحوم - قاطع القرن التاسع عشر (بداية) ======================= -->
+<style>
+#farhoumBtn{
+  position:fixed; left:18px; bottom:18px; z-index:9990;
+  width:58px; height:58px; border-radius:50%;
+  background:radial-gradient(circle at 35% 30%, #2a3fb8, #0d1a6e 70%);
+  border:2px solid var(--gold, #ffd700); box-shadow:0 0 14px rgba(255,215,0,.5);
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer; font-size:26px; animation:farhoumBtnGlow 2.4s ease-in-out infinite;
+}
+@keyframes farhoumBtnGlow{
+  0%,100%{ box-shadow:0 0 10px rgba(255,215,0,.4); }
+  50%{ box-shadow:0 0 22px rgba(255,215,0,.8); }
+}
+#farhoumOverlay{
+  position:fixed; inset:0; z-index:9991; display:none;
+  background:radial-gradient(ellipse at center, rgba(13,26,110,.75), rgba(2,11,46,.95));
+  backdrop-filter:blur(3px);
+  align-items:center; justify-content:center; flex-direction:column; padding:16px;
+}
+#farhoumOverlay.show{ display:flex; }
+.farhoum-stage{ width:min(340px,88vw); text-align:center; }
+.farhoum-svg-wrap{ width:100%; max-width:300px; margin:0 auto; opacity:0; transform:translateY(30px) scale(.9);
+  animation:farhoumRise 1.1s cubic-bezier(.2,.9,.3,1.2) forwards; }
+@keyframes farhoumRise{ to{ opacity:1; transform:translateY(0) scale(1); } }
+.farhoum-float{ animation:farhoumBob 3.6s ease-in-out infinite; transform-origin:50% 70%; }
+@keyframes farhoumBob{ 0%,100%{ transform:translateY(0) rotate(0deg);} 50%{ transform:translateY(-8px) rotate(1deg);} }
+.farhoum-smoke{ animation:farhoumSway 5s ease-in-out infinite; transform-origin:50% 100%; }
+@keyframes farhoumSway{ 0%,100%{ transform:skewX(0deg);} 50%{ transform:skewX(2.5deg);} }
+.farhoum-mustache{ transform-origin:50% 50%; animation:farhoumTwirl 4.5s ease-in-out infinite; }
+@keyframes farhoumTwirl{ 0%,100%{ transform:rotate(0deg);} 50%{ transform:rotate(1.5deg);} }
+.farhoum-sparkle{ animation:farhoumSparkle 1.8s ease-in-out infinite; }
+.farhoum-sparkle:nth-child(2){ animation-delay:.4s; }
+.farhoum-sparkle:nth-child(3){ animation-delay:.9s; }
+@keyframes farhoumSparkle{ 0%,100%{ opacity:0; transform:scale(.4);} 50%{ opacity:1; transform:scale(1);} }
+.farhoum-name{ font-family:'Amiri',serif; color:var(--gold3,#ffe566); font-size:19px; margin-top:6px; letter-spacing:.5px; }
+.farhoum-title{ color:var(--gold3,#ffe566); opacity:.75; font-size:12px; margin-bottom:10px; }
+.farhoum-bubble{
+  background:linear-gradient(160deg, rgba(13,26,110,.97), rgba(2,11,46,.97));
+  border:1px solid var(--gold,#ffd700); border-radius:14px; padding:10px 14px;
+  color:#fff; font-size:14px; line-height:1.7; min-height:24px; margin:10px 0;
+  max-height:150px; overflow-y:auto;
+}
+.farhoum-form{ display:flex; gap:6px; margin-top:6px; }
+#farhoumQuestion{
+  flex:1; padding:9px 10px; border-radius:9px; border:1px solid var(--gold,#ffd700);
+  background:#12131c; color:#fff; font-size:14px; direction:rtl;
+}
+.farhoum-form button{
+  padding:9px 14px; border-radius:9px; border:none; font-weight:700; cursor:pointer;
+  background:linear-gradient(135deg,var(--gold,#ffd700),var(--gold2,#ffcc00)); color:var(--navy-deep,#020b2e);
+}
+#farhoumMicBtn{
+  background:#0d1a6e; color:var(--gold,#ffd700); border:1px solid var(--gold,#ffd700) !important;
+  padding:9px 12px !important; font-size:16px;
+}
+#farhoumMicBtn.listening{ animation:farhoumMicPulse 1s ease-in-out infinite; }
+@keyframes farhoumMicPulse{ 0%,100%{ box-shadow:0 0 4px rgba(255,215,0,.4);} 50%{ box-shadow:0 0 16px rgba(255,215,0,.9);} }
+.farhoum-close{
+  position:absolute; top:14px; left:14px; background:#0d1a6e; color:var(--gold,#ffd700);
+  border:1px solid var(--gold,#ffd700); border-radius:50%; width:32px; height:32px; cursor:pointer; font-size:15px;
+}
+
+/* ---- وضع الخطر: فرحوم يحمرّ ويكبر ويغطي الشاشة عند أي إنذار في التطبيق ---- */
+#farhoumDangerOverlay{
+  position:fixed; inset:0; z-index:999999; display:none;
+  align-items:center; justify-content:center; flex-direction:column; text-align:center; padding:20px;
+  background:radial-gradient(ellipse at center, rgba(140,0,0,.75), rgba(40,0,0,.96));
+}
+#farhoumDangerOverlay.show{ display:flex; animation:farhoumDangerFlash 1s ease-in-out infinite; }
+@keyframes farhoumDangerFlash{
+  0%,100%{ background:radial-gradient(ellipse at center, rgba(140,0,0,.7), rgba(40,0,0,.95)); }
+  50%{ background:radial-gradient(ellipse at center, rgba(255,20,20,.85), rgba(60,0,0,.97)); }
+}
+.farhoum-danger-genie{
+  width:min(420px,70vw); transform:scale(.2); opacity:0;
+  animation:farhoumDangerGrow .9s cubic-bezier(.2,.8,.2,1.3) forwards;
+  filter:saturate(4.5) hue-rotate(150deg) brightness(.8) drop-shadow(0 0 45px #ff2020);
+}
+@keyframes farhoumDangerGrow{ to{ transform:scale(1); opacity:1; } }
+.farhoum-danger-genie svg{ animation:farhoumDangerShake 1s ease-in-out infinite; }
+@keyframes farhoumDangerShake{
+  0%,100%{ transform:translateY(0) rotate(0deg); }
+  25%{ transform:translateY(-4px) rotate(-1.2deg); }
+  75%{ transform:translateY(-4px) rotate(1.2deg); }
+}
+.farhoum-danger-text{
+  color:#fff; font-family:'Amiri',serif; font-size:clamp(24px,5vw,42px); font-weight:700;
+  text-shadow:0 0 18px #ff0000, 0 0 6px #000; margin-top:6px; animation:farhoumDangerPulseText .8s ease-in-out infinite;
+}
+@keyframes farhoumDangerPulseText{ 0%,100%{ transform:scale(1);} 50%{ transform:scale(1.05);} }
+.farhoum-danger-sub{ color:#ffd7d7; font-size:clamp(13px,2.2vw,17px); margin-top:8px; max-width:520px; }
+#farhoumDangerDismiss{
+  margin-top:18px; padding:9px 20px; border-radius:9px; border:2px solid #fff; background:transparent;
+  color:#fff; font-weight:700; cursor:pointer; font-size:14px;
+}
+</style>
+
+<button id="farhoumBtn" title="نادِ جني فرحوم">🧞</button>
+
+<div id="farhoumDangerOverlay">
+  <div class="farhoum-danger-genie" id="farhoumDangerGenieHolder"></div>
+  <div class="farhoum-danger-text">غادر السكة! ابتعد فوراً!</div>
+  <div class="farhoum-danger-sub" id="farhoumDangerSub">قطارٌ يقترب، ابتعد عن الخط الحديدي الآن يا صاحب السعادة.</div>
+  <button id="farhoumDangerDismiss" onclick="dismissFarhoumDanger()">فهمت، ابتعدت</button>
+</div>
+
+<div id="farhoumOverlay">
+  <button class="farhoum-close" onclick="closeFarhoumGenie()">✕</button>
+  <div class="farhoum-stage">
+    <div class="farhoum-svg-wrap">
+      <div class="farhoum-float">
+        <svg viewBox="0 0 300 420" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="frhSmoke" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#6f8cff" stop-opacity=".85"/>
+              <stop offset="100%" stop-color="#0d1a6e" stop-opacity=".95"/>
+            </linearGradient>
+            <linearGradient id="frhCoat" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#16257a"/>
+              <stop offset="100%" stop-color="#0a1550"/>
+            </linearGradient>
+            <radialGradient id="frhSkin" cx="40%" cy="35%" r="70%">
+              <stop offset="0%" stop-color="#f2c99a"/>
+              <stop offset="100%" stop-color="#d9a76d"/>
+            </radialGradient>
+          </defs>
+
+          <!-- قاطرة صغيرة -->
+          <g>
+            <rect x="70" y="352" width="160" height="46" rx="10" fill="#0a1550" stroke="#ffd700" stroke-width="2"/>
+            <circle cx="100" cy="398" r="14" fill="#020b2e" stroke="#ffd700" stroke-width="2"/>
+            <circle cx="200" cy="398" r="14" fill="#020b2e" stroke="#ffd700" stroke-width="2"/>
+            <circle cx="150" cy="368" r="9" fill="#ffe566"/>
+            <rect x="70" y="340" width="35" height="16" rx="4" fill="#ffd700" opacity=".85"/>
+          </g>
+
+          <!-- دخان سحري يتحول إلى جسد الجني -->
+          <g class="farhoum-smoke">
+            <path d="M150,352 C110,320 190,300 140,270 C100,244 200,222 150,190
+                     C170,190 190,200 190,225 C190,250 165,255 175,280
+                     C185,305 205,320 175,352 Z" fill="url(#frhSmoke)"/>
+          </g>
+
+          <!-- جسم الجني: معطف القاطع الأنيق -->
+          <g>
+            <path d="M112,205 C112,150 188,150 188,205 L196,240 L104,240 Z" fill="url(#frhCoat)" stroke="#ffd700" stroke-width="1.5"/>
+            <!-- أزرار نحاسية -->
+            <circle cx="150" cy="180" r="3.4" fill="#ffd700"/>
+            <circle cx="150" cy="196" r="3.4" fill="#ffd700"/>
+            <circle cx="150" cy="212" r="3.4" fill="#ffd700"/>
+            <circle cx="150" cy="228" r="3.4" fill="#ffd700"/>
+            <!-- ياقة بيضاء وربطة عنق فراشية -->
+            <path d="M136,160 L150,178 L164,160" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round"/>
+            <path d="M150,178 L138,171 L138,185 Z" fill="#8a1224"/>
+            <path d="M150,178 L162,171 L162,185 Z" fill="#8a1224"/>
+            <circle cx="150" cy="178" r="3" fill="#ffd700"/>
+
+            <!-- أكمام وأيدٍ بقفازات جلدية -->
+            <path d="M112,205 C95,215 85,235 92,252 C96,262 112,262 116,250" fill="url(#frhCoat)" stroke="#ffd700" stroke-width="1.2"/>
+            <ellipse cx="98" cy="256" rx="13" ry="10" fill="#3a2618" stroke="#ffd700" stroke-width="1"/>
+            <path d="M188,205 C205,215 215,235 208,252 C204,262 188,262 184,250" fill="url(#frhCoat)" stroke="#ffd700" stroke-width="1.2"/>
+            <ellipse cx="202" cy="256" rx="13" ry="10" fill="#3a2618" stroke="#ffd700" stroke-width="1"/>
+
+            <!-- ساعة جيب وسلسلة ذهبية -->
+            <path d="M150,214 C160,222 168,232 168,242" fill="none" stroke="#ffd700" stroke-width="2"/>
+            <circle cx="170" cy="246" r="8" fill="#ffe566" stroke="#8a6b00" stroke-width="2"/>
+          </g>
+
+          <!-- الرأس -->
+          <g>
+            <ellipse cx="150" cy="122" rx="34" ry="38" fill="url(#frhSkin)"/>
+            <!-- حواجب أنيقة -->
+            <path d="M126,108 C132,102 142,102 147,107" fill="none" stroke="#2a1a10" stroke-width="3" stroke-linecap="round"/>
+            <path d="M153,107 C158,102 168,102 174,108" fill="none" stroke="#2a1a10" stroke-width="3" stroke-linecap="round"/>
+            <!-- عيون -->
+            <circle cx="136" cy="118" r="3.6" fill="#1c1108"/>
+            <circle cx="164" cy="118" r="3.6" fill="#1c1108"/>
+            <!-- أنف وابتسامة -->
+            <path d="M150,116 C152,124 152,130 148,133" fill="none" stroke="#8a5a30" stroke-width="2" stroke-linecap="round"/>
+            <path d="M138,140 C144,146 156,146 162,140" fill="none" stroke="#5a2a10" stroke-width="2.4" stroke-linecap="round"/>
+
+            <!-- شارب ملتف أنيق -->
+            <g class="farhoum-mustache">
+              <path d="M150,136 C142,132 130,132 122,138 C116,142 118,150 126,148 C133,146 137,140 145,138"
+                    fill="none" stroke="#1c1108" stroke-width="4.2" stroke-linecap="round"/>
+              <path d="M150,136 C158,132 170,132 178,138 C184,142 182,150 174,148 C167,146 163,140 155,138"
+                    fill="none" stroke="#1c1108" stroke-width="4.2" stroke-linecap="round"/>
+            </g>
+
+            <!-- قبعة القاطع الأنيقة -->
+            <path d="M114,100 C114,74 186,74 186,100 L190,104 L110,104 Z" fill="#0a1550" stroke="#ffd700" stroke-width="1.6"/>
+            <rect x="106" y="100" width="88" height="10" rx="4" fill="#ffd700"/>
+            <circle cx="150" cy="105" r="6.5" fill="#ffe566" stroke="#8a6b00" stroke-width="1.4"/>
+          </g>
+
+          <!-- ومضات سحرية -->
+          <g fill="#ffe566">
+            <circle class="farhoum-sparkle" cx="90" cy="150" r="3"/>
+            <circle class="farhoum-sparkle" cx="215" cy="170" r="2.4"/>
+            <circle class="farhoum-sparkle" cx="205" cy="120" r="2"/>
+          </g>
+        </svg>
+      </div>
+    </div>
+
+    <div class="farhoum-name">جني فرحوم</div>
+    <div class="farhoum-title">قاطع القطارات — عهد الأصالة</div>
+
+    <div class="farhoum-bubble" id="farhoumBubble">اسألني عن موعد قطارك يا صاحب السعادة، وسأجيبك من سجلات المحطة القديمة.</div>
+
+    <div class="farhoum-form">
+      <button id="farhoumMicBtn" onclick="startFarhoumListening()" title="تكلّم مع الجني">🎙️</button>
+      <input type="text" id="farhoumQuestion" placeholder="مثال: من نابل إلى تونس">
+      <button onclick="askFarhoumGenie()">اسأل</button>
+    </div>
+    <div class="farhoum-hint" id="farhoumMicHint" style="display:none;color:var(--gold3,#ffe566);font-size:12px;margin-top:4px;">🎙️ أنصت إليك يا صاحب السعادة...</div>
+  </div>
+</div>
+
+<script>
+(function(){
+  function openFarhoumGenie(){
+    var ov = document.getElementById('farhoumOverlay');
+    if(!ov) return;
+    ov.classList.add('show');
+    setTimeout(function(){
+      var inp = document.getElementById('farhoumQuestion');
+      if(inp) inp.focus();
+    }, 300);
+  }
+  function closeFarhoumGenie(){
+    var ov = document.getElementById('farhoumOverlay');
+    if(ov) ov.classList.remove('show');
+    try{ if('speechSynthesis' in window) window.speechSynthesis.cancel(); }catch(e){}
+  }
+  window.closeFarhoumGenie = closeFarhoumGenie;
+
+  var btn = document.getElementById('farhoumBtn');
+  if(btn) btn.addEventListener('click', openFarhoumGenie);
+
+  var ovEl = document.getElementById('farhoumOverlay');
+  if(ovEl) ovEl.addEventListener('click', function(e){ if(e.target === ovEl) closeFarhoumGenie(); });
+
+  function frhSpeak(text){
+    try{
+      if(!('speechSynthesis' in window)) return;
+      window.speechSynthesis.cancel();
+      var u = new SpeechSynthesisUtterance(text);
+      u.lang = 'ar-SA'; u.rate = 0.92; u.pitch = 0.85;
+      window.speechSynthesis.speak(u);
+    }catch(e){}
+  }
+
+  function frhNormalize(s){
+    return (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[إأآا]/g,'ا').trim();
+  }
+
+  // يحاول استخراج محطتي الانطلاق والوصول من سؤال حر مثل: "من نابل إلى تونس"
+  function frhParseStations(q){
+    var m = q.match(/من\s+(.+?)\s+(?:الى|إلى)\s+(.+)/i);
+    if(m) return { from: m[1].trim(), to: m[2].trim() };
+    return null;
+  }
+
+  function frhFindStops(train){
+    try{
+      if(typeof parseStops === 'function'){
+        return parseStops(train.stopsText).filter(function(s){ return !s.unknown; });
+      }
+    }catch(e){}
+    return [];
+  }
+
+  // يبحث عن تأخير حقيقي مسجّل الآن عبر SNCFT Live لهذا القطار بالذات (برقمه)
+  function frhLiveDelayForTrain(trainName){
+    try{
+      if(typeof isLiveDataFresh !== 'function' || !isLiveDataFresh()) return undefined; // بلا بيانات مباشرة متاحة الآن
+      if(typeof liveTrains === 'undefined' || !Array.isArray(liveTrains)) return undefined;
+      if(typeof trainNumberMatches !== 'function') return undefined;
+      var best = null;
+      liveTrains.forEach(function(lt){
+        if(!trainNumberMatches(trainName, lt.num)) return;
+        var d = Number(lt.delay) || 0;
+        if(!best || d > best.delay) best = { delay: d, curFr: lt.curFr, nextFr: lt.nextFr };
+      });
+      return best; // null = مؤكَّد لكن بلا تأخير، undefined = لا معلومة عنه إطلاقاً
+    }catch(e){ return undefined; }
+  }
+
+  // يتحقق هل انطلاق هذا القطار مؤكَّد فعلياً الآن عبر SNCFT Live، أو لم يُؤكَّد بعد، أو لا توجد بيانات مباشرة إطلاقاً
+  function frhIsConfirmed(train){
+    try{
+      if(typeof isLiveDataFresh !== 'function' || !isLiveDataFresh()) return undefined; // لا بيانات SNCFT Live متاحة الآن إطلاقاً
+      if(typeof isTrainLiveConfirmed === 'function'){
+        return isTrainLiveConfirmed(train) === true; // true = مؤكَّد الآن، false = غير مؤكَّد بعد
+      }
+      return undefined;
+    }catch(e){ return undefined; }
+  }
+
+  function frhSearchTrains(fromName, toName){
+    var results = [];
+    if(typeof trains === 'undefined' || !Array.isArray(trains)) return results;
+    var fNorm = frhNormalize(fromName), tNorm = frhNormalize(toName);
+    trains.forEach(function(train){
+      var stops = frhFindStops(train);
+      if(!stops.length) return;
+      var iFrom = -1, iTo = -1;
+      stops.forEach(function(s, idx){
+        var n = frhNormalize(s.name);
+        if(n.indexOf(fNorm) !== -1 && iFrom === -1) iFrom = idx;
+        if(n.indexOf(tNorm) !== -1) iTo = idx;
+      });
+      if(iFrom !== -1 && iTo !== -1 && iTo > iFrom){
+        results.push({
+          name: train.name || 'قطار',
+          depart: stops[iFrom].time || '--',
+          arrive: stops[iTo].time || '--',
+          live: frhLiveDelayForTrain(train.name),
+          confirmed: frhIsConfirmed(train)
+        });
+      }
+    });
+    return results;
+  }
+
+  function askFarhoumGenie(){
+    var inp = document.getElementById('farhoumQuestion');
+    var bubble = document.getElementById('farhoumBubble');
+    if(!inp || !bubble) return;
+    var q = inp.value.trim();
+    if(!q){
+      var msg0 = 'اسألني من فضلك، مثلاً: من نابل إلى تونس';
+      bubble.textContent = msg0; frhSpeak(msg0);
+      return;
+    }
+    var parsed = frhParseStations(q);
+    if(!parsed){
+      var msg1 = 'اكتب سؤالك هكذا: من (المحطة الأولى) إلى (المحطة الثانية)، وسأبحث لك في السجلات.';
+      bubble.textContent = msg1; frhSpeak(msg1);
+      return;
+    }
+    var found = frhSearchTrains(parsed.from, parsed.to);
+    var answer;
+    if(found.length){
+      answer = 'وجدت ' + found.length + ' قطار' + (found.length>1?'ات':'') + ' من ' + parsed.from + ' إلى ' + parsed.to + '. ';
+      found.slice(0,3).forEach(function(f){
+        answer += f.name + ': الانطلاق ' + f.depart + '، الوصول ' + f.arrive + '. ';
+        if(f.confirmed === undefined){
+          answer += '(لا تتوفر بيانات SNCFT Live الآن لتأكيد الانطلاق) ';
+        } else if(f.confirmed === true){
+          answer += '(الانطلاق مؤكَّد الآن فعلياً عبر SNCFT Live) ';
+        } else {
+          answer += '(لم يُؤكَّد انطلاقه بعد عبر SNCFT Live) ';
+        }
+        if(f.live === undefined){
+          answer += '(لا تتوفر معلومة تأخير مباشرة عنه الآن) ';
+        } else if(f.live === null){
+          answer += '(لا تأخير مسجّل، في موعده) ';
+        } else if(f.live.delay > 0){
+          answer += '(تنبيه: متأخر حالياً ' + f.live.delay + ' دقيقة';
+          if(f.live.curFr) answer += '، آخر موقع مؤكَّد له: ' + f.live.curFr;
+          answer += ') ';
+        }
+      });
+    } else {
+      answer = 'لم أجد في سجلاتي حتى الآن قطاراً مباشراً من ' + parsed.from + ' إلى ' + parsed.to + '. تأكد من كتابة اسم المحطة كما هو مسجل في قِطاري.';
+    }
+    bubble.textContent = answer;
+    frhSpeak(answer);
+  }
+  window.askFarhoumGenie = askFarhoumGenie;
+
+  var qInput = document.getElementById('farhoumQuestion');
+  if(qInput) qInput.addEventListener('keydown', function(e){ if(e.key === 'Enter') askFarhoumGenie(); });
+
+  // الاستماع الصوتي: الجني ينصت ثم يجيب مباشرة
+  var frhRecognition = null;
+  function startFarhoumListening(){
+    var bubble = document.getElementById('farhoumBubble');
+    var micBtn = document.getElementById('farhoumMicBtn');
+    var hint = document.getElementById('farhoumMicHint');
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if(!SR){
+      var msgNo = 'عذراً يا صاحب السعادة، هذا المتصفح لا يتيح لي الإصغاء إليك، اكتب سؤالك من فضلك.';
+      if(bubble) bubble.textContent = msgNo;
+      frhSpeak(msgNo);
+      return;
+    }
+    try{ if('speechSynthesis' in window) window.speechSynthesis.cancel(); }catch(e){}
+    if(frhRecognition){ try{ frhRecognition.stop(); }catch(e){} }
+    frhRecognition = new SR();
+    frhRecognition.lang = 'ar-SA';
+    frhRecognition.interimResults = false;
+    frhRecognition.maxAlternatives = 1;
+
+    if(micBtn) micBtn.classList.add('listening');
+    if(hint) hint.style.display = 'block';
+    if(bubble) bubble.textContent = 'أنا مصغٍ إليك يا صاحب السعادة...';
+
+    frhRecognition.onresult = function(event){
+      var said = event.results[0][0].transcript;
+      var inp = document.getElementById('farhoumQuestion');
+      if(inp) inp.value = said;
+      askFarhoumGenie();
+    };
+    frhRecognition.onerror = function(){
+      if(bubble) bubble.textContent = 'لم أسمعك جيداً، أعد المحاولة من فضلك أو اكتب سؤالك.';
+      if(micBtn) micBtn.classList.remove('listening');
+      if(hint) hint.style.display = 'none';
+    };
+    frhRecognition.onend = function(){
+      if(micBtn) micBtn.classList.remove('listening');
+      if(hint) hint.style.display = 'none';
+    };
+    try{ frhRecognition.start(); }catch(e){}
+  }
+  window.startFarhoumListening = startFarhoumListening;
+
+  // ================= وضع الخطر: فرحوم يحمرّ ويكبر ويغطي الشاشة عند أي إنذار كيفما كان نوعه =================
+  var frhDangerPrevActive = false;
+  var frhDangerDismissed = false;
+  var frhDangerRepeatTimer = null;
+  var frhDangerGenieCloned = false;
+
+  function frhCloneGenieIntoDanger(){
+    if(frhDangerGenieCloned) return;
+    var src = document.querySelector('.farhoum-svg-wrap .farhoum-float');
+    var holder = document.getElementById('farhoumDangerGenieHolder');
+    if(src && holder){
+      var clone = src.cloneNode(true);
+      clone.removeAttribute('class'); // نزيل حركة الطفو العادية لأن حركة الاهتزاز الحمراء تتكفّل بالحركة هنا
+      holder.appendChild(clone);
+      frhDangerGenieCloned = true;
+    }
+  }
+
+  // يتحقق من كل وحدات الإنذار الموجودة في قِطاري (الرئيسي، المباشر، الأزرق، الأخط الأخضر، الفاحصة، وحدات 150م الأربع الإضافية)
+  function frhAnyAppAlarmActive(){
+    try{
+      return !!(
+        (typeof alertActive !== 'undefined' && alertActive) ||
+        (typeof liveAlarmActive !== 'undefined' && liveAlarmActive) ||
+        (typeof kzAlarmActive !== 'undefined' && kzAlarmActive) ||
+        (typeof kzLAlarmActive !== 'undefined' && kzLAlarmActive) ||
+        (typeof fauchAlarme_active !== 'undefined' && fauchAlarme_active) ||
+        (typeof corr_active !== 'undefined' && corr_active) ||
+        (typeof theoNC_active !== 'undefined' && theoNC_active) ||
+        (typeof theoAny_active !== 'undefined' && theoAny_active) ||
+        (typeof nonProg_active !== 'undefined' && nonProg_active) ||
+        (typeof abs150_active !== 'undefined' && abs150_active)
+      );
+    }catch(e){ return false; }
+  }
+
+  function frhSpeakDanger(){
+    try{
+      if(!('speechSynthesis' in window)) return;
+      window.speechSynthesis.cancel();
+      var u = new SpeechSynthesisUtterance('يا صاحب السعادة، غادر السكة الحديدية فوراً، ابتعد عنها، الخطر داهم!');
+      u.lang = 'ar-SA'; u.rate = 0.8; u.pitch = 0.55;
+      window.speechSynthesis.speak(u);
+    }catch(e){}
+  }
+
+  function showFarhoumDanger(){
+    frhCloneGenieIntoDanger();
+    var ov = document.getElementById('farhoumDangerOverlay');
+    if(ov) ov.classList.add('show');
+    frhSpeakDanger();
+    if(frhDangerRepeatTimer) clearInterval(frhDangerRepeatTimer);
+    frhDangerRepeatTimer = setInterval(function(){
+      if(frhAnyAppAlarmActive() && !frhDangerDismissed) frhSpeakDanger();
+    }, 9000);
+  }
+
+  function hideFarhoumDanger(){
+    var ov = document.getElementById('farhoumDangerOverlay');
+    if(ov) ov.classList.remove('show');
+    if(frhDangerRepeatTimer){ clearInterval(frhDangerRepeatTimer); frhDangerRepeatTimer = null; }
+  }
+
+  function dismissFarhoumDanger(){
+    frhDangerDismissed = true;
+    hideFarhoumDanger();
+    try{ if('speechSynthesis' in window) window.speechSynthesis.cancel(); }catch(e){}
+  }
+  window.dismissFarhoumDanger = dismissFarhoumDanger;
+
+  setInterval(function(){
+    var active = frhAnyAppAlarmActive();
+    if(active && !frhDangerPrevActive){
+      frhDangerDismissed = false; // إنذار جديد يلغي أي إغلاق يدوي سابق
+      showFarhoumDanger();
+    } else if(!active && frhDangerPrevActive){
+      hideFarhoumDanger();
+    }
+    frhDangerPrevActive = active;
+  }, 500);
+})();
+</script>
+<!-- ======================= جني فرحوم - قاطع القرن التاسع عشر (نهاية) ======================= -->
+
 </body>
 </html>
+
