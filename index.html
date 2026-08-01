@@ -1518,7 +1518,6 @@ const GHOST_VIDEO_SRC = 'data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yY
   <button class="btn" onclick="dismissLiveAlarm()">فهمت، أوقف صوت هذا الإنذار</button>
   <p id="liveAlarmGraceStatus"></p>
 </div>
-<button id="liveAlarmTestBtn" onclick="window.testLiveAlarm()" style="position:fixed;bottom:6px;left:6px;z-index:10003;font-size:10px;padding:4px 8px;background:#333;color:#8c2bff;border:1px solid #8c2bff;border-radius:6px;opacity:.55;">🧪 Test Live Alarm</button>
 
 <div id="trainReminderOverlay">
   <h1>🔔 تذكير قِطاري</h1>
@@ -8410,29 +8409,10 @@ function checkPeacockHour(){
     if(document.getElementById('radarBadgeIndependant')) return;
     const style = document.createElement('style');
     style.textContent = `
-      #radarBadgeIndependant{
-        position:fixed; left:12px; bottom:8px;
-        z-index:10005; padding:6px 14px; border-radius:20px;
-        font-size:12px; font-weight:700; letter-spacing:.5px;
-        background:rgba(20,40,20,.92); color:#7fffa0;
-        border:1px solid rgba(127,255,160,.5);
-        box-shadow:0 0 12px rgba(0,0,0,.4);
-        transition:background .3s,color .3s,border-color .3s;
-        white-space:nowrap; cursor:pointer;
-        font-family:inherit;
+      /* طلب المستخدم: الرادار يبقى يعمل بصمت في الخلفية (نفس الكشف والإنذار الصوتي عند الاصطدام) لكن دون أي شارة أو لوحة ظاهرة على الشاشة */
+      #radarBadgeIndependant, #radarPanelIndependant{
+        display:none !important;
       }
-      #radarBadgeIndependant.radarAlerte{
-        background:rgba(90,0,0,.95); color:#fff; border-color:#ff3b3b;
-        animation:radarBadgePulse .7s infinite;
-      }
-      @keyframes radarBadgePulse{0%,100%{box-shadow:0 0 12px rgba(255,0,0,.4)}50%{box-shadow:0 0 22px rgba(255,0,0,.9)}}
-      #radarPanelIndependant{
-        position:fixed; left:12px; bottom:44px;
-        z-index:10005; width:min(92vw,340px); max-height:38vh; overflow-y:auto;
-        background:rgba(10,20,10,.96); border:1px solid rgba(127,255,160,.5);
-        border-radius:12px; padding:8px 10px; display:none; font-family:inherit;
-      }
-      #radarPanelIndependant.ouvert{ display:block; }
       #radarPanelIndependant .rp-item{
         font-size:12px; color:#c8ffd8; padding:5px 4px; border-bottom:1px solid rgba(127,255,160,.15);
       }
@@ -8574,6 +8554,13 @@ function checkPeacockHour(){
     if(fauch_layer) return;
     if(typeof map==='undefined' || !map || typeof L==='undefined') return;
     fauch_layer = L.layerGroup().addTo(map);
+    // طلب المستخدم: الفاحصات تبقى تعمل بصمت (كشف + إنذار عند الاقتراب) لكن دون أي رمز ظاهر فوق الخريطة
+    if(!document.getElementById('fauchIconMasque')){
+      const s = document.createElement('style');
+      s.id = 'fauchIconMasque';
+      s.textContent = '.fauch-icon{display:none !important;}';
+      document.head.appendChild(s);
+    }
   }
   function fauch_icone(){
     return L.divIcon({
@@ -8767,28 +8754,10 @@ function checkPeacockHour(){
     if(document.getElementById('fauchBadgeIndependant')) return;
     const style = document.createElement('style');
     style.textContent = `
-      #fauchBadgeIndependant{
-        position:fixed; right:12px; bottom:8px;
-        z-index:10005; padding:6px 14px; border-radius:20px;
-        font-size:12px; font-weight:700; letter-spacing:.5px;
-        background:rgba(50,35,0,.92); color:#ffd27f;
-        border:1px solid rgba(255,180,80,.5);
-        box-shadow:0 0 12px rgba(0,0,0,.4);
-        transition:background .3s,color .3s,border-color .3s;
-        white-space:nowrap; cursor:pointer; font-family:inherit;
+      /* طلب المستخدم: تُخفى الشارة كلياً عن الشاشة، مع بقاء الكشف والإنذار يعملان بصمت */
+      #fauchBadgeIndependant, #fauchPanelIndependant{
+        display:none !important;
       }
-      #fauchBadgeIndependant.fauchAlerte{
-        background:rgba(120,50,0,.95); color:#fff; border-color:#ff8c00;
-        animation:fauchBadgePulse .8s infinite;
-      }
-      @keyframes fauchBadgePulse{0%,100%{box-shadow:0 0 12px rgba(255,140,0,.4)}50%{box-shadow:0 0 22px rgba(255,140,0,.9)}}
-      #fauchPanelIndependant{
-        position:fixed; right:12px; bottom:44px;
-        z-index:10005; width:min(92vw,340px); max-height:38vh; overflow-y:auto;
-        background:rgba(30,20,0,.96); border:1px solid rgba(255,180,80,.5);
-        border-radius:12px; padding:8px 10px; display:none; font-family:inherit;
-      }
-      #fauchPanelIndependant.ouvert{ display:block; }
       #fauchPanelIndependant .fp-item{
         font-size:12px; color:#ffe6c2; padding:5px 4px; border-bottom:1px solid rgba(255,180,80,.15);
       }
@@ -9128,230 +9097,6 @@ function checkPeacockHour(){
 // ========== FIN رُبع "قطار إشكالي في مقطعك" ==========
 
 // ================================================================
-// ========== "قطارات غير مدرجة" — قطارات SNCFT Live بلا أي مقابل في الجدول النظري ==========
-// طلب المستخدم: عرض كل قطار يظهر فعلياً في بيانات SNCFT Live دون أي مقابل في الجدول النظري
-// (trains[]) — أي قطار "وُلد من العدم" بالنسبة لنا — في لائحة مستقلة ومنفصلة، مع تفعيل إنذار
-// خاص بأي قطار منها إن بلغ فعلياً نفس التّرَنكون (المقطع بين محطتين) الذي يشغله حالياً أقرب
-// قطار مؤكَّد فعلياً عبر SNCFT Live إلى المستخدم.
-// Module 100% indépendant : préfixe nonRef_, propre badge, propre panneau, propre alarme —
-// aucun lien avec le radar, la faucheuse, l'alarme SNCFT Live existante ou l'alarme 2 cm.
-// ================================================================
-(function(){
-  'use strict';
-
-  const NONREF_CYCLE_MS = 3000;
-
-  // ---------- أقرب قطار مؤكَّد فعلياً عبر SNCFT Live إلى المستخدم، وتِرَنكونه الحالي ----------
-  function nonRef_trononDuPlusProche(userPos){
-    let meilleur = null;
-    trains.forEach(train=>{
-      if(!isTrainLiveConfirmed(train)) return;
-      const pos = trainPositionLiveDirect(train);
-      if(!pos) return;
-      const dist = haversine(userPos, [pos.lat, pos.lon]);
-      if(!meilleur || dist<meilleur.dist){
-        meilleur = {dist, trainName: train.name, fromStation:pos.fromStation, toStation:pos.toStation};
-      }
-    });
-    return meilleur;
-  }
-
-  function nonRef_memeTroncon(a, b){
-    if(!a || !b) return false;
-    return (stationNamesMatch(a.fromStation,b.fromStation) && stationNamesMatch(a.toStation,b.toStation))
-        || (stationNamesMatch(a.fromStation,b.toStation) && stationNamesMatch(a.toStation,b.fromStation));
-  }
-
-  // ---------- تقدير سرعة كل قطار غير مدرج على حدة (بمقارنة مسافته الحالية بآخر مسافة معروفة له) لحساب "وقت الوصول" التقديري عند نقطة تأثيري ----------
-  const nonRef_lastDistParTrain = new Map(); // num -> {dist, time}
-  function nonRef_estimerMinutesImpact(num, dist){
-    const maintenant = Date.now();
-    const prec = nonRef_lastDistParTrain.get(num);
-    let minutesImpact = null;
-    if(prec){
-      const dtSec = (maintenant-prec.time)/1000;
-      if(dtSec>=1){
-        const deltaDist = dist - prec.dist; // سالب = يقترب مني
-        if(deltaDist<0){
-          const vitesseMS = Math.abs(deltaDist)/dtSec;
-          if(vitesseMS>0.3) minutesImpact = (dist/vitesseMS)/60;
-        }
-      }
-    }
-    nonRef_lastDistParTrain.set(num, {dist, time:maintenant});
-    return minutesImpact;
-  }
-  // تنسيق "الساعة:الدقيقة" التقديرية للوصول انطلاقاً من عدد الدقائق المتبقية
-  function nonRef_horaireImpact(minutesImpact){
-    if(minutesImpact==null) return null;
-    const d = new Date(Date.now() + minutesImpact*60000);
-    return d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0');
-  }
-
-  let nonRef_alerteActive = false;
-  let nonRef_ctx=null, nonRef_osc=null, nonRef_gain=null, nonRef_sirenTimer=null, nonRef_vibrateTimer=null;
-  let nonRef_trainEnAlerte = null;
-
-  function nonRef_demarrerAlerte(num){
-    nonRef_trainEnAlerte = num;
-    if(nonRef_alerteActive) return;
-    nonRef_alerteActive = true;
-    try{
-      nonRef_ctx = new (window.AudioContext||window.webkitAudioContext)();
-      nonRef_gain = nonRef_ctx.createGain();
-      nonRef_gain.gain.value = 1;
-      nonRef_gain.connect(nonRef_ctx.destination);
-      nonRef_osc = nonRef_ctx.createOscillator();
-      nonRef_osc.type = 'triangle';
-      nonRef_osc.frequency.value = 600;
-      nonRef_osc.connect(nonRef_gain);
-      nonRef_osc.start();
-      nonRef_sirenTimer = setInterval(function(){
-        if(!nonRef_osc) return;
-        nonRef_osc.frequency.value = (nonRef_osc.frequency.value < 800) ? 1100 : 600;
-      }, 260);
-    }catch(e){}
-    if(navigator.vibrate){
-      navigator.vibrate([300,100,300,100,300,100,600]);
-      nonRef_vibrateTimer = setInterval(function(){
-        if(navigator.vibrate) navigator.vibrate([300,100,300,100,300,100,600]);
-      }, 2800);
-    }
-  }
-  function nonRef_arreterAlerte(){
-    if(!nonRef_alerteActive) return;
-    nonRef_alerteActive = false;
-    nonRef_trainEnAlerte = null;
-    if(nonRef_sirenTimer){ clearInterval(nonRef_sirenTimer); nonRef_sirenTimer=null; }
-    if(nonRef_vibrateTimer){ clearInterval(nonRef_vibrateTimer); nonRef_vibrateTimer=null; }
-    if(navigator.vibrate) navigator.vibrate(0);
-    try{
-      if(nonRef_osc){ nonRef_osc.stop(); nonRef_osc.disconnect(); nonRef_osc=null; }
-      if(nonRef_gain){ nonRef_gain.disconnect(); nonRef_gain=null; }
-      if(nonRef_ctx){ nonRef_ctx.close(); nonRef_ctx=null; }
-    }catch(e){}
-  }
-
-  // ---------- badge + لائحة مستقلة، أعلى يمين الشاشة لتفادي التزاحم مع شارات الرادار/الفاشوز ----------
-  function nonRef_creerUI(){
-    if(document.getElementById('nonRefBadgeIndependant')) return;
-    const style = document.createElement('style');
-    style.textContent = `
-      #nonRefBadgeIndependant{
-        position:fixed; top:64px; right:8px; z-index:10005;
-        padding:6px 12px; border-radius:20px; font-size:11px; font-weight:700;
-        letter-spacing:.3px; background:rgba(10,20,45,.92); color:#8fb8ff;
-        border:1px solid rgba(143,184,255,.5); box-shadow:0 0 12px rgba(0,0,0,.4);
-        white-space:nowrap; cursor:pointer; font-family:inherit;
-        transition:background .3s,color .3s,border-color .3s;
-      }
-      #nonRefBadgeIndependant.nonRefAlerte{
-        background:rgba(90,0,0,.95); color:#fff; border-color:#ff3b3b;
-        animation:nonRefBadgePulse .7s infinite;
-      }
-      @keyframes nonRefBadgePulse{0%,100%{box-shadow:0 0 12px rgba(255,0,0,.4)}50%{box-shadow:0 0 22px rgba(255,0,0,.9)}}
-      #nonRefPanelIndependant{
-        position:fixed; top:100px; right:8px; z-index:10005;
-        width:min(88vw,320px); max-height:44vh; overflow-y:auto;
-        background:rgba(8,14,30,.96); border:1px solid rgba(143,184,255,.5);
-        border-radius:12px; padding:8px 10px; display:none; font-family:inherit;
-      }
-      #nonRefPanelIndependant.ouvert{ display:block; }
-      #nonRefPanelIndependant .nr-item{
-        font-size:12px; color:#cfe0ff; padding:5px 4px; border-bottom:1px solid rgba(143,184,255,.15);
-      }
-      #nonRefPanelIndependant .nr-item:last-child{ border-bottom:none; }
-      #nonRefPanelIndependant .nr-item.alerte{ color:#ff8a8a; font-weight:700; }
-      #nonRefPanelIndependant .nr-item.proche{ color:#7fffa0; font-weight:700; }
-      #nonRefPanelIndependant .nr-empty{ font-size:12px; color:#9bf; opacity:.7; text-align:center; padding:6px; }
-    `;
-    document.head.appendChild(style);
-
-    const badge = document.createElement('div');
-    badge.id = 'nonRefBadgeIndependant';
-    badge.textContent = '🆕 قطارات غير مدرجة';
-    badge.title = 'اضغط لعرض/إخفاء لائحة القطارات غير المدرجة في الجدول النظري';
-    badge.addEventListener('click', ()=>{
-      const panel = document.getElementById('nonRefPanelIndependant');
-      if(panel) panel.classList.toggle('ouvert');
-    });
-    document.body.appendChild(badge);
-
-    const panel = document.createElement('div');
-    panel.id = 'nonRefPanelIndependant';
-    document.body.appendChild(panel);
-  }
-
-  function nonRef_majUI(entries, unAlerteAuMoins){
-    const badge = document.getElementById('nonRefBadgeIndependant');
-    const panel = document.getElementById('nonRefPanelIndependant');
-    if(badge){
-      if(unAlerteAuMoins){
-        badge.textContent = '🆕⚠️ قطارات غير مدرجة — تنبيه!';
-        badge.classList.add('nonRefAlerte');
-      } else {
-        badge.textContent = '🆕 قطارات غير مدرجة — '+entries.length;
-        badge.classList.remove('nonRefAlerte');
-      }
-    }
-    if(panel){
-      if(entries.length===0){
-        panel.innerHTML = '<div class="nr-empty">لا يوجد أي قطار غير مدرج نظرياً حالياً في SNCFT Live</div>';
-      } else {
-        const rang = e => e.alerte ? 0 : (e.proche ? 1 : 2);
-        const triees = entries.slice().sort((a,b)=>rang(a)-rang(b));
-        panel.innerHTML = triees.map(e=>{
-          const cls = e.alerte ? ' alerte' : (e.proche ? ' proche' : '');
-          const icon = e.alerte ? '⚠️ ' : (e.proche ? '📍 ' : '🆕 ');
-          const horaireTxt = (e.horaireImpact && (e.alerte||e.proche))
-            ? ('<br>🕒 الوصول التقديري عند نقطتي: <b>'+e.horaireImpact+'</b> (خلال ~'+e.minutesImpact.toFixed(1)+' د)')
-            : '';
-          return '<div class="nr-item'+cls+'">'+icon+'قطار '+e.num+' — '+e.fromStation+' → '+e.toStation+
-          (e.alerte? '<br><b>بلغ نفس مقطع أقرب قطار مؤكَّد!</b>' : (e.proche? '<br><b>أقرب قطار غير مدرج منك حالياً</b>' : ''))+
-          horaireTxt+
-          '</div>';
-        }).join('');
-      }
-    }
-  }
-
-  function nonRef_cycle(){
-    try{
-      const userPos = (typeof lastPos!=='undefined' && Array.isArray(lastPos)) ? lastPos : null;
-      const troconProche = userPos ? nonRef_trononDuPlusProche(userPos) : null;
-
-      const entries = liveOnlyEntries().map(lt=>{
-        const pos = liveOnlyTrainPosition(lt);
-        if(!pos) return null;
-        const alerte = nonRef_memeTroncon({fromStation:pos.fromStation, toStation:pos.toStation}, troconProche);
-        const dist = userPos ? haversine(userPos, [pos.lat, pos.lon]) : null;
-        const minutesImpact = dist!=null ? nonRef_estimerMinutesImpact(lt.num, dist) : null;
-        const horaireImpact = nonRef_horaireImpact(minutesImpact);
-        return {num: lt.num, fromStation: pos.fromStation, toStation: pos.toStation, alerte, dist, minutesImpact, horaireImpact};
-      }).filter(Boolean);
-
-      // تحديد الأقرب (بالمسافة الفعلية من موقع المستخدم) من بين القطارات التي ليست أصلاً في حالة تنبيه أحمر
-      if(userPos){
-        let plusProche = null;
-        entries.forEach(e=>{
-          if(e.alerte || e.dist==null) return;
-          if(!plusProche || e.dist<plusProche.dist) plusProche = e;
-        });
-        if(plusProche) plusProche.proche = true;
-      }
-
-      const alertes = entries.filter(e=>e.alerte);
-      nonRef_majUI(entries, alertes.length>0);
-
-      if(alertes.length>0) nonRef_demarrerAlerte(alertes[0].num);
-      else nonRef_arreterAlerte();
-    }catch(e){}
-  }
-
-  nonRef_creerUI();
-  setInterval(nonRef_cycle, NONREF_CYCLE_MS);
-})();
-// ========== FIN MODULE "قطارات غير مدرجة" ==========
 
 // ================================================================
 // ========== إنذار مستقل رابع — القطار النظري مصحَّح بالتأخير المباشر ==========
@@ -10131,16 +9876,11 @@ document.getElementById('toggleStationsBtn').click(); // نعرض كل المح�
 <style>
 #farhoumBtn{
   position:fixed; left:18px; bottom:18px; z-index:9990;
-  width:58px; height:58px; border-radius:50%;
+  width:68px; height:68px; border-radius:50%;
   background:radial-gradient(circle at 35% 30%, #2a3fb8, #0d1a6e 70%);
   border:2px solid var(--gold, #ffd700); box-shadow:0 0 14px rgba(255,215,0,.5);
   display:flex; align-items:center; justify-content:center;
-  cursor:pointer; font-size:26px; animation:farhoumBtnGlow 2.4s ease-in-out infinite;
-}
-#farhoumTestBtn{
-  position:fixed; left:84px; bottom:32px; z-index:9990;
-  padding:7px 10px; border-radius:8px; border:1px solid #ff5050; background:#4a0e0e;
-  color:#ffdada; font-size:12px; font-weight:700; cursor:pointer;
+  cursor:pointer; font-size:32px; animation:farhoumBtnGlow 2.4s ease-in-out infinite;
 }
 @keyframes farhoumBtnGlow{
   0%,100%{ box-shadow:0 0 10px rgba(255,215,0,.4); }
@@ -10231,7 +9971,6 @@ document.getElementById('toggleStationsBtn').click(); // نعرض كل المح�
 </style>
 
 <button id="farhoumBtn" title="نادِ جني فرحوم">🧞</button>
-<button id="farhoumTestBtn" onclick="testFarhoumDanger()" title="اختبار وضع الخطر">🧪 اختبار فرحوم</button>
 <div id="qitariVersionBadge" style="position:fixed;right:8px;bottom:6px;z-index:9990;font-size:10px;color:#ffd70099;background:#0d1a6ecc;padding:2px 7px;border-radius:6px;border:1px solid #ffd70055;">v3</div>
 
 <div id="farhoumDangerOverlay">
