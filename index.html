@@ -5186,6 +5186,7 @@ function computeRiskModuleLiveAny(userPos){
   liveTrains.forEach(lt=>{
     if(!lt || !lt.num) return;
     const matchedTrain = trains.find(t=>trainNumberMatches(t.name, lt.num));
+    if(!matchedTrain && isLiveOnlyEntryStale(lt)) return; // بيانات عالقة (قطار غير مرجعي فعلياً انتهت رحلته ولم يُحدَّث الخبر) — تسبب إنذاراً دائماً كاذباً إن لم نستبعدها هنا
     const pos = matchedTrain ? trainPositionLiveDirect(matchedTrain) : liveOnlyTrainPosition(lt);
     if(!pos) return;
     const dist = haversine(userPos,[pos.lat,pos.lon]);
@@ -7870,7 +7871,7 @@ function stopKeepAlive(){
 // حتى لو كانت هناك نسخة أحدث متاحة، فيبدو للمستخدم أن أي تعديل/إصلاح "لا يعمل" رغم أنه فعلاً مُطبَّق في الملف.
 if('serviceWorker' in navigator){
   const swCode = `
-    const CACHE_NAME = 'qitari-shell-v2';
+    const CACHE_NAME = 'qitari-shell-v3';
     self.addEventListener('install', e => {
       self.skipWaiting();
       e.waitUntil(
@@ -8551,6 +8552,7 @@ function checkPeacockHour(){
   const FAUCH_ALARME_MESSAGE_AR = 'احذر، ابتعد مائة وخمسين متراً';
 
   let fauchAlarme_active = false;
+  window.__frhFauchActive = function(){ return fauchAlarme_active; };
   let fauchAlarme_muet = false;
   let fauchAlarme_trainSuivi = null;
   let fauchAlarme_ctx=null, fauchAlarme_osc=null, fauchAlarme_gain=null;
@@ -9299,6 +9301,7 @@ function checkPeacockHour(){
   const CORR_GRACE_MS = 30*60*1000; // 30 دقيقة سماح بعد تأكيد المرور، كباقي الإنذارات
 
   let corr_active = false;
+  window.__frhCorrActive = function(){ return corr_active; };
   let corr_lockTrain = null, corr_lockToStation = null, corr_lockConfirmedAt = null;
   let corr_ctx=null, corr_osc=null, corr_gain=null, corr_sirenTimer=null, corr_vibrateTimer=null;
   // ---------- تقدير سرعة الاقتراب والزمن المتبقي، على غرار الإنذار الرئيسي (شرط مزدوج: مسافة + زمن) ----------
@@ -9460,6 +9463,7 @@ function checkPeacockHour(){
   const THEONC_TEMPS_MAX_MIN = 3; // aligné sur l'alarme principale : condition double (distance ET temps d'arrivée estimé)
 
   let theoNC_active = false;
+  window.__frhTheoNCActive = function(){ return theoNC_active; };
   let theoNC_muet = false;
   let theoNC_trainSuivi = null;
   let theoNC_ctx=null, theoNC_osc=null, theoNC_gain=null, theoNC_sirenTimer=null, theoNC_vibrateTimer=null;
@@ -9632,6 +9636,7 @@ function checkPeacockHour(){
   const THEOANY_TEMPS_MAX_MIN = 3; // aligné sur l'alarme principale : condition double (distance ET temps d'arrivée estimé)
 
   let theoAny_active = false;
+  window.__frhTheoAnyActive = function(){ return theoAny_active; };
   let theoAny_muet = false;
   let theoAny_trainSuivi = null;
   let theoAny_ctx=null, theoAny_osc=null, theoAny_gain=null, theoAny_sirenTimer=null, theoAny_vibrateTimer=null;
@@ -9801,6 +9806,7 @@ function checkPeacockHour(){
   const NONPROG_TEMPS_MAX_MIN = 3; // aligné sur l'alarme principale : condition double (distance ET temps d'arrivée estimé)
 
   let nonProg_active = false;
+  window.__frhNonProgActive = function(){ return nonProg_active; };
   let nonProg_muet = false;
   let nonProg_trainSuivi = null;
   let nonProg_ctx=null, nonProg_osc=null, nonProg_gain=null, nonProg_sirenTimer=null, nonProg_vibrateTimer=null;
@@ -9919,7 +9925,10 @@ function checkPeacockHour(){
     }catch(e){}
   }
 
+  const NONPROG_DESACTIVE = true; // أوقفها المستخدم نهائياً بسبب إنذارات كاذبة متكررة — لا تُشغَّل إطلاقاً طالما هذا true
+
   function nonProg_cycle(){
+    if(NONPROG_DESACTIVE){ nonProg_arreter(); return; }
     try{
       nonProg_creerUI();
       if(typeof lastPos==='undefined' || !Array.isArray(lastPos)){
@@ -9946,147 +9955,6 @@ function checkPeacockHour(){
   setInterval(nonProg_cycle, NONPROG_CYCLE_MS);
 })();
 // ========== FIN إنذار "قطار غير مبرمَج" ==========
-
-// ================================================================
-// ========== إنذار مستقل سابع — 150 متر مطلق، بغضّ النظر عن الوحدة أو السرعة أو التأكيد ==========
-// طلب المستخدم: إنذار أخير يعمل كشبكة أمان مطلقة — لا شرط سرعة (بعكس الإنذارات #7/#8/#9 التي تشترط
-// الآن زمن وصول ≤3 دقائق)، لا شرط تأكيد (سواء مؤكَّداً أو غير مؤكَّد أو حتى غير موجود في SNCFT Live
-// إطلاقاً)، ولا شرط طريقة حساب الموقع (نظري بحت / مصحَّح بالتأخير / مباشر SNCFT Live / غير مجدول).
-// يفحص كل طرق حساب الموقع الممكنة لكل قطار (الأربع الطرق) ويأخذ الأقرب مسافة مطلقة بينها جميعاً.
-// إن كانت ≤150م، يرن — نقطة واحدة لا غير.
-// Module 100% indépendant : préfixe abs150_, propre bannière (rouge vif, distincte de toutes les
-// autres), propre son, seule l'hystérésis 150/160m existe (pour éviter le clignotement au pixel
-// près) — aucune autre condition, aucun lien avec les 9 autres alarmes indépendantes.
-// ================================================================
-(function(){
-  'use strict';
-
-  const ABS150_CYCLE_MS = 1500; // فحص سريع نسبياً لأنه شبكة الأمان الأخيرة
-  const ABS150_SEUIL_DEMARRAGE_M = 150;
-  const ABS150_SEUIL_ARRET_M = 160; // هستيريسيس بسيط فقط لمنع الوميض، بلا أي شرط آخر
-
-  let abs150_active = false;
-  let abs150_ctx=null, abs150_osc=null, abs150_gain=null, abs150_sirenTimer=null, abs150_vibrateTimer=null;
-
-  // يفحص الطرق الأربع الممكنة لموقع كل قطار (نظري بحت / مصحَّح بالتأخير / مباشر SNCFT Live)
-  // بالإضافة لكل قطارات SNCFT Live غير المجدولة إطلاقاً — ويأخذ أقرب مسافة مطلقة من بينها كلها معاً
-  function abs150_nearestAbsolu(userPos){
-    let best = {dist:Infinity, lineName:'--'};
-    trains.forEach(train=>{
-      [trainPositionScheduleOnly, trainPositionNow, trainPositionLiveDirect].forEach(fn=>{
-        const pos = fn(train);
-        if(!pos) return;
-        const dist = haversine(userPos, [pos.lat, pos.lon]);
-        if(dist < best.dist){
-          best = {dist, lineName: train.name+' ('+pos.fromStation+' → '+pos.toStation+')'};
-        }
-      });
-    });
-    if(typeof liveOnlyEntries==='function'){
-      liveOnlyEntries().forEach(lt=>{
-        const pos = liveOnlyTrainPosition(lt);
-        if(!pos) return;
-        const dist = haversine(userPos, [pos.lat, pos.lon]);
-        if(dist < best.dist){
-          best = {dist, lineName: 'قطار '+lt.num+' (غير مجدول، '+pos.fromStation+' → '+pos.toStation+')'};
-        }
-      });
-    }
-    return best;
-  }
-
-  function abs150_creerUI(){
-    if(document.getElementById('abs150Banniere')) return;
-    const style = document.createElement('style');
-    style.textContent = `
-      #abs150Banniere{
-        position:fixed; left:50%; top:50%; transform:translate(-50%,-50%);
-        z-index:10020; width:min(92vw,380px);
-        background:linear-gradient(180deg,rgba(140,0,0,.97),rgba(60,0,0,.97));
-        color:#fff; padding:18px 20px 20px; text-align:center; border-radius:16px;
-        display:none; box-shadow:0 0 40px rgba(255,0,0,.6);
-        animation:abs150PulseBg .6s infinite; font-family:inherit;
-      }
-      @keyframes abs150PulseBg{0%,100%{box-shadow:0 0 40px rgba(255,0,0,.6)}50%{box-shadow:0 0 60px rgba(255,60,60,.95)}}
-      #abs150Banniere h3{margin:0 0 8px;font-size:17px;color:#ffdcdc}
-      #abs150Banniere p{margin:0;font-size:13px;line-height:1.7}
-    `;
-    document.head.appendChild(style);
-    const div = document.createElement('div');
-    div.id = 'abs150Banniere';
-    div.innerHTML = '<h3>🔴🚨 إنذار مطلق — 150 متر (بلا أي شرط)</h3><p id="abs150Texte"></p>';
-    document.body.appendChild(div);
-  }
-
-  function abs150_majTexte(info){
-    const t = document.getElementById('abs150Texte');
-    if(t) t.textContent = 'قطار على بعد '+formatDist(info.dist)+' فقط: '+info.lineName+' — بغضّ النظر عن السرعة أو التأكيد أو طريقة الحساب';
-  }
-
-  function abs150_demarrer(info){
-    abs150_majTexte(info);
-    if(abs150_active) return;
-    abs150_active = true;
-    const banniere = document.getElementById('abs150Banniere');
-    if(banniere) banniere.style.display = 'block';
-    try{
-      abs150_ctx = new (window.AudioContext||window.webkitAudioContext)();
-      abs150_gain = abs150_ctx.createGain();
-      abs150_gain.gain.value = .5;
-      abs150_gain.connect(abs150_ctx.destination);
-      abs150_osc = abs150_ctx.createOscillator();
-      abs150_osc.type = 'square';
-      abs150_osc.frequency.value = 950;
-      abs150_osc.connect(abs150_gain);
-      abs150_osc.start();
-      abs150_sirenTimer = setInterval(function(){
-        if(!abs150_osc) return;
-        abs150_osc.frequency.value = (abs150_osc.frequency.value < 1100) ? 1400 : 950;
-      }, 180);
-    }catch(e){}
-    speakDanger150();
-    if(navigator.vibrate){
-      navigator.vibrate([200,80,200,80,200,80,200]);
-      abs150_vibrateTimer = setInterval(function(){
-        if(navigator.vibrate) navigator.vibrate([200,80,200,80,200,80,200]);
-      }, 2000);
-    }
-  }
-
-  function abs150_arreter(){
-    if(!abs150_active) return;
-    abs150_active = false;
-    const banniere = document.getElementById('abs150Banniere');
-    if(banniere) banniere.style.display = 'none';
-    if(abs150_sirenTimer){ clearInterval(abs150_sirenTimer); abs150_sirenTimer=null; }
-    if(abs150_vibrateTimer){ clearInterval(abs150_vibrateTimer); abs150_vibrateTimer=null; }
-    if(navigator.vibrate) navigator.vibrate(0);
-    try{
-      if(abs150_osc){ abs150_osc.stop(); abs150_osc.disconnect(); abs150_osc=null; }
-      if(abs150_gain){ abs150_gain.disconnect(); abs150_gain=null; }
-      if(abs150_ctx){ abs150_ctx.close(); abs150_ctx=null; }
-    }catch(e){}
-  }
-
-  function abs150_cycle(){
-    try{
-      abs150_creerUI();
-      if(typeof lastPos==='undefined' || !Array.isArray(lastPos)){ abs150_arreter(); return; }
-
-      const best = abs150_nearestAbsolu(lastPos);
-      const seuil = abs150_active ? ABS150_SEUIL_ARRET_M : ABS150_SEUIL_DEMARRAGE_M;
-
-      if(isFinite(best.dist) && best.dist<=seuil){
-        abs150_demarrer(best);
-      } else {
-        abs150_arreter();
-      }
-    }catch(e){}
-  }
-
-  setInterval(abs150_cycle, ABS150_CYCLE_MS);
-})();
-// ========== FIN إنذار "150 متر مطلق" ==========
 
 // ================================================================
 // ========== شاشة إعداد موحّدة — تطلب كل الأذونات (GPS + صوت + إشعارات) دفعة واحدة عند أول فتح فقط ==========
@@ -10138,6 +10006,23 @@ function checkPeacockHour(){
 
 window.testPeacock = playPeacockSequence; // pour tester manuellement depuis la console: testPeacock()
 
+// ========== جسر جني فرحوم: يكشف ما يحتاجه فرحوم من داخل الـ IIFE الرئيسية (وإلا فهي معزولة تماماً عن أي سكريبت آخر في الصفحة) ==========
+window.__frhTrains = function(){ return trains; };
+window.__frhSTATIONS = STATIONS;
+window.__frhParseStops = parseStops;
+window.__frhLiveTrains = function(){ return liveTrains; };
+window.__frhIsLiveDataFresh = function(){ return isLiveDataFresh(); };
+window.__frhIsTrainLiveConfirmed = function(train){ return isTrainLiveConfirmed(train); };
+window.__frhTrainNumberMatches = function(trainName, ltNum){ return trainNumberMatches(trainName, ltNum); };
+window.__frhOuterAlarmsActive = function(){
+  return !!(
+    (typeof alertActive !== 'undefined' && alertActive) ||
+    (typeof liveAlarmActive !== 'undefined' && liveAlarmActive) ||
+    (typeof kzAlarmActive !== 'undefined' && kzAlarmActive) ||
+    (typeof kzLAlarmActive !== 'undefined' && kzLAlarmActive)
+  );
+};
+
 // ---------- init ----------
 initMap();
 renderLines();
@@ -10181,6 +10066,11 @@ document.getElementById('toggleStationsBtn').click(); // نعرض كل المح�
   border:2px solid var(--gold, #ffd700); box-shadow:0 0 14px rgba(255,215,0,.5);
   display:flex; align-items:center; justify-content:center;
   cursor:pointer; font-size:26px; animation:farhoumBtnGlow 2.4s ease-in-out infinite;
+}
+#farhoumTestBtn{
+  position:fixed; left:84px; bottom:32px; z-index:9990;
+  padding:7px 10px; border-radius:8px; border:1px solid #ff5050; background:#4a0e0e;
+  color:#ffdada; font-size:12px; font-weight:700; cursor:pointer;
 }
 @keyframes farhoumBtnGlow{
   0%,100%{ box-shadow:0 0 10px rgba(255,215,0,.4); }
@@ -10271,6 +10161,8 @@ document.getElementById('toggleStationsBtn').click(); // نعرض كل المح�
 </style>
 
 <button id="farhoumBtn" title="نادِ جني فرحوم">🧞</button>
+<button id="farhoumTestBtn" onclick="testFarhoumDanger()" title="اختبار وضع الخطر">🧪 اختبار فرحوم</button>
+<div id="qitariVersionBadge" style="position:fixed;right:8px;bottom:6px;z-index:9990;font-size:10px;color:#ffd70099;background:#0d1a6ecc;padding:2px 7px;border-radius:6px;border:1px solid #ffd70055;">v3</div>
 
 <div id="farhoumDangerOverlay">
   <div class="farhoum-danger-genie" id="farhoumDangerGenieHolder"></div>
@@ -10381,7 +10273,7 @@ document.getElementById('toggleStationsBtn').click(); // نعرض كل المح�
     <div class="farhoum-name">جني فرحوم</div>
     <div class="farhoum-title">قاطع القطارات — عهد الأصالة</div>
 
-    <div class="farhoum-bubble" id="farhoumBubble">اسألني عن موعد قطارك يا صاحب السعادة، وسأجيبك من سجلات المحطة القديمة.</div>
+    <div class="farhoum-bubble" id="farhoumBubble">اسألني عن موعد قطارك يا صاحب السعادة، مثلاً: من نابل إلى تونس، أو فقط قل اسم محطة واحدة وسأعطيك كل مواعيدها، وسأجيبك من سجلات المحطة القديمة.</div>
 
     <div class="farhoum-form">
       <button id="farhoumMicBtn" onclick="startFarhoumListening()" title="تكلّم مع الجني">🎙️</button>
@@ -10416,31 +10308,45 @@ document.getElementById('toggleStationsBtn').click(); // نعرض كل المح�
   var ovEl = document.getElementById('farhoumOverlay');
   if(ovEl) ovEl.addEventListener('click', function(e){ if(e.target === ovEl) closeFarhoumGenie(); });
 
-  function frhSpeak(text){
+  var frhLastUtterance = null; // نُبقي مرجعاً حياً للنطق الحالي لتفادي توقفه المفاجئ في بعض المتصفحات
+
+  function frhPickArabicVoice(){
+    try{
+      var voices = window.speechSynthesis.getVoices() || [];
+      var v = voices.find(function(v){ return /^ar/i.test(v.lang); });
+      return v || null;
+    }catch(e){ return null; }
+  }
+
+  function frhDoSpeak(text, rate, pitch){
     try{
       if(!('speechSynthesis' in window)) return;
       window.speechSynthesis.cancel();
-      var u = new SpeechSynthesisUtterance(text);
-      u.lang = 'ar-SA'; u.rate = 0.92; u.pitch = 0.85;
-      window.speechSynthesis.speak(u);
+      try{ window.speechSynthesis.resume(); }catch(e){}
+      setTimeout(function(){
+        var u = new SpeechSynthesisUtterance(text);
+        u.lang = 'ar-SA'; u.rate = rate; u.pitch = pitch; u.volume = 1;
+        var v = frhPickArabicVoice();
+        if(v) u.voice = v;
+        frhLastUtterance = u; // مرجع حيّ يمنع تجاهل بعض المتصفحات للنطق
+        window.speechSynthesis.speak(u);
+      }, 60);
     }catch(e){}
   }
 
-  function frhNormalize(s){
-    return (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[إأآا]/g,'ا').trim();
+  function frhSpeak(text){
+    frhDoSpeak(text, 0.92, 0.85);
   }
 
-  // يحاول استخراج محطتي الانطلاق والوصول من سؤال حر مثل: "من نابل إلى تونس"
-  function frhParseStations(q){
-    var m = q.match(/من\s+(.+?)\s+(?:الى|إلى)\s+(.+)/i);
-    if(m) return { from: m[1].trim(), to: m[2].trim() };
-    return null;
+  function frhNormalize(s){
+    return (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[إأآا]/g,'ا').toLowerCase().trim();
   }
 
   function frhFindStops(train){
     try{
-      if(typeof parseStops === 'function'){
-        return parseStops(train.stopsText).filter(function(s){ return !s.unknown; });
+      if(typeof window.__frhParseStops === 'function'){
+        // نُبقي كل المحطات التي لها اسم ووقت، حتى ولو لم تُعرف إحداثياتها في STATIONS (لا نحتاج الإحداثيات هنا)
+        return window.__frhParseStops(train.stopsText).filter(function(s){ return s && s.name && s.time; });
       }
     }catch(e){}
     return [];
@@ -10449,12 +10355,13 @@ document.getElementById('toggleStationsBtn').click(); // نعرض كل المح�
   // يبحث عن تأخير حقيقي مسجّل الآن عبر SNCFT Live لهذا القطار بالذات (برقمه)
   function frhLiveDelayForTrain(trainName){
     try{
-      if(typeof isLiveDataFresh !== 'function' || !isLiveDataFresh()) return undefined; // بلا بيانات مباشرة متاحة الآن
-      if(typeof liveTrains === 'undefined' || !Array.isArray(liveTrains)) return undefined;
-      if(typeof trainNumberMatches !== 'function') return undefined;
+      if(typeof window.__frhIsLiveDataFresh !== 'function' || !window.__frhIsLiveDataFresh()) return undefined; // بلا بيانات مباشرة متاحة الآن
+      var liveList = (typeof window.__frhLiveTrains === 'function') ? window.__frhLiveTrains() : null;
+      if(!Array.isArray(liveList)) return undefined;
+      if(typeof window.__frhTrainNumberMatches !== 'function') return undefined;
       var best = null;
-      liveTrains.forEach(function(lt){
-        if(!trainNumberMatches(trainName, lt.num)) return;
+      liveList.forEach(function(lt){
+        if(!window.__frhTrainNumberMatches(trainName, lt.num)) return;
         var d = Number(lt.delay) || 0;
         if(!best || d > best.delay) best = { delay: d, curFr: lt.curFr, nextFr: lt.nextFr };
       });
@@ -10465,19 +10372,92 @@ document.getElementById('toggleStationsBtn').click(); // نعرض كل المح�
   // يتحقق هل انطلاق هذا القطار مؤكَّد فعلياً الآن عبر SNCFT Live، أو لم يُؤكَّد بعد، أو لا توجد بيانات مباشرة إطلاقاً
   function frhIsConfirmed(train){
     try{
-      if(typeof isLiveDataFresh !== 'function' || !isLiveDataFresh()) return undefined; // لا بيانات SNCFT Live متاحة الآن إطلاقاً
-      if(typeof isTrainLiveConfirmed === 'function'){
-        return isTrainLiveConfirmed(train) === true; // true = مؤكَّد الآن، false = غير مؤكَّد بعد
+      if(typeof window.__frhIsLiveDataFresh !== 'function' || !window.__frhIsLiveDataFresh()) return undefined; // لا بيانات SNCFT Live متاحة الآن إطلاقاً
+      if(typeof window.__frhIsTrainLiveConfirmed === 'function'){
+        return window.__frhIsTrainLiveConfirmed(train) === true; // true = مؤكَّد الآن، false = غير مؤكَّد بعد
       }
       return undefined;
     }catch(e){ return undefined; }
   }
 
+  // جدول مطابقة: أسماء المحطات بالعربي كما يقولها الناس عادة -> الاسم اللاتيني الفعلي المستعمل في بيانات قِطاري
+  var frhStationAliases = {
+    'تونس':'Tunis', 'نابل':'Nabeul', 'الحمامات':'Hammamet', 'حمامات':'Hammamet',
+    'سوسة':'Sousse', 'صفاقس':'Sfax', 'قابس':'Gabes', 'قفصة':'Gafsa', 'توزر':'Tozeur',
+    'المهدية':'Mahdia', 'مهدية':'Mahdia', 'المنستير':'Monastir', 'منستير':'Monastir',
+    'الجم':'El Jem', 'جم':'El Jem', 'بنزرت':'Bizerte', 'باجة':'Beja',
+    'الكاف':'Le Kef', 'كاف':'Le Kef', 'جندوبة':'Jendouba', 'منوبة':'Manouba',
+    'حمام الأنف':'Hammam Lif', 'قرمبالية':'Grombalia', 'النفيضة':'Enfidha', 'نفيضة':'Enfidha',
+    'ماطر':'Mateur', 'مجاز الباب':'Mejez El Bab', 'قعافور':'Gaafour', 'تبربة':'Tebourba',
+    'الجديدة':'Jedeida', 'بوسالم':'Bousalem', 'غار الدماء':'Ghardimaou', 'سوق الأربعاء':'Souk Ahras',
+    'المطوية':'Metlaoui', 'ماكناسي':'Maknassy', 'برج السدرية':'Borj Cedria', 'البردو':'Le Bardo'
+  };
+
+  // يحوّل اسم المحطة إلى الصيغة اللاتينية المستعملة فعلياً في بيانات قِطاري، سواء كتبه المستخدم بالعربي أو باللاتيني مباشرة
+  function frhResolveStationName(name){
+    var norm = frhNormalize(name);
+    for(var k in frhStationAliases){
+      if(frhNormalize(k) === norm) return frhStationAliases[k];
+    }
+    return name; // لم يُوجد بديل عربي، نبقيه كما هو (يفترض أنه مكتوب باللاتيني أصلاً)
+  }
+
+  // يبني قائمة كل أسماء المحطات القابلة للفهم (عربي من القاموس أعلاه + لاتيني من بيانات المحطات STATIONS)، الأطول أولاً لتفادي أي تطابق جزئي خاطئ (مثلاً اسم قصير داخل اسم محطة أطول)
+  var frhStationCandidates = null;
+  function frhBuildStationCandidates(){
+    if(frhStationCandidates) return frhStationCandidates;
+    var list = [], seen = {};
+    for(var k in frhStationAliases){
+      var norm = frhNormalize(k);
+      if(norm && !seen[norm]){ seen[norm] = 1; list.push({ norm: norm, resolved: frhStationAliases[k] }); }
+    }
+    var st = window.__frhSTATIONS || {};
+    var bases = {};
+    for(var name in st){
+      bases[name.replace(/ Arrivée$/, '').replace(/ Départ$/, '')] = 1;
+    }
+    for(var b in bases){
+      var norm2 = frhNormalize(b);
+      if(norm2 && !seen[norm2]){ seen[norm2] = 1; list.push({ norm: norm2, resolved: b }); }
+    }
+    list.sort(function(a, b){ return b.norm.length - a.norm.length; });
+    frhStationCandidates = list;
+    return list;
+  }
+
+  // يستخرج من سؤال حر اسم محطة واحدة أو اسمي محطتين، بأي صياغة وبدون شرط "من...إلى":
+  // محطة واحدة فقط → وضع "كل مواعيد هذه المحطة" (مغادرة ووصول) | محطتان → وضع "رحلة من الأولى إلى الثانية" حسب ترتيب ورودهما في الجملة
+  function frhExtractStations(qRaw){
+    var q = frhNormalize(qRaw);
+    var candidates = frhBuildStationCandidates();
+    var matches = [], claimed = [];
+    candidates.forEach(function(c){
+      if(!c.norm) return;
+      var from = 0, pos;
+      while((pos = q.indexOf(c.norm, from)) !== -1){
+        var overlap = claimed.some(function(r){ return pos < r.end && (pos + c.norm.length) > r.start; });
+        if(!overlap){
+          matches.push({ resolved: c.resolved, idx: pos });
+          claimed.push({ start: pos, end: pos + c.norm.length });
+        }
+        from = pos + 1;
+      }
+    });
+    matches.sort(function(a, b){ return a.idx - b.idx; });
+    var byName = {}, uniq = [];
+    matches.forEach(function(m){ if(!byName[m.resolved]){ byName[m.resolved] = 1; uniq.push(m); } });
+    if(uniq.length >= 2) return { mode: 'route', from: uniq[0].resolved, to: uniq[1].resolved };
+    if(uniq.length === 1) return { mode: 'station', station: uniq[0].resolved };
+    return null;
+  }
+
   function frhSearchTrains(fromName, toName){
     var results = [];
-    if(typeof trains === 'undefined' || !Array.isArray(trains)) return results;
-    var fNorm = frhNormalize(fromName), tNorm = frhNormalize(toName);
-    trains.forEach(function(train){
+    var allTrains = (typeof window.__frhTrains === 'function') ? window.__frhTrains() : null;
+    if(!Array.isArray(allTrains)) return results;
+    var fResolved = frhResolveStationName(fromName), tResolved = frhResolveStationName(toName);
+    var fNorm = frhNormalize(fResolved), tNorm = frhNormalize(tResolved);
+    allTrains.forEach(function(train){
       var stops = frhFindStops(train);
       if(!stops.length) return;
       var iFrom = -1, iTo = -1;
@@ -10499,48 +10479,125 @@ document.getElementById('toggleStationsBtn').click(); // نعرض كل المح�
     return results;
   }
 
+  // يزيل لاحقة "الوصول/المغادرة" من اسم محطة لعرضه بشكل نظيف للمستخدم (مثلاً "Sousse Départ" → "Sousse")
+  function frhBaseDisplayName(name){
+    return (name || '').replace(/ Arrivée$/, '').replace(/ Départ$/, '');
+  }
+
+  // كل مواعيد محطة واحدة بذاتها: كل قطار يغادر منها (مع وجهته النهائية) وكل قطار يصل إليها (مع محطة انطلاقه الأصلية)
+  // يتعامل بشكل صحيح مع المحطات المُقسَّمة وصول/مغادرة (مثل Sousse وSfax) فلا يخلط بين توقيت الوصول وتوقيت المغادرة الفعلي
+  function frhStationBoard(stationName){
+    var departures = [], arrivals = [];
+    var allTrains = (typeof window.__frhTrains === 'function') ? window.__frhTrains() : null;
+    if(!Array.isArray(allTrains)) return { departures: departures, arrivals: arrivals };
+    var sNorm = frhNormalize(frhResolveStationName(stationName));
+    allTrains.forEach(function(train){
+      var stops = frhFindStops(train);
+      if(!stops.length) return;
+      stops.forEach(function(s, idx){
+        var n = frhNormalize(s.name);
+        if(n.indexOf(sNorm) === -1) return;
+        var lastWord = n.trim().split(' ').pop();
+        var departOnly = (lastWord === 'depart');
+        var arriveOnly = (lastWord === 'arrivee');
+        if(idx < stops.length - 1 && !arriveOnly){
+          departures.push({
+            name: train.name || 'قطار', time: s.time || '--',
+            dest: frhBaseDisplayName(stops[stops.length - 1].name),
+            live: frhLiveDelayForTrain(train.name), confirmed: frhIsConfirmed(train)
+          });
+        }
+        if(idx > 0 && !departOnly){
+          arrivals.push({
+            name: train.name || 'قطار', time: s.time || '--',
+            origin: frhBaseDisplayName(stops[0].name),
+            live: frhLiveDelayForTrain(train.name), confirmed: frhIsConfirmed(train)
+          });
+        }
+      });
+    });
+    departures.sort(function(a, b){ return (a.time||'').localeCompare(b.time||''); });
+    arrivals.sort(function(a, b){ return (a.time||'').localeCompare(b.time||''); });
+    return { departures: departures, arrivals: arrivals };
+  }
+
   function askFarhoumGenie(){
     var inp = document.getElementById('farhoumQuestion');
     var bubble = document.getElementById('farhoumBubble');
     if(!inp || !bubble) return;
     var q = inp.value.trim();
     if(!q){
-      var msg0 = 'اسألني من فضلك، مثلاً: من نابل إلى تونس';
+      var msg0 = 'اسألني من فضلك، مثلاً: من نابل إلى تونس، أو فقط اسم محطة واحدة لأعطيك كل مواعيدها';
       bubble.textContent = msg0; frhSpeak(msg0);
       return;
     }
-    var parsed = frhParseStations(q);
+    var parsed = frhExtractStations(q);
     if(!parsed){
-      var msg1 = 'اكتب سؤالك هكذا: من (المحطة الأولى) إلى (المحطة الثانية)، وسأبحث لك في السجلات.';
+      var msg1 = 'لم أتعرّف على اسم محطة في سؤالك. قل مثلاً: من نابل إلى تونس، أو فقط اسم محطة واحدة وسأعطيك كل قطاراتها المغادرة والواصلة.';
       bubble.textContent = msg1; frhSpeak(msg1);
       return;
     }
-    var found = frhSearchTrains(parsed.from, parsed.to);
+    var mentionsTomorrow = /غد(اً|ا)?|بكرة|بكرا/.test(q);
     var answer;
-    if(found.length){
-      answer = 'وجدت ' + found.length + ' قطار' + (found.length>1?'ات':'') + ' من ' + parsed.from + ' إلى ' + parsed.to + '. ';
-      found.slice(0,3).forEach(function(f){
-        answer += f.name + ': الانطلاق ' + f.depart + '، الوصول ' + f.arrive + '. ';
-        if(f.confirmed === undefined){
-          answer += '(لا تتوفر بيانات SNCFT Live الآن لتأكيد الانطلاق) ';
-        } else if(f.confirmed === true){
-          answer += '(الانطلاق مؤكَّد الآن فعلياً عبر SNCFT Live) ';
-        } else {
-          answer += '(لم يُؤكَّد انطلاقه بعد عبر SNCFT Live) ';
+
+    if(parsed.mode === 'route'){
+      var found = frhSearchTrains(parsed.from, parsed.to);
+      if(found.length){
+        answer = 'وجدت ' + found.length + ' قطار' + (found.length>1?'ات':'') + ' من ' + parsed.from + ' إلى ' + parsed.to + '. ';
+        if(mentionsTomorrow){
+          answer += 'اعلم أن هذا الجدول ثابت ويتكرر كل يوم بنفس التوقيت، فهو صالح لليوم ولغد على حد سواء. ';
         }
-        if(f.live === undefined){
-          answer += '(لا تتوفر معلومة تأخير مباشرة عنه الآن) ';
-        } else if(f.live === null){
-          answer += '(لا تأخير مسجّل، في موعده) ';
-        } else if(f.live.delay > 0){
-          answer += '(تنبيه: متأخر حالياً ' + f.live.delay + ' دقيقة';
-          if(f.live.curFr) answer += '، آخر موقع مؤكَّد له: ' + f.live.curFr;
-          answer += ') ';
-        }
-      });
+        found.slice(0,3).forEach(function(f){
+          answer += f.name + ': الانطلاق ' + f.depart + '، الوصول ' + f.arrive + '. ';
+          if(f.confirmed === undefined){
+            answer += '(لا تتوفر بيانات SNCFT Live الآن لتأكيد الانطلاق) ';
+          } else if(f.confirmed === true){
+            answer += '(الانطلاق مؤكَّد الآن فعلياً عبر SNCFT Live) ';
+          } else {
+            answer += '(لم يُؤكَّد انطلاقه بعد عبر SNCFT Live) ';
+          }
+          if(f.live === undefined){
+            answer += '(لا تتوفر معلومة تأخير مباشرة عنه الآن) ';
+          } else if(f.live === null){
+            answer += '(لا تأخير مسجّل، في موعده) ';
+          } else if(f.live.delay > 0){
+            answer += '(تنبيه: متأخر حالياً ' + f.live.delay + ' دقيقة';
+            if(f.live.curFr) answer += '، آخر موقع مؤكَّد له: ' + f.live.curFr;
+            answer += ') ';
+          }
+        });
+      } else {
+        answer = 'لم أجد في سجلاتي قطاراً مباشراً من ' + parsed.from + ' إلى ' + parsed.to + '. تأكد من كتابة اسم المحطة الصحيح، أو جرّب كتابته باللاتينية كما يظهر في قوائم المحطات.';
+      }
     } else {
-      answer = 'لم أجد في سجلاتي حتى الآن قطاراً مباشراً من ' + parsed.from + ' إلى ' + parsed.to + '. تأكد من كتابة اسم المحطة كما هو مسجل في قِطاري.';
+      var board = frhStationBoard(parsed.station);
+      var total = board.departures.length + board.arrivals.length;
+      if(!total){
+        answer = 'لم أجد في سجلاتي أي قطار يمرّ بمحطة ' + parsed.station + '. تأكد من كتابة اسمها الصحيح، أو جرّب اسمها باللاتينية كما يظهر في قوائم المحطات.';
+      } else {
+        answer = 'هذه كل مواعيد محطة ' + parsed.station + '. ';
+        if(mentionsTomorrow){
+          answer += 'اعلم أن هذا الجدول ثابت ويتكرر كل يوم بنفس التوقيت. ';
+        }
+        if(board.departures.length){
+          answer += board.departures.length + ' قطار' + (board.departures.length>1?'ات':'') + ' مغادر' + (board.departures.length>1?'ة':'') + ': ';
+          board.departures.forEach(function(d){
+            answer += d.name + ' الساعة ' + d.time + ' نحو ' + d.dest;
+            if(d.live && d.live.delay > 0) answer += ' (متأخر ' + d.live.delay + ' د)';
+            answer += '. ';
+          });
+        }
+        if(board.arrivals.length){
+          answer += board.arrivals.length + ' قطار' + (board.arrivals.length>1?'ات':'') + ' واصل' + (board.arrivals.length>1?'ة':'') + ': ';
+          board.arrivals.forEach(function(a){
+            answer += a.name + ' الساعة ' + a.time + ' قادم من ' + a.origin;
+            if(a.live && a.live.delay > 0) answer += ' (متأخر ' + a.live.delay + ' د)';
+            answer += '. ';
+          });
+        }
+      }
     }
+
     bubble.textContent = answer;
     frhSpeak(answer);
   }
@@ -10556,12 +10613,21 @@ document.getElementById('toggleStationsBtn').click(); // نعرض كل المح�
     var micBtn = document.getElementById('farhoumMicBtn');
     var hint = document.getElementById('farhoumMicHint');
     var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+
     if(!SR){
       var msgNo = 'عذراً يا صاحب السعادة، هذا المتصفح لا يتيح لي الإصغاء إليك، اكتب سؤالك من فضلك.';
       if(bubble) bubble.textContent = msgNo;
       frhSpeak(msgNo);
       return;
     }
+    // الميكروفون يتطلب اتصالاً آمناً (https) أو localhost — وإلا يرفضه المتصفح بصمت
+    if(window.isSecureContext === false){
+      var msgIns = 'الإصغاء الصوتي يعمل فقط عبر رابط آمن https، افتح الموقع من الرابط الأصلي وليس كملف محلي.';
+      if(bubble) bubble.textContent = msgIns;
+      frhSpeak(msgIns);
+      return;
+    }
+
     try{ if('speechSynthesis' in window) window.speechSynthesis.cancel(); }catch(e){}
     if(frhRecognition){ try{ frhRecognition.stop(); }catch(e){} }
     frhRecognition = new SR();
@@ -10579,8 +10645,21 @@ document.getElementById('toggleStationsBtn').click(); // نعرض كل المح�
       if(inp) inp.value = said;
       askFarhoumGenie();
     };
-    frhRecognition.onerror = function(){
-      if(bubble) bubble.textContent = 'لم أسمعك جيداً، أعد المحاولة من فضلك أو اكتب سؤالك.';
+    frhRecognition.onerror = function(event){
+      var errType = event && event.error;
+      var msg;
+      if(errType === 'not-allowed' || errType === 'service-not-allowed'){
+        msg = 'يبدو أنك رفضت إذن الميكروفون لهذا الموقع من قبل. فعّل إذن الميكروفون من إعدادات المتصفح لهذا الموقع بالذات ثم أعد المحاولة.';
+      } else if(errType === 'no-speech'){
+        msg = 'لم أسمع أي صوت، اضغط على الميكروفون وتحدّث بوضوح مباشرة.';
+      } else if(errType === 'audio-capture'){
+        msg = 'لم أجد ميكروفوناً متاحاً على هذا الجهاز.';
+      } else if(errType === 'network'){
+        msg = 'الإصغاء الصوتي يحتاج اتصالاً بالإنترنت ليعمل، تحقّق من اتصالك.';
+      } else {
+        msg = 'حدث خطأ أثناء الإصغاء (' + (errType || 'غير معروف') + ')، حاول مجدداً أو اكتب سؤالك.';
+      }
+      if(bubble) bubble.textContent = msg;
       if(micBtn) micBtn.classList.remove('listening');
       if(hint) hint.style.display = 'none';
     };
@@ -10588,7 +10667,13 @@ document.getElementById('toggleStationsBtn').click(); // نعرض كل المح�
       if(micBtn) micBtn.classList.remove('listening');
       if(hint) hint.style.display = 'none';
     };
-    try{ frhRecognition.start(); }catch(e){}
+    try{
+      frhRecognition.start();
+    }catch(e){
+      // غالباً InvalidStateError لأنه كان يستمع فعلاً — نوقفه ونعيد المحاولة بعد لحظة
+      try{ frhRecognition.stop(); }catch(e2){}
+      setTimeout(function(){ try{ frhRecognition.start(); }catch(e3){} }, 250);
+    }
   }
   window.startFarhoumListening = startFarhoumListening;
 
@@ -10597,6 +10682,7 @@ document.getElementById('toggleStationsBtn').click(); // نعرض كل المح�
   var frhDangerDismissed = false;
   var frhDangerRepeatTimer = null;
   var frhDangerGenieCloned = false;
+  var frhTestForce = false; // يُبقي وضع الخطر ظاهراً أثناء اختبار الزر، حتى لا تغلقه حلقة المراقبة الحقيقية فوراً
 
   function frhCloneGenieIntoDanger(){
     if(frhDangerGenieCloned) return;
@@ -10614,28 +10700,19 @@ document.getElementById('toggleStationsBtn').click(); // نعرض كل المح�
   function frhAnyAppAlarmActive(){
     try{
       return !!(
-        (typeof alertActive !== 'undefined' && alertActive) ||
-        (typeof liveAlarmActive !== 'undefined' && liveAlarmActive) ||
-        (typeof kzAlarmActive !== 'undefined' && kzAlarmActive) ||
-        (typeof kzLAlarmActive !== 'undefined' && kzLAlarmActive) ||
-        (typeof fauchAlarme_active !== 'undefined' && fauchAlarme_active) ||
-        (typeof corr_active !== 'undefined' && corr_active) ||
-        (typeof theoNC_active !== 'undefined' && theoNC_active) ||
-        (typeof theoAny_active !== 'undefined' && theoAny_active) ||
-        (typeof nonProg_active !== 'undefined' && nonProg_active) ||
-        (typeof abs150_active !== 'undefined' && abs150_active)
+        (typeof window.__frhOuterAlarmsActive === 'function' && window.__frhOuterAlarmsActive()) ||
+        (typeof window.__frhFauchActive === 'function' && window.__frhFauchActive()) ||
+        (typeof window.__frhCorrActive === 'function' && window.__frhCorrActive()) ||
+        (typeof window.__frhTheoNCActive === 'function' && window.__frhTheoNCActive()) ||
+        (typeof window.__frhTheoAnyActive === 'function' && window.__frhTheoAnyActive()) ||
+        (typeof window.__frhNonProgActive === 'function' && window.__frhNonProgActive()) ||
+        (typeof window.__frhAbs150Active === 'function' && window.__frhAbs150Active())
       );
     }catch(e){ return false; }
   }
 
   function frhSpeakDanger(){
-    try{
-      if(!('speechSynthesis' in window)) return;
-      window.speechSynthesis.cancel();
-      var u = new SpeechSynthesisUtterance('يا صاحب السعادة، غادر السكة الحديدية فوراً، ابتعد عنها، الخطر داهم!');
-      u.lang = 'ar-SA'; u.rate = 0.8; u.pitch = 0.55;
-      window.speechSynthesis.speak(u);
-    }catch(e){}
+    frhDoSpeak('يا صاحب السعادة، غادر السكة الحديدية فوراً، ابتعد عنها، الخطر داهم!', 0.8, 0.55);
   }
 
   function showFarhoumDanger(){
@@ -10657,13 +10734,22 @@ document.getElementById('toggleStationsBtn').click(); // نعرض كل المح�
 
   function dismissFarhoumDanger(){
     frhDangerDismissed = true;
+    frhTestForce = false;
     hideFarhoumDanger();
     try{ if('speechSynthesis' in window) window.speechSynthesis.cancel(); }catch(e){}
   }
   window.dismissFarhoumDanger = dismissFarhoumDanger;
 
+  function testFarhoumDanger(){
+    frhDangerDismissed = false;
+    frhTestForce = true;
+    showFarhoumDanger();
+    frhDangerPrevActive = true;
+  }
+  window.testFarhoumDanger = testFarhoumDanger;
+
   setInterval(function(){
-    var active = frhAnyAppAlarmActive();
+    var active = frhAnyAppAlarmActive() || frhTestForce;
     if(active && !frhDangerPrevActive){
       frhDangerDismissed = false; // إنذار جديد يلغي أي إغلاق يدوي سابق
       showFarhoumDanger();
