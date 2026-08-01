@@ -168,6 +168,11 @@ body{
 @keyframes countdownPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
 #countdownOverlay .cdLabel{font-size:22px;color:#fff;margin-top:14px;font-weight:700;}
 #countdownOverlay .cdSub{font-size:15px;color:#ffd700;margin-top:8px;}
+/* شعار تحذيري (رأس ميت وعظام متصالبة) يظهر فوق العدّاد التنازلي — طلب صريح من المستخدم */
+#countdownOverlay #countdownSkullIcon{
+  width:min(38vw,190px);height:min(38vw,190px);margin-bottom:6px;
+  animation:countdownPulse 1s infinite;filter:drop-shadow(0 0 22px rgba(255,23,68,.85));
+}
 
 /* ---------- إنذار إضافي مستقل تماماً: يعتمد فقط على بيانات SNCFT Live المباشرة (وحدتا 3 و4)، بلا أي علاقة بالجدول النظري ----------
    يعمل بالتوازي مع الإنذار الأحمر الرئيسي أعلاه (لا يعطّله ولا يتأثر به) ويُعرض في شريط سفلي منفصل تماماً، بلون بنفسجي/سماوي مميّز
@@ -1494,8 +1499,26 @@ const GHOST_VIDEO_SRC = 'data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yY
 </div>
 
 <div id="countdownOverlay">
+  <svg id="countdownSkullIcon" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg">
+    <polygon points="150,4 296,150 150,296 4,150" fill="#fff" stroke="#b3121e" stroke-width="24"/>
+    <g fill="#111" stroke="#111" stroke-width="4" stroke-linejoin="round" stroke-linecap="round">
+      <path d="M150 70c-32 0-55 24-55 56 0 20 9 32 18 42-2 8-2 16 3 22 6 8 16 8 22 5 4 6 8 9 12 9s8-3 12-9c6 3 16 3 22-5 5-6 5-14 3-22 9-10 18-22 18-42 0-32-23-56-55-56z"/>
+      <ellipse cx="128" cy="132" rx="16" ry="20" fill="#fff" stroke="none"/>
+      <ellipse cx="172" cy="132" rx="16" ry="20" fill="#fff" stroke="none"/>
+      <path d="M150 158l-10 20h20z" fill="#fff" stroke="none"/>
+      <path d="M120 190c8 6 20 9 30 9s22-3 30-9" fill="none" stroke="#fff" stroke-width="5"/>
+      <g stroke="#111" stroke-width="16" fill="none">
+        <path d="M40 175l70 45M110 175l-70 45"/>
+        <path d="M260 175l-70 45M190 175l70 45"/>
+      </g>
+      <g stroke="#fff" stroke-width="4" fill="none">
+        <path d="M28 172l14 6M42 165l6 15M96 172l-14 6M82 165l-6 15"/>
+        <path d="M272 172l-14 6M258 165l-6 15M204 172l14 6M218 165l6 15"/>
+      </g>
+    </g>
+  </svg>
   <div id="countdownNumber">60</div>
-  <div class="cdLabel">🚨 القطار على وشك الوصول — ابتعد فوراً! 🚨</div>
+  <div class="cdLabel">القطار على وشك الوصول — ابتعد فوراً!</div>
   <div class="cdSub" id="countdownSub"></div>
 </div>
 
