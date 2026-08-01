@@ -6524,7 +6524,7 @@ function kz_setGhostAlarm(prefix, active){
   } else if(!active && st.active){
     st.active = false;
     if(box) box.classList.remove('kzGhostAlarm');
-    try{ if('speechSynthesis' in window) window.speechSynthesis.cancel(); }catch(e){}
+    window.__qtStop();
   }
 }
 function kz_dismissGhostAlarm(prefix){
@@ -6712,39 +6712,63 @@ function kz_renderTrainViz(next){
   if(vizTrain) vizTrain.style.right = (trainFrac*100)+'%';
   el.style.display='flex';
 }
+// ============ نظام مركزي واحد لتنسيق كل الأصوات المنطوقة (TTS) في التطبيق ============
+// السبب الحقيقي لتقطّع صوت إعلان المحطة وتوقّف فرحوم عن الكلام: كل وحدة (الإعلان، فرحوم، إنذارات 150م،
+// إنذار الخمس دقائق، العدّاد التنازلي...) كانت تنادي window.speechSynthesis.cancel() الخاصة بها بمعزل تام
+// عن الأخريات. لأن محرّك النطق واحد ومشترك في كل الصفحة، أي نداء cancel() من أي وحدة يقطع فوراً كلام
+// أي وحدة أخرى كانت تتكلم في تلك اللحظة بالذات — ومع تراكم عدة نداءات متلاحقة من مصادر مختلفة، يتعطّل
+// محرّك النطق كلياً في بعض المتصفحات فيتوقف عن الاستجابة حتى لصوت فرحوم. الحل: كل كلام في التطبيق
+// يعبر من هنا فقط، بأولوية (priority) — الأعلى أولوية يقطع الأدنى، وكلام من أولوية أعلى أو مساوية
+// لا يقطعه كلام أقل أهمية يصل في نفس اللحظة.
+(function(){
+  let qtCurrentPriority = 0;
+  window.__qtSpeak = function(text, opts){
+    try{
+      opts = opts || {};
+      if(!('speechSynthesis' in window)) return;
+      const priority = (typeof opts.priority === 'number') ? opts.priority : 50;
+      const busy = window.speechSynthesis.speaking || window.speechSynthesis.pending;
+      if(busy && priority < qtCurrentPriority) return; // كلام أهم جارٍ حالياً → لا نقطعه بكلام أقل أهمية
+      window.speechSynthesis.cancel();
+      qtCurrentPriority = priority;
+      const repeat = opts.repeat || 1;
+      for(let i=0;i<repeat;i++){
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = opts.lang || 'ar-SA';
+        u.rate = (typeof opts.rate === 'number') ? opts.rate : 0.95;
+        u.pitch = (typeof opts.pitch === 'number') ? opts.pitch : 1;
+        if(typeof opts.volume === 'number') u.volume = opts.volume;
+        if(opts.voice) u.voice = opts.voice;
+        if(i === repeat-1){
+          u.onend = function(){ qtCurrentPriority = 0; if(typeof opts.onend === 'function') opts.onend(); };
+          u.onerror = function(){ qtCurrentPriority = 0; if(typeof opts.onerror === 'function') opts.onerror(); };
+        }
+        window.__qtLastUtterance = u; // مرجع حيّ يمنع تجاهل بعض المتصفحات للنطق
+        window.speechSynthesis.speak(u);
+      }
+    }catch(e){}
+  };
+  // يقطع كل كلام جارٍ فوراً بصرف النظر عن الأولوية (إيقاف إنذار مثلاً)
+  window.__qtStop = function(){
+    try{ if('speechSynthesis' in window) window.speechSynthesis.cancel(); }catch(e){}
+    qtCurrentPriority = 0;
+  };
+})();
 function kz_speakArabic(text){
-  try{
-    if(!('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang='ar-SA'; u.rate=0.95; u.pitch=1;
-    window.speechSynthesis.speak(u);
-  }catch(e){}
+  window.__qtSpeak(text, {priority:70});
 }
 // طلب المستخدم: عند 150م، رسالة موحّدة وجادّة بنبرة صوت خفيضة "غليظة"، تُقال بالعربية بصرف النظر عن
 // أي إنذار من إنذارات 150م أطلقها (الرئيسي، الأزرق، الأخضر، الشبح، غير المؤكَّد، 150م المطلق، الصوتي التكميلي) —
 // نفس الرسالة تماماً في كل مكان بدل الرسائل المختلفة السابقة الخاصة بكل إنذار على حدة
 function speakDanger150(){
-  try{
-    if(!('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance('يا سيدي، انتبه، قطارٌ سيمرّ، احتموا، احتموا، ابتعدوا عن السكة');
-    u.lang='ar-SA'; u.rate=0.75; u.pitch=0.55; // نبرة خفيضة وجادّة
-    window.speechSynthesis.speak(u);
-  }catch(e){}
+  window.__qtSpeak('يا سيدي، انتبه، قطارٌ سيمرّ، احتموا، احتموا، ابتعدوا عن السكة', {rate:0.75, pitch:0.55, priority:100});
 }
 window.speakDanger150 = speakDanger150;
 // طلب المستخدم: عند ابتعاد القطار (توقّف الإنذار تلقائياً)، إعلان ارتياح يذكر أدنى مسافة رُصدت فعلياً
 // أثناء اقترابه (نقطة أقرب مرور) — مثال: "لقد مرّ القطار على بعد 25 متراً فقط، شعرتُ بنفَسه!"
 function speakTrainPassedRelief(distMeters){
-  try{
-    if(!('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel();
-    const distTxt = Math.round(distMeters);
-    const u = new SpeechSynthesisUtterance('آه، كم كان قريباً! لقد مرّ القطار على بعد '+distTxt+' متراً فقط مني، لقد شعرتُ بنفَسه!');
-    u.lang='ar-SA'; u.rate=0.95; u.pitch=1.05; // نبرة ارتياح، أخفّ من نبرة إنذار الخطر الجادّة
-    window.speechSynthesis.speak(u);
-  }catch(e){}
+  const distTxt = Math.round(distMeters);
+  window.__qtSpeak('آه، كم كان قريباً! لقد مرّ القطار على بعد '+distTxt+' متراً فقط مني، لقد شعرتُ بنفَسه!', {pitch:1.05, priority:60});
 }
 window.speakTrainPassedRelief = speakTrainPassedRelief;
 function kz_distanceSpokenText(distM){
@@ -6851,21 +6875,15 @@ function ann_fadeRadioVolume(target, durationMs){
 }
 // الإنذار يقطع كل إعلان صوتي فوراً ويعيد صوت الإذاعة لمستواه الطبيعي (بدون أي تعتيم متبقٍّ)
 function ann_stopForAlarm(){
-  try{ if('speechSynthesis' in window) window.speechSynthesis.cancel(); }catch(e){}
+  window.__qtStop();
   if(annDuckTimer){ clearInterval(annDuckTimer); annDuckTimer=null; }
   const el = document.getElementById('qitariRadioAudio');
   if(el) el.volume = ANN_RADIO_NORMAL_VOL;
 }
 function ann_speak(text){
-  try{
-    if(!('speechSynthesis' in window)) return;
-    ann_fadeRadioVolume(ANN_RADIO_DUCK_VOL, 600); // تخفيض تدريجي كما في السيارات الكبيرة، وليس قطعاً فجائياً
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang='ar-SA'; u.rate=0.95; u.pitch=1;
-    const restore = ()=>ann_fadeRadioVolume(ANN_RADIO_NORMAL_VOL, 1200);
-    u.onend = restore; u.onerror = restore;
-    window.speechSynthesis.speak(u);
-  }catch(e){}
+  ann_fadeRadioVolume(ANN_RADIO_DUCK_VOL, 600); // تخفيض تدريجي كما في السيارات الكبيرة، وليس قطعاً فجائياً
+  const restore = ()=>ann_fadeRadioVolume(ANN_RADIO_NORMAL_VOL, 1200);
+  window.__qtSpeak(text, {priority:40, onend:restore, onerror:restore});
 }
 // يبحث عن أقرب محطة مستعملة فعلياً، ثم كل القطارات التي ستمر بها خلال نافذة الزمن المسموحة، ويصوغ إعلاناً واحداً بأسلوب المطار
 function ann_announceUpcomingTrains(){
@@ -7278,13 +7296,7 @@ function kzL_computeAndRender(){
 // طلب المستخدم: أن ينطق "خطاطب" (صوت اصطناعي) نص إنذار العدّاد التنازلي (60 ثانية) بنبرة قوية وسلطوية —
 // نبرة خفيضة جداً وإيقاع بطيء يعكسان الجدّية والحزم، تتكرر كل بضع ثوانٍ طوال ظهور التراكب
 function speakCountdownWarning(){
-  try{
-    if(!('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance('خطر الموت الفوري، ابتعد عن السكة الحديدية فوراً');
-    u.lang='ar-SA'; u.rate=0.78; u.pitch=0.5; u.volume=1; // نبرة قوية وسلطوية جداً
-    window.speechSynthesis.speak(u);
-  }catch(e){}
+  window.__qtSpeak('خطر الموت الفوري، ابتعد عن السكة الحديدية فوراً', {rate:0.78, pitch:0.5, volume:1, priority:100});
 }
 function startCountdownVoice(){
   stopCountdownVoice();
@@ -7293,7 +7305,7 @@ function startCountdownVoice(){
 }
 function stopCountdownVoice(){
   if(countdownVoiceIntervalId){ clearInterval(countdownVoiceIntervalId); countdownVoiceIntervalId=null; }
-  try{ if('speechSynthesis' in window) window.speechSynthesis.cancel(); }catch(e){}
+  window.__qtStop();
 }
 // ---------- عدّاد تنازلي على كامل الشاشة (آخر 60 ثانية ضمن 150م) ----------
 // يبدأ العدّاد فقط عند حدوث حدث جديد (eventKey مختلف) أو إن لم يكن يعمل أصلاً، حتى لا يهتزّ التوقيت مع كل تحديث GPS —
@@ -8646,17 +8658,7 @@ function checkPeacockHour(){
   }
 
   function fauchAlarme_parlerArabeTroisFois(){
-    try{
-      if(!('speechSynthesis' in window)) return;
-      window.speechSynthesis.cancel(); // vide toute file déjà en cours pour ne pas s'empiler
-      for(let i=0;i<3;i++){
-        const u = new SpeechSynthesisUtterance(FAUCH_ALARME_MESSAGE_AR);
-        u.lang = 'ar-SA';
-        u.rate = 0.95;
-        u.pitch = 1;
-        window.speechSynthesis.speak(u);
-      }
-    }catch(e){}
+    window.__qtSpeak(FAUCH_ALARME_MESSAGE_AR, {priority:100, repeat:3});
   }
 
   function fauchAlarme_demarrer(numTrain){
@@ -8953,15 +8955,7 @@ function checkPeacockHour(){
   }
 
   function pta_parlerArabeTroisFois(){
-    try{
-      if(!('speechSynthesis' in window)) return;
-      window.speechSynthesis.cancel();
-      for(let i=0;i<3;i++){
-        const u = new SpeechSynthesisUtterance(PTA_MESSAGE_AR);
-        u.lang = 'ar-SA'; u.rate = 0.95; u.pitch = 1;
-        window.speechSynthesis.speak(u);
-      }
-    }catch(e){}
+    window.__qtSpeak(PTA_MESSAGE_AR, {priority:100, repeat:3});
   }
 
   function pta_demarrer(entry, distTxt, impactTxt){
@@ -10107,7 +10101,7 @@ document.getElementById('toggleStationsBtn').click(); // نعرض كل المح�
   function closeFarhoumGenie(){
     var ov = document.getElementById('farhoumOverlay');
     if(ov) ov.classList.remove('show');
-    try{ if('speechSynthesis' in window) window.speechSynthesis.cancel(); }catch(e){}
+    window.__qtStop();
   }
   window.closeFarhoumGenie = closeFarhoumGenie;
 
@@ -10117,8 +10111,6 @@ document.getElementById('toggleStationsBtn').click(); // نعرض كل المح�
   var ovEl = document.getElementById('farhoumOverlay');
   if(ovEl) ovEl.addEventListener('click', function(e){ if(e.target === ovEl) closeFarhoumGenie(); });
 
-  var frhLastUtterance = null; // نُبقي مرجعاً حياً للنطق الحالي لتفادي توقفه المفاجئ في بعض المتصفحات
-
   function frhPickArabicVoice(){
     try{
       var voices = window.speechSynthesis.getVoices() || [];
@@ -10127,18 +10119,14 @@ document.getElementById('toggleStationsBtn').click(); // نعرض كل المح�
     }catch(e){ return null; }
   }
 
+  // طلب المستخدم: صوت فرحوم كان يتوقف عن الكلام كلياً أحياناً — السبب أن هذه الدالة كانت تنادي
+  // window.speechSynthesis.cancel() مباشرةً بمعزل عن كل الوحدات الأخرى في التطبيق (الإعلان، الإنذارات...)،
+  // فيتصادم مع نداءات cancel() الأخرى الجارية في نفس اللحظة ويتعطّل محرّك النطق. الآن يعبر من المنسّق المركزي.
   function frhDoSpeak(text, rate, pitch){
     try{
       if(!('speechSynthesis' in window)) return;
-      window.speechSynthesis.cancel();
-      try{ window.speechSynthesis.resume(); }catch(e){}
       setTimeout(function(){
-        var u = new SpeechSynthesisUtterance(text);
-        u.lang = 'ar-SA'; u.rate = rate; u.pitch = pitch; u.volume = 1;
-        var v = frhPickArabicVoice();
-        if(v) u.voice = v;
-        frhLastUtterance = u; // مرجع حيّ يمنع تجاهل بعض المتصفحات للنطق
-        window.speechSynthesis.speak(u);
+        window.__qtSpeak(text, {rate:rate, pitch:pitch, volume:1, voice:frhPickArabicVoice(), priority:80});
       }, 60);
     }catch(e){}
   }
@@ -10449,7 +10437,7 @@ document.getElementById('toggleStationsBtn').click(); // نعرض كل المح�
       return;
     }
 
-    try{ if('speechSynthesis' in window) window.speechSynthesis.cancel(); }catch(e){}
+    window.__qtStop();
     if(frhRecognition){ try{ frhRecognition.stop(); }catch(e){} }
     frhRecognition = new SR();
     frhRecognition.lang = 'ar-SA';
@@ -10559,7 +10547,7 @@ document.getElementById('toggleStationsBtn').click(); // نعرض كل المح�
     frhDangerDismissed = true;
     frhTestForce = false;
     hideFarhoumDanger();
-    try{ if('speechSynthesis' in window) window.speechSynthesis.cancel(); }catch(e){}
+    window.__qtStop();
   }
   window.dismissFarhoumDanger = dismissFarhoumDanger;
 
