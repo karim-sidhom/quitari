@@ -230,6 +230,25 @@ body{
 #kzLGhostBox.kzGhostAlarm{ animation:kzGhostPulse .8s infinite; }
 @keyframes kzGhostPulse{ 0%,100%{box-shadow:0 0 0 5px rgba(255,0,0,.95) inset;} 50%{box-shadow:0 0 0 14px rgba(255,0,0,.5) inset;} }
 
+/* ---------- إنذار ثالث مستقل تماماً: "تنبيه المقطع" — فكرة المستخدم: أنت قرب السكة (≤150م هندسياً من مسار حقيقي)
+   + SNCFT Live يؤكد قطاراً يعبر فعلاً بين أقرب محطتين معروفتين لموقعك (بحثاً عن الإحداثيات ديناميكياً عبر Nominatim
+   بدل الاعتماد فقط على قاموس STATIONS الثابت الذي لا يمكن أن يحوي كل المحطات/المحطات الصغيرة أبداً).
+   مستقل تماماً عن الإنذارين الآخرين: لا يقرأ ولا يعدّل متغيّراتهما، ويُعرض في شريط سفلي بلون كهرماني مميّز. ---------- */
+#segAlarmBanner{
+  position:fixed;left:0;right:0;bottom:0;z-index:10003;
+  background:linear-gradient(180deg,rgba(150,90,0,.97),rgba(60,30,0,.97));
+  display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+  padding:16px 14px calc(16px + env(safe-area-inset-bottom,0px));
+  animation:segAlarmPulse 0.9s infinite;
+  box-shadow:0 -4px 24px rgba(255,150,0,.6);
+  border-top:2px solid #ffb347;
+}
+@keyframes segAlarmPulse{0%,100%{background:linear-gradient(180deg,rgba(150,90,0,.97),rgba(60,30,0,.97))}50%{background:linear-gradient(180deg,rgba(210,130,0,.97),rgba(90,50,0,.97))}}
+#segAlarmBanner h2{font-size:19px;margin:0 0 8px;color:#ffe0b3;}
+#segAlarmBanner p{font-size:14px;margin:0 0 12px;line-height:1.7;color:#fff;max-width:520px;}
+#segAlarmBanner .btn{max-width:280px;background:#ff8c00;}
+#segAlarmGraceStatus{font-size:12px;margin-top:8px;opacity:.85;color:#ffe0b3;}
+
 .station-clock-wrap{display:flex;justify-content:center;align-items:center;gap:34px;margin:10px 0 4px;}
 .traffic-light{
   display:flex;flex-direction:column;gap:7px;padding:8px 6px;border-radius:14px;
@@ -1173,6 +1192,7 @@ var RADIO_TRACKS = [
     <div class="small-note" id="mapPickHint" style="display:none;color:var(--gold);font-weight:700;text-align:center;">👆 انقر الآن فوق نقطة على الخريطة أعلاه لتحديد محطة الانطلاق</div>
     <button class="btn secondary" id="fetchLinesBtn">🔄 تحميل خطوط السكة القريبة (Overpass)</button>
     <button class="btn secondary" id="toggleStationsBtn" style="margin-top:6px">🚉 عرض جميع المحطات</button>
+    <button class="btn secondary" id="toggleGeoStationsBtn" style="margin-top:6px;background:#0d3a66;border-color:#1e90ff">🔵 عرض المحطات المكتشفة (تنبيه المقطع)</button>
     <button class="btn secondary" id="toggleAllTrainsBtn" style="margin-top:6px">🚆 عرض كل القطارات الآن</button>
   </div>
 
@@ -1267,6 +1287,23 @@ var RADIO_TRACKS = [
         <div style="font-size:12px;color:#c7cbe0;margin-top:2px;opacity:.85;">لا يوجد قطار مؤكد عبر SNCFT Live قريب منك الآن</div>
       </div>
       <div id="kzLStopsList" style="width:100%;margin-top:14px;max-height:220px;overflow-y:auto;border-top:1px solid rgba(46,204,113,.3);padding-top:10px;"></div>
+    </div>
+  </div>
+
+  <!-- بطاقة عادية ضمن باقي الرُبريكات — لا تعويم ولا شاشة كاملة، تُعرض دائماً هنا كأي قسم آخر في الصفحة -->
+  <div class="card" id="segPositionCard" style="border-color:rgba(30,144,255,.35);">
+    <h3>🔵 تنبيه المقطع — موقعك بين المحطتين</h3>
+    <div id="segVizBox" style="margin-top:10px;border-radius:14px;overflow:hidden;background:#03101f;padding:3vh 3vw;">
+      <div style="display:flex;flex-direction:row;align-items:center;gap:8px;width:100%;">
+        <div id="segVizFromName" style="font-size:12px;font-weight:700;color:#1e90ff;text-align:center;flex:0 0 auto;max-width:90px;word-break:break-word;">--</div>
+        <div style="position:relative;height:40px;margin:0;flex:1 1 auto;min-width:40px;">
+          <div style="position:absolute;left:0;right:0;top:50%;height:5px;margin-top:-2.5px;background:repeating-linear-gradient(90deg,#1e90ff 0 8px, transparent 8px 14px);border-radius:4px;"></div>
+          <div id="segVizUser" style="position:absolute;top:50%;margin-top:-11px;z-index:5;font-size:22px;line-height:1;transition:right .5s linear;right:50%;">🧍</div>
+          <div id="segVizTrain" style="position:absolute;top:50%;margin-top:-13px;z-index:6;font-size:26px;line-height:1;display:none;transition:right .8s linear;right:0%;">🚆</div>
+        </div>
+        <div id="segVizToName" style="font-size:12px;font-weight:700;color:#bfe3ff;text-align:center;flex:0 0 auto;max-width:90px;word-break:break-word;">--</div>
+      </div>
+      <div id="segPositionSliceText" style="font-size:13px;color:#bfe3ff;text-align:center;margin-top:12px;">بانتظار تحديد الموقع...</div>
     </div>
   </div>
 
@@ -1519,6 +1556,14 @@ const GHOST_VIDEO_SRC = 'data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yY
   <p id="liveAlarmGraceStatus"></p>
 </div>
 
+<!-- إنذار "تنبيه المقطع": مستقل تماماً — أنت قرب السكة فعلياً (قياس هندسي) + SNCFT Live يؤكد قطاراً يعبر بين أقرب محطتين لك -->
+<div id="segAlarmBanner">
+  <h2>🛤️🚨 تنبيه المقطع (SNCFT Live)</h2>
+  <p id="segAlarmText">أنت قريب فعلياً من السكة، وقطار مؤكَّد الآن يعبر بين أقرب محطتين لموقعك!</p>
+  <button class="btn" onclick="dismissSegAlarm()">فهمت، أوقف صوت هذا الإنذار</button>
+  <p id="segAlarmGraceStatus"></p>
+</div>
+
 <div id="trainReminderOverlay">
   <h1>🔔 تذكير قِطاري</h1>
   <p id="trainReminderText"></p>
@@ -1661,7 +1706,17 @@ const STATIONS = {
   "Gobaa":[36.825,10.04074], "Gobaa Ville":[36.83079,10.02218],
   // Ligne E : Tunis - Bougatfa (été 2026) - coordonnées approximatives, à corriger via l'éditeur
   "Ennajah":[36.79386,10.1597], "Etayarane":[36.80592,10.13987], "Ezzouhour 2":[36.81114,10.11829],
-  "Elhrayria":[36.81748,10.09184], "Bougatfa":[36.82191,10.06175]
+  "Elhrayria":[36.81748,10.09184], "Bougatfa":[36.82191,10.06175],
+  // ---------- Alias orthographiques SNCFT Live (ajoutés après comparaison directe avec le flux proxy.php réel) ----------
+  // Ces gares existent déjà ci-dessus mais SNCFT Live utilise une orthographe différente que stationNamesMatch() ne
+  // reconnaît pas (espace en plus, lettre en moins/en trop) — on ajoute donc le nom EXACT envoyé par SNCFT Live comme
+  // clé séparée, pointant vers les MÊMES coordonnées que la gare correspondante, sans toucher aux clés existantes.
+  "BOU SALEM":[36.61116,8.96674], "BEN BACHIR":[36.56181,8.84419], "NASSEN":[36.82541,10.03798],
+  "ENFIDA":[36.12882,10.38278], "MANNOUBA":[36.81651,10.09841],
+  // ---------- Gares complètement absentes, trouvées dans le flux SNCFT Live réel mais inexistantes dans STATIONS ----------
+  // Coordonnées obtenues via recherche de lieu réelle (Google Places) — à vérifier/ajuster via l'éditeur si besoin
+  "Erriadh":[36.6994516,10.415136], "Bir El Bey":[36.7102676,10.3787702], "Bir Aniba":[36.7954484,10.1574953],
+  "Sousse Bab Jedid":[35.823063,10.6415928], "Bekalta":[35.615241,10.9893645], "Bou Arkoub":[36.5311356,10.5515796]
 };
 // خطوط سكة اصطناعية قصيرة تُضاف تلقائياً تحت أي محطة بعيدة عن أي خط سكة حقيقي (SNCFT أو Overpass)
 // الهدف: ضمان وجود سكة أسفل كل محطة دوماً، حتى لو كانت بيانات الخط الحقيقي غير مكتملة قرب تلك المحطة
@@ -2194,6 +2249,7 @@ async function fetchLiveTrains(){
     liveFetchAt = Date.now();
     saveOfflineSnapshot(); // حفظ محلي فوري: يتيح استئناف العمل من نفس النقطة لو انقطع الإنترنت لاحقاً أو أُغلق التطبيق
     updateLiveOnlyHistory(); // يحدّث سجل مراقبة القطارات الزرقاء (غير المجدولة) عند كل جلب ناجح، لكشف أي بيانات عالقة لاحقاً
+    queueMissingStationGeocodes(); // "تنبيه المقطع": يطلب إحداثيات أي محطة جديدة تظهر في البيانات المباشرة ولا وجود لها في STATIONS بعد
     if(typeof renderComparatif === 'function' && !comparatifHidden) renderComparatif(); // تحديث تلقائي لجداول "مقارن" عند كل جلب ناجح
     const dot=document.getElementById('liveDot'), txt=document.getElementById('liveStatusTxt');
     if(dot) dot.className='status-dot on';
@@ -2682,6 +2738,50 @@ document.getElementById('toggleStationsBtn').onclick = ()=>{
   if(stationsVisible){ stationsLayer.addTo(map); } else { map.removeLayer(stationsLayer); }
   updateToggleStationsLabel();
 };
+// ---------- عرض المحطات المكتشفة ديناميكياً عبر Nominatim (وحدة "تنبيه المقطع") — نقاط زرقاء، بنفس منطق الأزرق المستعمل للقطارات غير المجدولة ----------
+let geoStationsLayer = null, geoStationsVisible = false;
+function buildGeoStationsLayer(){
+  const layer = L.layerGroup();
+  Object.keys(geocodedStationsCache).forEach(name=>{
+    const c = geocodedStationsCache[name];
+    if(!c) return;
+    const icon = L.divIcon({
+      className:'geo-station-icon',
+      html:'<div style="width:16px;height:16px;border-radius:50%;background:#1e90ff;border:2px solid #fff;box-shadow:0 0 8px rgba(30,144,255,.9)"></div>',
+      iconSize:[16,16], iconAnchor:[8,8]
+    });
+    const marker = L.marker([c[0],c[1]],{icon}).bindPopup(`<b>🔵 ${escAttr(name)}</b><br>مكتشَفة ديناميكياً عبر Nominatim`);
+    marker.bindTooltip('🔵 '+escAttr(name), {permanent:true, direction:'top', offset:[0,-10], className:'train-label'});
+    layer.addLayer(marker);
+  });
+  return layer;
+}
+function updateToggleGeoStationsLabel(){
+  const btn = document.getElementById('toggleGeoStationsBtn');
+  const n = Object.keys(geocodedStationsCache).length;
+  btn.textContent = geoStationsVisible
+    ? `🔵 إخفاء المحطات المكتشفة (${n})`
+    : `🔵 عرض المحطات المكتشفة (${n})`;
+}
+// إعادة بناء الطبقة فوراً إن كانت ظاهرة حالياً — تُستدعى بعد كل اكتشاف ناجح لمحطة جديدة عبر Nominatim حتى تظهر مباشرة على الخريطة بلا حاجة لإعادة الضغط على الزر
+function refreshGeoStationsLayerIfVisible(){
+  updateToggleGeoStationsLabel();
+  if(!geoStationsVisible) return;
+  if(geoStationsLayer) map.removeLayer(geoStationsLayer);
+  geoStationsLayer = buildGeoStationsLayer();
+  geoStationsLayer.addTo(map);
+}
+document.getElementById('toggleGeoStationsBtn').onclick = ()=>{
+  geoStationsVisible = !geoStationsVisible;
+  if(geoStationsVisible){
+    geoStationsLayer = buildGeoStationsLayer();
+    geoStationsLayer.addTo(map);
+  } else if(geoStationsLayer){
+    map.removeLayer(geoStationsLayer);
+  }
+  updateToggleGeoStationsLabel();
+};
+updateToggleGeoStationsLabel(); // يعرض العدّاد الصحيح فوراً عند التحميل (قد يكون هناك محطات محفوظة من جلسة سابقة عبر localStorage)
 
 // ---------- عرض جميع القطارات النشطة الآن على الخريطة (يعيد استعمال trainPositionNow) ----------
 let allTrainsLayer = null;
@@ -5836,6 +5936,8 @@ function recalcAndDisplay(){
   }
   // إنذار إضافي مستقل تماماً: يعمل بالتوازي مع الإنذار أعلاه، بلا أي اعتماد عليه ولا تأثير منه أو عليه — انظر checkLiveOnlyAlarm أدناه
   checkLiveOnlyAlarm(result);
+  // إنذار ثالث مستقل تماماً: "تنبيه المقطع" (فكرة المستخدم) — انظر checkTrackSegmentAlarm أعلاه لتفاصيل المنطق
+  checkTrackSegmentAlarm();
   // المُعلن الصوتي للمسافة: يتكلم فوراً بمجرد أن تصل المسافة إلى 150م أو أقل، حسب أي وحدة من الوحدات الأربع (وليس بالضرورة كلها معاً) —
   // نفس منطق "لا قطارات شبح تُخفي خطراً حقيقياً" المعمول به في triggerAlert. يُعاد تصفير الإعلان فقط بعد خروج كل الوحدات من نطاق 150م
   const dist150Candidates = [result.dist, result.theoBest && result.theoBest.dist, result.liveAnyBest && result.liveAnyBest.dist]
@@ -6137,8 +6239,228 @@ window.dismissLiveAlarm=function(){
   }
   forceStopLiveAlarm();
 };
+
+// ================================================================================================
+// ---------- إنذار ثالث مستقل تماماً: "تنبيه المقطع" (فكرة المستخدم) ----------
+// المبدأ: بدل الاعتماد على قاموس STATIONS الثابت (الذي لن يحوي أبداً كل محطة/محطة صغيرة)، نبحث ديناميكياً
+// عن إحداثيات أي اسم محطة يصل من SNCFT Live عبر Nominatim (OpenStreetMap) — بديل مجاني بلا مفتاح API لما
+// يعادل "البحث في خرائط جوجل" الذي طلبه المستخدم، ومناسب لكونه بلا خادم خلفي (نشر GitHub Pages فقط).
+// المنطق: نحسب أقرب محطتين معروفتين (من STATIONS + من ذاكرة التخزين المؤقت للبحث الديناميكي) لموقع المستخدم
+// الفعلي، ثم نتحقق هل يوجد قطار EN_ROUTE مؤكَّد عبر SNCFT Live يعبر فعلياً بين هاتين المحطتين بالذات — بغض
+// النظر عن موقعه الدقيق بينهما (حتى لو كان على محطة صغيرة غير موجودة في أي قاموس). يُشترط أيضاً أن يكون
+// المستخدم قريباً هندسياً فعلاً من خط سكة حقيقي (≤150م) عبر snapToNearestTrack/nearestPointOnTrackCoords
+// الموجودتين أصلاً — بلا أي علاقة بالإنذارين الآخرين (لا يقرأ ولا يعدّل متغيّراتهما).
+// ================================================================================================
+let segAlarmActive=false, segSirenOsc=null;
+let segAlarmStationA=null, segAlarmStationB=null;
+let geocodedStationsCache = {};
+try{ geocodedStationsCache = JSON.parse(localStorage.getItem('segAlarmGeocodeCache')||'{}'); }catch(e){ geocodedStationsCache = {}; }
+function saveGeocodeCache(){ try{ localStorage.setItem('segAlarmGeocodeCache', JSON.stringify(geocodedStationsCache)); }catch(e){} }
+let geocodeQueue = [], geocodeInFlight = false;
+// طلب صريح من المستخدم: هذه الوحدة لا تتحقق أبداً من قاموس STATIONS الثابت (المكتوب يدوياً وقد يحوي أخطاء إملائية) —
+// تعتمد حصراً على ما اكتشفته بنفسها ديناميكياً عبر Nominatim، حتى لو كانت المحطة موجودة أصلاً في STATIONS
+function resolveGeocodedCoord(name){
+  for(const k in geocodedStationsCache){ if(stationNamesMatch(k,name)) return geocodedStationsCache[k]; }
+  return null;
+}
+// يضيف اسم محطة إلى طابور البحث الديناميكي فقط إن لم تكن نتيجته محفوظة مسبقاً في هذه الذاكرة المؤقتة الخاصة بالوحدة
+function queueGeocodeIfMissing(name){
+  if(!name) return;
+  if(resolveGeocodedCoord(name)) return;
+  if(geocodeQueue.includes(name)) return;
+  geocodeQueue.push(name);
+  processGeocodeQueue();
+}
+// يعالج الطابور بحد أقصى طلب واحد كل ~1.1 ثانية احتراماً لحد استعمال Nominatim المجاني (طلب واحد بالثانية)
+async function processGeocodeQueue(){
+  if(geocodeInFlight || geocodeQueue.length===0) return;
+  geocodeInFlight = true;
+  const name = geocodeQueue.shift();
+  try{
+    const q = encodeURIComponent(name+' gare train Tunisie');
+    const res = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=tn&q='+q, {headers:{'Accept-Language':'fr'}});
+    const data = await res.json();
+    if(Array.isArray(data) && data.length>0){
+      geocodedStationsCache[name] = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+      saveGeocodeCache();
+      if(typeof refreshGeoStationsLayerIfVisible==='function') refreshGeoStationsLayerIfVisible();
+    }
+  }catch(e){ console.warn('Nominatim geocode échoué pour', name, e.message); }
+  setTimeout(()=>{ geocodeInFlight=false; processGeocodeQueue(); }, 1100);
+}
+// يُستدعى بعد كل جلب ناجح لبيانات SNCFT Live: يجمع أسماء محطات كل قطار "en route" فعلياً الآن (وليس كل القطارات المعروضة)
+// ويطلب إحداثياتها عبر Nominatim مباشرة — بلا أي تحقق أو تقاطع مع قاموس STATIONS كما طلب المستخدم صراحةً
+function queueMissingStationGeocodes(){
+  liveTrains.forEach(lt=>{
+    if(!lt || lt.status!=='EN_ROUTE') return;
+    if(lt.curFr) queueGeocodeIfMissing(lt.curFr);
+    if(lt.nextFr) queueGeocodeIfMissing(lt.nextFr);
+  });
+}
+// كل المحطات المعروفة حالياً لهذه الوحدة تحديداً: فقط ما اكتُشف ديناميكياً عبر Nominatim، بلا أي مصدر آخر
+function allKnownStationsForSeg(){
+  return Object.keys(geocodedStationsCache).map(k=>({name:k, lat:geocodedStationsCache[k][0], lon:geocodedStationsCache[k][1]}));
+}
+// أقرب N محطة معروفة (ثابتة أو مكتشَفة) من موقع المستخدم الفعلي حالياً
+function nearestKnownStationsTo(pos, n){
+  return allKnownStationsForSeg()
+    .map(s=>({...s, dist:haversine(pos,[s.lat,s.lon])}))
+    .sort((a,b)=>a.dist-b.dist)
+    .slice(0,n);
+}
+// أقصر مسافة حقيقية بين المستخدم وأي خط سكة فعلي (SNCFT الرسمي أو OSM) — هندسية بحتة، بلا أي علاقة بأسماء المحطات
+function distanceToNearestTrack(lat,lon){
+  const pt=[lat,lon];
+  let best=Infinity;
+  allTrackLists().forEach(track=>{
+    const r = nearestPointOnTrackCoords(pt, track.coords);
+    if(r && r.dist<best) best=r.dist;
+  });
+  return best;
+}
+// الفحص الدوري الرئيسي لهذا الإنذار — يُستدعى في كل دورة تحديث GPS، بمعزل كامل عن الإنذارين الآخرين
+// يعرض دائماً موقع المستخدم بالنسبة لأقرب محطتين مكتشفتين ديناميكياً (إن وُجدتا) — بغض النظر تماماً عن تفعيل الإنذار من عدمه
+function updateUserBetweenGeoStations(){
+  const textEl = document.getElementById('segPositionSliceText');
+  const fromEl = document.getElementById('segVizFromName');
+  const toEl = document.getElementById('segVizToName');
+  const userEl = document.getElementById('segVizUser');
+  const trainEl = document.getElementById('segVizTrain');
+  if(!textEl) return;
+  if(!lastPos){
+    textEl.textContent='بانتظار تحديد الموقع...';
+    if(fromEl) fromEl.textContent='--'; if(toEl) toEl.textContent='--';
+    if(userEl) userEl.style.right='50%';
+    if(trainEl) trainEl.style.display='none';
+    return;
+  }
+  const nearest2 = nearestKnownStationsTo(lastPos, 2);
+  if(nearest2.length===0){
+    textEl.textContent='لا توجد محطات مكتشفة بعد';
+    if(fromEl) fromEl.textContent='--'; if(toEl) toEl.textContent='--';
+    if(userEl) userEl.style.right='50%';
+    if(trainEl) trainEl.style.display='none';
+    return;
+  }
+  if(nearest2.length===1){
+    textEl.textContent = 'قرب '+nearest2[0].name+' ('+formatDist(nearest2[0].dist)+')';
+    if(fromEl) fromEl.textContent = nearest2[0].name; if(toEl) toEl.textContent='--';
+    if(userEl) userEl.style.right='50%';
+    if(trainEl) trainEl.style.display='none';
+    return;
+  }
+  const [sA, sB] = nearest2;
+  if(fromEl) fromEl.textContent = sA.name;
+  if(toEl) toEl.textContent = sB.name;
+  textEl.textContent = 'بين '+sA.name+' ('+formatDist(sA.dist)+') و'+sB.name+' ('+formatDist(sB.dist)+')';
+  // موقعك التقريبي على الخط بين المحطتين، بناءً على نسبة المسافتين الحقيقيتين (نفس منطق right المستعمل في خط الزمن الأصلي أعلاه)
+  const total = sA.dist + sB.dist;
+  const ratio = total>0 ? (sA.dist/total)*100 : 50;
+  if(userEl) userEl.style.right = Math.min(94,Math.max(6,ratio))+'%';
+  // صورة القطار: تظهر فقط إن كان يوجد فعلاً قطار EN_ROUTE مؤكَّد عبر SNCFT Live يعبر هذا المقطع بالذات الآن — وإلا تبقى مخفية تماماً
+  const matched = liveTrains.find(lt=> lt && lt.status==='EN_ROUTE' &&
+    ((stationNamesMatch(lt.curFr, sA.name) && stationNamesMatch(lt.nextFr, sB.name)) ||
+     (stationNamesMatch(lt.curFr, sB.name) && stationNamesMatch(lt.nextFr, sA.name))) );
+  if(trainEl){
+    if(matched){
+      trainEl.style.display='block';
+      // نسبة تقدّم القطار الحقيقية بين المحطتين (prog من بيانات SNCFT Live نفسها) — تُعكس حسب اتجاه سيره
+      const prog = (typeof matched.prog==='number' && isFinite(matched.prog)) ? matched.prog : 50;
+      const trainGoingFromA = stationNamesMatch(matched.curFr, sA.name);
+      const trainRatio = trainGoingFromA ? prog : (100-prog);
+      trainEl.style.right = Math.min(94,Math.max(6,trainRatio))+'%';
+    } else {
+      trainEl.style.display='none';
+    }
+  }
+}
+function checkTrackSegmentAlarm(){
+  updateUserBetweenGeoStations(); // يُحدَّث في كل دورة، حتى لو لم يكن هناك أي خطر حالياً
+  if(!lastPos){ if(segAlarmActive) forceStopSegAlarm(); return; }
+  const distTrack = distanceToNearestTrack(lastPos[0], lastPos[1]);
+  const nearTrack = isFinite(distTrack) && distTrack<=RISK_THRESHOLD_M;
+  if(nearTrack){
+    const nearest = nearestKnownStationsTo(lastPos, 2);
+    if(nearest.length>=2){
+      const [sA, sB] = nearest;
+      const matched = liveTrains.find(lt=> lt && lt.status==='EN_ROUTE' &&
+        ((stationNamesMatch(lt.curFr, sA.name) && stationNamesMatch(lt.nextFr, sB.name)) ||
+         (stationNamesMatch(lt.curFr, sB.name) && stationNamesMatch(lt.nextFr, sA.name))) );
+      if(matched){
+        if(!segAlarmActive){
+          if(!isProximityAlertMuted()) triggerSegAlarm(sA, sB, matched);
+          else if(typeof fallbackMutedVibration==='function') fallbackMutedVibration();
+        } else {
+          segAlarmStationA=sA.name; segAlarmStationB=sB.name;
+          updateSegAlarmGraceStatusText();
+        }
+        return;
+      }
+    }
+  }
+  // لا تطابق حالياً (القطار غادر المقطع، أو ابتعد المستخدم عن السكة): إيقاف تلقائي فوري إن كان الإنذار فعّالاً
+  if(segAlarmActive) forceStopSegAlarm();
+}
+function triggerSegAlarm(sA, sB, matchedTrain){
+  segAlarmActive = true;
+  segAlarmStationA = sA.name; segAlarmStationB = sB.name;
+  const el = document.getElementById('segAlarmBanner'); if(el) el.style.display='flex';
+  const textEl = document.getElementById('segAlarmText');
+  if(textEl) textEl.innerHTML = 'أنت قريب من السكة، وقطار "'+(matchedTrain.name||matchedTrain.num||'')+'" مؤكَّد الآن بين محطتَي "'+sA.name+'" و"'+sB.name+'"!';
+  startSegSiren();
+  speakDanger150();
+  if(navigator.vibrate) navigator.vibrate([150,80,150,80,150,80,500]);
+}
+function updateSegAlarmGraceStatusText(){
+  const el = document.getElementById('segAlarmGraceStatus');
+  if(!el || !segAlarmActive) return;
+  el.textContent = '🔒 القطار لا يزال مؤكَّداً على مقطع "'+segAlarmStationA+' ↔ '+segAlarmStationB+'" الآن — سيتوقف الإنذار تلقائياً بمجرد خروج القطار من هذا المقطع أو ابتعادك عن السكة عن '+RISK_THRESHOLD_M+'م.';
+}
+function forceStopSegAlarm(){
+  segAlarmActive=false;
+  const el = document.getElementById('segAlarmBanner'); if(el) el.style.display='none';
+  stopSegSiren();
+  segAlarmStationA=null; segAlarmStationB=null;
+  const gEl = document.getElementById('segAlarmGraceStatus'); if(gEl) gEl.textContent='';
+}
+// نغمة مختلفة تماماً عن الإنذارين الآخرين (نوع sawtooth، ترددات مختلفة) لتمييز الأصوات الثلاثة عن بعضها لو عملت معاً
+function startSegSiren(){
+  if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+  if(audioCtx.state==='suspended'){ audioCtx.resume(); }
+  if(segSirenOsc) return;
+  segSirenOsc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  segSirenOsc.type='sawtooth';
+  gain.gain.value=0.32;
+  segSirenOsc.connect(gain).connect(audioCtx.destination);
+  segSirenOsc.start();
+  segSirenOsc._sweep = setInterval(()=>{
+    if(audioCtx.state==='suspended'){ audioCtx.resume(); }
+    const t=audioCtx.currentTime;
+    segSirenOsc.frequency.setValueAtTime(440,t);
+    segSirenOsc.frequency.linearRampToValueAtTime(700,t+0.35);
+    segSirenOsc.frequency.linearRampToValueAtTime(440,t+0.7);
+  },800);
+}
+function stopSegSiren(){
+  if(segSirenOsc){
+    if(segSirenOsc._sweep) clearInterval(segSirenOsc._sweep);
+    try{ segSirenOsc.stop(); }catch(e){}
+    segSirenOsc.disconnect();
+    segSirenOsc=null;
+  }
+}
+window.dismissSegAlarm=function(){
+  checkTrackSegmentAlarm(); // إعادة تحقق فورية: قد يكون القطار غادر المقطع فعلاً منذ آخر دورة، فيتوقف الإنذار من تلقاء نفسه هنا
+  if(segAlarmActive){
+    if(navigator.vibrate) navigator.vibrate([80,40,80]);
+    updateSegAlarmGraceStatusText();
+    return;
+  }
+};
 // يعرض الثلاث وحدات كل واحدة بمفردها (نسبة خطر + قطار + مسافة) — بدون أي دمج بينها، حتى يرى المستخدم فعلياً كل الوحدات الثلاث في نفس الوقت
 function renderModulesPanel(modules){
+
   if(!modules) return;
   modules.forEach((m,i)=>{
     const row = document.getElementById('modRow'+i), val = document.getElementById('modVal'+i);
