@@ -51,6 +51,26 @@ body{
 .ornament.tl{top:6px;right:6px}.ornament.tr{top:6px;left:6px;animation-direction:reverse}
 @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
 
+/* عسكري بلباس أزرق وطربوش أحمر يمشي يمين ويسار (أمام الكلمة "الحالة") — طلب المستخدم */
+.tarboosh-guard-wrap{display:inline-block;width:34px;height:34px;position:relative;overflow:visible;vertical-align:middle;}
+.tarboosh-guard{position:absolute;top:0;width:26px;height:34px;animation:tgPace 2.6s ease-in-out infinite;}
+@keyframes tgPace{
+  0%{left:0; transform:scaleX(1);}
+  48%{left:22px; transform:scaleX(1);}
+  50%{left:22px; transform:scaleX(-1);}
+  98%{left:0; transform:scaleX(-1);}
+  100%{left:0; transform:scaleX(1);}
+}
+.tarboosh-guard .tg-leg{animation:tgWalk .32s steps(2) infinite;transform-origin:15px 30px;}
+.tarboosh-guard .tg-leg-r{animation-delay:.16s;}
+@keyframes tgWalk{0%{transform:rotate(-14deg)}50%{transform:rotate(14deg)}100%{transform:rotate(-14deg)}}
+@keyframes statusSummaryBlink{0%,100%{opacity:1}50%{opacity:.6}}
+.status-light{width:11px;height:11px;border-radius:50%;display:inline-block;margin:0 4px;background:#2ecc71;box-shadow:0 0 7px #2ecc71;animation:statusLightBlink 1.8s ease-in-out infinite;}
+.status-light:nth-child(2){animation-delay:.3s;}
+.status-light:nth-child(3){animation-delay:.6s;}
+@keyframes statusLightBlink{0%,100%{opacity:1}50%{opacity:.25}}
+.status-light.alert{background:#ff3b3b;box-shadow:0 0 9px #ff3b3b;}
+
 .card{
   background:var(--glass);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
   border:1px solid var(--glass-b);border-radius:18px;padding:16px;margin-bottom:14px;
@@ -1148,25 +1168,64 @@ var RADIO_TRACKS = [
     <div id="tripResult" style="margin-top:10px;"></div>
   </div>
 
-  <div class="card" id="statusCard" style="display:none">
-    <h3>📡 الحالة</h3>
+  <div class="card" id="statusCard">
+    <h3><span class="tarboosh-guard-wrap"><svg class="tarboosh-guard" viewBox="0 0 30 34" xmlns="http://www.w3.org/2000/svg">
+      <rect class="tg-leg tg-leg-l" x="11" y="22" width="4" height="11" rx="1.5" fill="#0d1a4a"/>
+      <rect class="tg-leg tg-leg-r" x="16" y="22" width="4" height="11" rx="1.5" fill="#0d1a4a"/>
+      <rect x="5" y="10" width="4" height="11" rx="2" fill="#16266e"/>
+      <rect x="21" y="10" width="4" height="11" rx="2" fill="#16266e"/>
+      <rect x="8" y="8" width="14" height="15" rx="3" fill="#1a2f7a"/>
+      <circle cx="15" cy="12" r="1" fill="#ffd700"/>
+      <circle cx="15" cy="15.5" r="1" fill="#ffd700"/>
+      <circle cx="15" cy="19" r="1" fill="#ffd700"/>
+      <circle cx="15" cy="5" r="5" fill="#e8b98a"/>
+      <path d="M9.5 3 h11 a1 1 0 0 1 1 1 v2.5 h-13 v-2.5 a1 1 0 0 1 1 -1 z" fill="#c0392b"/>
+      <line x1="15" y1="3" x2="15" y2="0.5" stroke="#111" stroke-width="1"/>
+      <circle cx="15" cy="0.3" r="1" fill="#111"/>
+    </svg></span> 📡 الحالة</h3>
+    <div id="statusLights" style="text-align:center;margin-top:6px;">
+      <span class="status-light"></span><span class="status-light"></span><span class="status-light"></span>
+    </div>
+    <div id="statusQuickSummary" class="small-note" style="color:#7ee787;border-color:#7ee787;font-size:18px;font-weight:900;text-align:center;animation:statusSummaryBlink 2.2s ease-in-out infinite;"></div>
+    <button class="btn secondary" id="statusDetailsToggle" style="margin-top:6px;">🔎 المزيد من التفاصيل</button>
+    <div id="statusDetailsWrap" style="display:none;margin-top:6px;">
     <div class="row"><span>GPS <span class="status-dot off" id="gpsDot"></span></span><b id="gpsAcc">--</b></div>
     <div class="row"><span>📍 موقعك بالنسبة للمحطات</span><b id="userBetweenStations">--</b></div>
     <div id="segmentSafeInfo" class="small-note" style="color:#7ee787;border-color:#7ee787"></div>
-    <div class="row"><span>أقرب قطار (مؤكد SNCFT Live فقط)</span><b id="nearLine">--</b></div>
-    <div id="neverCloseNote" class="small-note" style="display:none;color:#7ee787;border-color:#7ee787"></div>
-    <div class="row"><span>رقم القطار</span><b id="nearTrainNum">--</b></div>
-    <div class="row"><span>المسافة إلى القطار</span><b id="distTrain">--</b></div>
-    <div class="row"><span>📌 موقع القطار الآن</span><b id="nearTrainCurPos">--</b></div>
-    <div class="row"><span>انطلق من</span><b id="nearTrainDep">--</b></div>
-    <div id="catchTrainNote" class="small-note" style="display:none;color:var(--gold);border-color:var(--gold)"></div>
-    <div class="row"><span>الوصول المقدر</span><b id="nearTrainArr">--</b></div>
-    <div class="small-note" id="nearTrainAllStops" style="display:none"></div>
-    <div class="row"><span>اتجاه القطار</span><b id="trainDirection">--</b></div>
+    <div class="line-item" id="train1Box" style="background:rgba(255,215,0,.10);border-color:rgba(255,215,0,.4);">
+      <label style="color:var(--gold);font-weight:700;">🚂 أقرب قطار (مؤكد SNCFT Live فقط)</label>
+      <div class="row"><span>القطار</span><b id="nearLine">--</b></div>
+      <div id="neverCloseNote" class="small-note" style="display:none;color:#7ee787;border-color:#7ee787"></div>
+      <div class="row"><span>رقم القطار</span><b id="nearTrainNum">--</b></div>
+      <div class="row"><span>المسافة إلى القطار</span><b id="distTrain">--</b></div>
+      <div class="row"><span>📌 موقع القطار الآن</span><b id="nearTrainCurPos">--</b></div>
+      <div class="row"><span>انطلق من</span><b id="nearTrainDep">--</b></div>
+      <div id="catchTrainNote" class="small-note" style="display:none;color:var(--gold);border-color:var(--gold)"></div>
+      <div class="row"><span>الوصول المقدر</span><b id="nearTrainArr">--</b></div>
+      <div class="small-note" id="nearTrainAllStops" style="display:none"></div>
+      <div class="row"><span>اتجاه القطار</span><b id="trainDirection">--</b></div>
+    </div>
     <div class="row"><span>أقرب سكة حديدية</span><b id="nearTrack">--</b></div>
     <div class="row"><span>المسافة إلى السكة</span><b id="distTrack">--</b></div>
     <div class="row"><span>⏱️ منطقة آمنة لمدة</span><b id="safeTimeZone">--</b></div>
     <div class="row"><span>السرعة الحالية</span><b id="speedNow">--</b></div>
+    <div class="row" style="border:none;padding-top:14px;"><span style="font-weight:700;color:#bb8fce;">🚂 القطاران الثاني والثالث الأقرب</span></div>
+    <div id="otherTrainsPanel" style="margin-top:8px;border-radius:14px;overflow:hidden;background:#180a24;border:1px solid rgba(155,89,182,.4);padding:3vh 3vw;">
+      <div style="text-align:center;">
+        <div class="row" style="border:none;padding:3px 0"><span>🚂 القطار الثاني</span><b id="ot2Num" style="color:#bb8fce">--</b></div>
+        <div class="row" style="border:none;padding:3px 0"><span>انطلق من</span><b id="ot2Dep">--</b></div>
+        <div class="row" style="border:none;padding:3px 0"><span>الوصول إلى</span><b id="ot2Arr">--</b></div>
+        <div class="row" style="border:none;padding:3px 0"><span>المسافة</span><b id="ot2Dist">--</b></div>
+      </div>
+      <hr style="border:none;border-top:1px solid rgba(155,89,182,.3);margin:10px 0;">
+      <div style="text-align:center;">
+        <div class="row" style="border:none;padding:3px 0"><span>🚂 القطار الثالث</span><b id="ot3Num" style="color:#bb8fce">--</b></div>
+        <div class="row" style="border:none;padding:3px 0"><span>انطلق من</span><b id="ot3Dep">--</b></div>
+        <div class="row" style="border:none;padding:3px 0"><span>الوصول إلى</span><b id="ot3Arr">--</b></div>
+        <div class="row" style="border:none;padding:3px 0"><span>المسافة</span><b id="ot3Dist">--</b></div>
+      </div>
+    </div>
+    </div>
     <button class="btn" id="startBtn">▶️ تشغيل المراقبة</button>
   </div>
 
@@ -5293,6 +5352,39 @@ function computeRiskModule(userPos, positionFn, methodLabel){
   });
   return best;
 }
+// وحدة إضافية: بدل إرجاع أقرب قطار واحد فقط، تُرجع أقرب N قطارات — تجمع بين قطارات الجدول النظري (مصحَّحة بالتأخير عبر trainPositionNow)
+// وقطارات SNCFT Live غير الموجودة إطلاقاً في الجدول النظري (نفس منطق computeRiskModuleLiveAny)، حتى لا يُستبعد قطار حقيقي يسير الآن
+// لمجرد أنه غير مُدرج في trains[]. بلا أي شرط تأكيد إضافي. مستقلة تماماً عن computeRisk: لا تُغيّر الحساب الأصلي لأقرب قطار واحد.
+function computeTopConfirmedTrains(userPos, n){
+  const results = [];
+  trains.forEach(train=>{
+    const pos = trainPositionNow(train);
+    if(!pos) return;
+    const dist = haversine(userPos,[pos.lat,pos.lon]);
+    const delayTxt = pos.delayMin ? (' — متأخر '+pos.delayMin+' د') : '';
+    results.push({dist, risk: Math.round(Math.max(0, 1 - dist/RISK_THRESHOLD_M)*100),
+      lineName: train.name+' ('+pos.fromStation+' → '+pos.toStation+')'+delayTxt,
+      trainPos:{lat:pos.lat,lon:pos.lon}, trainId: train.name, method:'مصحَّح بالتأخير'});
+  });
+  // قطارات SNCFT Live غير الموجودة في الجدول النظري (renfort / غير مجدول) — تُضاف للترتيب نفسه بدل أن تُستبعد
+  if(isLiveDataFresh()){
+    liveTrains.forEach(lt=>{
+      if(!lt || !lt.num) return;
+      const matchedTrain = trains.find(t=>trainNumberMatches(t.name, lt.num));
+      if(matchedTrain) return; // موجود أصلاً أعلاه عبر trains.forEach، نتفادى التكرار
+      if(isLiveOnlyEntryStale(lt)) return;
+      const pos = liveOnlyTrainPosition(lt);
+      if(!pos) return;
+      const dist = haversine(userPos,[pos.lat,pos.lon]);
+      const delayTxt = pos.delayMin ? (' — متأخر '+pos.delayMin+' د') : '';
+      results.push({dist, risk: Math.round(Math.max(0, 1 - dist/RISK_THRESHOLD_M)*100),
+        lineName: 'قطار '+lt.num+' (غير موجود في الجدول النظري) ('+pos.fromStation+' → '+pos.toStation+')'+delayTxt,
+        trainPos:{lat:pos.lat,lon:pos.lon}, trainId:'LIVE-'+lt.num, method:'SNCFT Live كامل'});
+    });
+  }
+  results.sort((a,b)=>a.dist-b.dist);
+  return results.slice(0, n);
+}
 // الوحدة 4: تفحص بيانات SNCFT Live كما هي بالكامل — كل قطار مرصود فيها، حتى لو لم يكن موجوداً إطلاقاً بين قطاراتنا في الجدول النظري —
 // وتُرجع الأقرب منها فقط. مستقلة تماماً عن الوحدات الثلاث أعلاه (لا تشترط أي وجود مسبق في trains[])
 function computeRiskModuleLiveAny(userPos){
@@ -5675,6 +5767,17 @@ setInterval(checkTrainAlerts, 15000);
 
 // ---------- geolocation watch ----------
 document.getElementById('startBtn').onclick = startWatch;
+(function(){
+  const btn = document.getElementById('statusDetailsToggle');
+  const wrap = document.getElementById('statusDetailsWrap');
+  if(btn && wrap){
+    btn.addEventListener('click', function(){
+      const open = wrap.style.display !== 'none';
+      wrap.style.display = open ? 'none' : 'block';
+      btn.textContent = open ? '🔎 المزيد من التفاصيل' : '🔽 إخفاء التفاصيل';
+    });
+  }
+})();
 function startWatch(){
   if(!navigator.geolocation){ alert('الموقع الجغرافي غير مدعوم'); return; }
   unlockAudio();
@@ -5779,12 +5882,50 @@ function recalcAndDisplay(){
   // القطار الأقرب (بالاعتماد على موقعه الحقيقي المُقدّر من التوقيت) — لا يُعرض هنا إلا قطار مؤكد عبر SNCFT Live، أبداً قطار شبح مبني على الجدول فقط
   document.getElementById('nearLine').textContent = isFinite(result.dist) ? result.lineName+' — 🕒 آخر تحديث: '+liveRefreshTimeText()
     : (result.noLiveData ? 'لا تتوفر بيانات SNCFT Live الآن — لا يُعرض أي قطار' : 'لا يوجد قطار مؤكد قريب الآن');
+  // عرض القطارين الثاني والثالث — بلوك بسيط ببانو واحد بنفسجي، فيه غير 4 معلومات لكل قطار: رقم القطار، انطلق من، الوصول إلى، المسافة
+  function renderOtherTrain(prefix, tr){
+    const numEl = document.getElementById(prefix+'Num');
+    const depEl = document.getElementById(prefix+'Dep');
+    const arrEl = document.getElementById(prefix+'Arr');
+    const distEl = document.getElementById(prefix+'Dist');
+    if(!numEl) return;
+    if(!tr){
+      numEl.textContent = 'لا يوجد قطار حالياً';
+      depEl.textContent = '--'; arrEl.textContent = '--'; distEl.textContent = '--';
+      return;
+    }
+    numEl.textContent = tr.trainId || tr.lineName.split('(')[0].trim();
+    distEl.textContent = formatDist(tr.dist);
+    const nearTrain = trains.find(t=>t.name===tr.trainId);
+    const stops = nearTrain ? parseStops(nearTrain.stopsText).filter(s=>!s.unknown && s.time) : [];
+    if(stops.length>=2){
+      const first=stops[0], last=stops[stops.length-1];
+      const delayMin = getLiveDelayForTrain(nearTrain) || 0;
+      const estArr = delayMin ? minsToHHMM(minutesOf(last.time)+delayMin) : last.time;
+      depEl.textContent = first.name+' ('+first.time+')';
+      arrEl.textContent = last.name+' ('+estArr+')';
+    } else if(tr.fromStation || tr.toStation){
+      depEl.textContent = tr.fromStation || '--';
+      arrEl.textContent = tr.toStation || '--';
+    } else {
+      depEl.textContent = '--'; arrEl.textContent = '--';
+    }
+  }
+  (function(){
+    const top3 = computeTopConfirmedTrains(lastPos, 3);
+    renderOtherTrain('ot2', top3[1]);
+    renderOtherTrain('ot3', top3[2]);
+  })();
   // موقعك بالنسبة للمحطات: بين أقرب محطتين، أو قرب محطة واحدة مباشرة إن كنت قريباً جداً منها
   const userBetweenEl = document.getElementById('userBetweenStations');
   const segEl = document.getElementById('segmentSafeInfo');
   if(userBetweenEl){
     const nearest2 = nearestUsedStations(lastPos, 2);
-    if(nearest2.length===0){ userBetweenEl.textContent='--'; if(segEl) segEl.textContent=''; }
+    const summaryEl = document.getElementById('statusQuickSummary');
+    if(nearest2.length===0){
+      userBetweenEl.textContent='--'; if(segEl) segEl.textContent='';
+      if(summaryEl) summaryEl.textContent = '⏳ جارٍ تحديد موقعك...';
+    }
     else {
       const closeEnough = nearest2.length===1 || nearest2[0].dist<=250;
       if(closeEnough){
@@ -5800,16 +5941,24 @@ function recalcAndDisplay(){
           const minsLeft = (nextSeg.time - Date.now())/60000;
           const isTomorrow = nextSeg.time > todayAt('23:59').getTime();
           const dayTxt = isTomorrow ? 'غداً' : 'اليوم';
-          if(minsLeft <= 15){
+          const isAlert = minsLeft <= 15;
+          if(isAlert){
             segEl.style.color='#ff8888'; segEl.style.borderColor='#ff8888';
             segEl.textContent = '⚠️ قطار خلال '+formatHoursMinutes(minsLeft)+' — عند محطة '+nextSeg.matchedStation+' (الساعة '+nextSeg.stationTime+' '+dayTxt+')';
           } else {
             segEl.style.color='#7ee787'; segEl.style.borderColor='#7ee787';
             segEl.textContent = '🚫 لا يوجد قطار في هذا القطاع حتى الساعة '+nextSeg.stationTime+' '+dayTxt+' ('+formatHoursMinutes(minsLeft)+' من الآن)';
           }
+          document.querySelectorAll('#statusLights .status-light').forEach(l=>l.classList.toggle('alert', isAlert));
         } else {
           segEl.style.color='#7ee787'; segEl.style.borderColor='#7ee787';
           segEl.textContent = '🚫 لا يوجد أي قطار مجدول عبر هذا القطاع.';
+          document.querySelectorAll('#statusLights .status-light').forEach(l=>l.classList.remove('alert'));
+        }
+        if(summaryEl){
+          summaryEl.textContent = segEl.textContent;
+          summaryEl.style.color = segEl.style.color;
+          summaryEl.style.borderColor = segEl.style.borderColor;
         }
       }
     }
