@@ -6321,6 +6321,33 @@ function distanceToNearestTrack(lat,lon){
   });
   return best;
 }
+// ---------- أولوية جديدة (بطلب صريح من المستخدم): استعمال محطتَي SNCFT Live نفسهما (curFr/nextFr) مباشرة ----------
+// المبدأ: SNCFT Live يعطي أصلاً لكل قطار EN_ROUTE اسم "آخر محطة" و"المحطة التالية" جاهزتين — لا داعي لانتظار
+// Nominatim لتحديد أقرب محطتين لموقع المستخدم بالتخمين الهندسي البحت. نأخذ إحداثيات هاتين المحطتين (من STATIONS
+// الثابت أولاً، ثم من ذاكرة Nominatim كاحتياط) ونحسب أقرب قطعة خط (بين محطتَي كل قطار EN_ROUTE) لموقع المستخدم؛
+// الأقرب هي المقطع المعروض. Nominatim/nearestKnownStationsTo يبقى فقط احتياطياً إن لم نجد أي قطار بإحداثيات معروفة.
+function coordForStationName(name){
+  return resolveStationCoord(name) || resolveGeocodedCoord(name);
+}
+function findLiveConfirmedSegment(pos){
+  let best = null;
+  liveTrains.forEach(lt=>{
+    if(!lt || lt.status!=='EN_ROUTE' || !lt.curFr || !lt.nextFr) return;
+    const cA = coordForStationName(lt.curFr);
+    const cB = coordForStationName(lt.nextFr);
+    if(!cA || !cB) return; // نتجاهل هذا القطار إن لم نعرف بعد إحداثيات محطتيه (لا STATIONS ولا Nominatim)
+    const r = nearestPointOnTrackCoords(pos, [cA, cB]);
+    const dist = (r && isFinite(r.dist)) ? r.dist : Math.min(haversine(pos,cA), haversine(pos,cB));
+    if(!best || dist<best.dist){
+      best = {
+        train: lt, dist,
+        sA:{name:lt.curFr, lat:cA[0], lon:cA[1], dist:haversine(pos,cA)},
+        sB:{name:lt.nextFr, lat:cB[0], lon:cB[1], dist:haversine(pos,cB)}
+      };
+    }
+  });
+  return best;
+}
 // الفحص الدوري الرئيسي لهذا الإنذار — يُستدعى في كل دورة تحديث GPS، بمعزل كامل عن الإنذارين الآخرين
 // يعرض دائماً موقع المستخدم بالنسبة لأقرب محطتين مكتشفتين ديناميكياً (إن وُجدتا) — بغض النظر تماماً عن تفعيل الإنذار من عدمه
 function updateUserBetweenGeoStations(){
@@ -6337,7 +6364,9 @@ function updateUserBetweenGeoStations(){
     if(trainEl) trainEl.style.display='none';
     return;
   }
-  const nearest2 = nearestKnownStationsTo(lastPos, 2);
+  // أولوية جديدة: قطار EN_ROUTE مؤكَّد بإحداثيات محطتيه (curFr/nextFr) معروفتين — بلا انتظار Nominatim
+  const liveSeg = findLiveConfirmedSegment(lastPos);
+  const nearest2 = liveSeg ? [liveSeg.sA, liveSeg.sB] : nearestKnownStationsTo(lastPos, 2);
   if(nearest2.length===0){
     textEl.textContent='لا توجد محطات مكتشفة بعد';
     if(fromEl) fromEl.textContent='--'; if(toEl) toEl.textContent='--';
@@ -6383,22 +6412,29 @@ function checkTrackSegmentAlarm(){
   const distTrack = distanceToNearestTrack(lastPos[0], lastPos[1]);
   const nearTrack = isFinite(distTrack) && distTrack<=RISK_THRESHOLD_M;
   if(nearTrack){
-    const nearest = nearestKnownStationsTo(lastPos, 2);
-    if(nearest.length>=2){
-      const [sA, sB] = nearest;
-      const matched = liveTrains.find(lt=> lt && lt.status==='EN_ROUTE' &&
-        ((stationNamesMatch(lt.curFr, sA.name) && stationNamesMatch(lt.nextFr, sB.name)) ||
-         (stationNamesMatch(lt.curFr, sB.name) && stationNamesMatch(lt.nextFr, sA.name))) );
-      if(matched){
-        if(!segAlarmActive){
-          if(!isProximityAlertMuted()) triggerSegAlarm(sA, sB, matched);
-          else if(typeof fallbackMutedVibration==='function') fallbackMutedVibration();
-        } else {
-          segAlarmStationA=sA.name; segAlarmStationB=sB.name;
-          updateSegAlarmGraceStatusText();
-        }
-        return;
+    // أولوية جديدة: قطار EN_ROUTE مؤكَّد بإحداثيات محطتيه (curFr/nextFr) معروفتين — بلا انتظار Nominatim
+    const liveSeg = findLiveConfirmedSegment(lastPos);
+    let sA, sB, matched;
+    if(liveSeg){
+      sA = liveSeg.sA; sB = liveSeg.sB; matched = liveSeg.train;
+    } else {
+      const nearest = nearestKnownStationsTo(lastPos, 2);
+      if(nearest.length>=2){
+        sA = nearest[0]; sB = nearest[1];
+        matched = liveTrains.find(lt=> lt && lt.status==='EN_ROUTE' &&
+          ((stationNamesMatch(lt.curFr, sA.name) && stationNamesMatch(lt.nextFr, sB.name)) ||
+           (stationNamesMatch(lt.curFr, sB.name) && stationNamesMatch(lt.nextFr, sA.name))) );
       }
+    }
+    if(matched && sA && sB){
+      if(!segAlarmActive){
+        if(!isProximityAlertMuted()) triggerSegAlarm(sA, sB, matched);
+        else if(typeof fallbackMutedVibration==='function') fallbackMutedVibration();
+      } else {
+        segAlarmStationA=sA.name; segAlarmStationB=sB.name;
+        updateSegAlarmGraceStatusText();
+      }
+      return;
     }
   }
   // لا تطابق حالياً (القطار غادر المقطع، أو ابتعد المستخدم عن السكة): إيقاف تلقائي فوري إن كان الإنذار فعّالاً
