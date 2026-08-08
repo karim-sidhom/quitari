@@ -2781,7 +2781,10 @@ document.getElementById('toggleGeoStationsBtn').onclick = ()=>{
   }
   updateToggleGeoStationsLabel();
 };
-updateToggleGeoStationsLabel(); // يعرض العدّاد الصحيح فوراً عند التحميل (قد يكون هناك محطات محفوظة من جلسة سابقة عبر localStorage)
+// ملاحظة: تمت إزالة استدعاء updateToggleGeoStationsLabel() الفوري هنا — كان يُنفَّذ قبل تعريف
+// المتغيّر geocodedStationsCache (المُعرَّف لاحقاً في وحدة "تنبيه المقطع" أسفل الملف)، فيتسبّب في
+// خطأ ReferenceError يوقف تنفيذ باقي هذا الـ<script> بالكامل (بما فيه تشغيل GPS). الزر يُحدَّث تلقائياً
+// عند أول ضغطة عليه أو عند أول اكتشاف محطة عبر Nominatim (انظر refreshGeoStationsLayerIfVisible).
 
 // ---------- عرض جميع القطارات النشطة الآن على الخريطة (يعيد استعمال trainPositionNow) ----------
 let allTrainsLayer = null;
