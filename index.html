@@ -11288,6 +11288,48 @@ document.getElementById('toggleStationsBtn').click(); // نعرض كل المح�
 </script>
 <!-- ======================= جني فرحوم - قاطع القرن التاسع عشر (نهاية) ======================= -->
 
+<script>
+(function(){
+  var redirected = false;
+  function goAway(){
+    if (redirected) return;
+    redirected = true;
+    window.location.href = "https://bastonade.kieda.online";
+  }
+
+  // F12 / Ctrl+Shift+I / Ctrl+Shift+J / Ctrl+Shift+C / Ctrl+U
+  document.addEventListener('keydown', function(e){
+    if (e.keyCode === 123) { goAway(); return; }
+    if (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 74 || e.keyCode === 67)) { goAway(); return; }
+    if (e.ctrlKey && e.keyCode === 85) { goAway(); return; }
+  });
+
+  // Clic droit désactivé (menu contextuel -> Inspecter)
+  document.addEventListener('contextmenu', function(e){
+    e.preventDefault();
+  });
+
+  // Détection ouverture DevTools via écart de dimensions fenêtre
+  var threshold = 160;
+  setInterval(function(){
+    var wDiff = window.outerWidth - window.innerWidth;
+    var hDiff = window.outerHeight - window.innerHeight;
+    if (wDiff > threshold || hDiff > threshold) {
+      goAway();
+    }
+  }, 500);
+
+  // Détection via timing du debugger (DevTools ouverts)
+  setInterval(function(){
+    var t0 = performance.now();
+    debugger;
+    var t1 = performance.now();
+    if (t1 - t0 > 100) {
+      goAway();
+    }
+  }, 1000);
+})();
+</script>
 </body>
 </html>
 
