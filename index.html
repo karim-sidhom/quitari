@@ -275,18 +275,18 @@ body{
    مستقل تماماً عن الإنذارين الآخرين: لا يقرأ ولا يعدّل متغيّراتهما، ويُعرض في شريط سفلي بلون كهرماني مميّز. ---------- */
 #segAlarmBanner{
   position:fixed;left:0;right:0;bottom:0;z-index:10003;
-  background:linear-gradient(180deg,rgba(150,90,0,.97),rgba(60,30,0,.97));
+  background:#c40000;
   display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;
   padding:16px 14px calc(16px + env(safe-area-inset-bottom,0px));
-  animation:segAlarmPulse 0.9s infinite;
-  box-shadow:0 -4px 24px rgba(255,150,0,.6);
-  border-top:2px solid #ffb347;
+  animation:segAlarmPulse 0.5s steps(1) infinite;
+  box-shadow:0 -4px 30px rgba(255,0,0,.85);
+  border-top:3px solid #ff3b3b;
 }
-@keyframes segAlarmPulse{0%,100%{background:linear-gradient(180deg,rgba(150,90,0,.97),rgba(60,30,0,.97))}50%{background:linear-gradient(180deg,rgba(210,130,0,.97),rgba(90,50,0,.97))}}
-#segAlarmBanner h2{font-size:19px;margin:0 0 8px;color:#ffe0b3;}
+@keyframes segAlarmPulse{0%,49%{background:#ff1a1a;box-shadow:0 -4px 34px rgba(255,0,0,.95)}50%,100%{background:#3a0000;box-shadow:0 -4px 10px rgba(255,0,0,.3)}}
+#segAlarmBanner h2{font-size:19px;margin:0 0 8px;color:#fff;}
 #segAlarmBanner p{font-size:14px;margin:0 0 12px;line-height:1.7;color:#fff;max-width:520px;}
 #segAlarmBanner .btn{max-width:280px;background:#ff8c00;}
-#segAlarmGraceStatus{font-size:12px;margin-top:8px;opacity:.85;color:#ffe0b3;}
+#segAlarmGraceStatus{font-size:12px;margin-top:8px;opacity:.85;color:#ffd6d6;}
 
 .station-clock-wrap{display:flex;justify-content:center;align-items:center;gap:34px;margin:10px 0 4px;}
 .traffic-light{
@@ -2268,12 +2268,41 @@ function parseStops(stopsText){
 
 // ---------- SNCFT بيانات مباشرة (فقط لكشف التأخير على الخط، لا تغيّر شيئاً في محرك التوقيت v8) ----------
 const SNCFT_LIVE_URL = 'https://www.sncft.com.tn/wp-content/plugins/sncft-live-tracker/proxy.php';
+// نفس المجلد بالضبط الذي يستعمله proxy.php — يُرجع القائمة الكاملة الحقيقية لكل محطات قطار واحد بالذات (id) مع Prévu/Réel لكل محطة
+// (مصدر: onglet Network على sncft.com.tn/suivi-train/ نفسه — طلب details.php?id=... يُطلق بعد اختيار قطار معيّن)
+const SNCFT_DETAILS_URL = 'https://www.sncft.com.tn/wp-content/plugins/sncft-live-tracker/details.php';
+let trainDetailsCache = {}; // id -> {at, stops:[{name, plan, forecast, actual}]}
+const TRAIN_DETAILS_MAX_AGE_MS = 45*1000; // نعيد الجلب كل 45 ثانية كحد أقصى لكل قطار (لا داعي لأكثر، والتوقيت يتغيّر ببطء)
 let liveTrains = [];
 let liveFetchOk = false;
 let liveFetchTimer = null;
 let liveFetchAt = 0; // وقت آخر جلب ناجح للبيانات المباشرة (ms) — يُستعمل لمنع استعمال بيانات قديمة (مثلاً من الأمس)
 const LIVE_DATA_MAX_AGE_MS = 90*1000; // بعد 90 ثانية بدون تحديث ناجح، تُعتبر البيانات منتهية الصلاحية ولا تُستعمل إطلاقاً
 const MAX_STALE_DELAY_BUFFER_MIN = 10; // إن تجاوز الوقت الحالي توقيت المحطة المرصودة بأكثر من هذا الهامش، فالقطار قطعاً مرّ من هناك فعلاً — الخبر أصبح بلا فائدة ويُهمَل
+// يجلب القائمة الحقيقية الكاملة لمحطات قطار واحد بالذات (id مأخوذ من نفس بيانات proxy.php) — بها Prévu (PLAN_ARRIVAL) وReel/Statut (FORECAST_ARRIVAL)
+// هذا بالضبط ما يستعمله موقع SNCFT نفسه (suivi-train) عند اختيار قطار — وليس تخميناً أو محطات مضافة يدوياً
+async function fetchTrainDetails(id){
+  if(!id) return null;
+  const cached = trainDetailsCache[id];
+  if(cached && (Date.now()-cached.at) < TRAIN_DETAILS_MAX_AGE_MS) return cached.stops;
+  try{
+    const res = await fetch(SNCFT_DETAILS_URL+'?id='+encodeURIComponent(id), {cache:'no-store'});
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const data = await res.json();
+    if(!Array.isArray(data)) throw new Error('réponse inattendue');
+    const stops = data.map(d=>({
+      name: d.LOC_NAME,
+      plan: d.PLAN_ARRIVAL || d.PLAN_DEPARTURE || null,
+      forecast: d.FORECAST_ARRIVAL || d.ACTUAL_ARRIVAL || null,
+      actual: d.ACTUAL_ARRIVAL || null
+    })).filter(s=>s.name && s.plan);
+    trainDetailsCache[id] = {at:Date.now(), stops};
+    return stops;
+  }catch(e){
+    console.warn('SNCFT details.php fetch échoué pour id='+id+':', e.message);
+    return (cached ? cached.stops : null); // نستعمل آخر نسخة معروفة (حتى لو قديمة قليلاً) بدل عدم عرض شيء إطلاقاً
+  }
+}
 
 // ---------- استمرارية دون اتصال: حفظ آخر حالة معروفة على الهاتف واستعادتها فوراً عند فتح التطبيق ----------
 // الهدف: لو انقطع الإنترنت (أو أُغلق التطبيق أثناء الانقطاع)، يواصل قِطاري العمل بآخر بيانات محفوظة محلياً
@@ -6604,7 +6633,7 @@ function findLiveConfirmedSegment(pos){
     const dist = (r && isFinite(r.dist)) ? r.dist : Math.min(haversine(pos,cA), haversine(pos,cB));
     if(!best || dist<best.dist){
       best = {
-        train: lt, dist,
+        train: lt, dist, id: lt.id,
         sA:{name:lt.curFr, lat:cA[0], lon:cA[1], dist:haversine(pos,cA)},
         sB:{name:lt.nextFr, lat:cB[0], lon:cB[1], dist:haversine(pos,cB)}
       };
@@ -6632,6 +6661,42 @@ function updateUserBetweenGeoStations(){
   // بطلب المستخدم: لا نثق في محطتَي هذا القطاع المؤكَّد إلا إذا كانتا فعلاً من ضمن نفس محطتَي "📍 موقعك بالنسبة للمحطات" أعلاه —
   // إن لم تتطابقا (قطار EN_ROUTE بعيد جغرافياً عن أقرب محطتين حقيقيتين لموقعك)، نستعمل مباشرة نفس محطتَي القسم أعلاه بدل ذلك
   const liveSeg = findLiveConfirmedSegment(lastPos);
+  // ---------- أولوية قصوى فعلية (بطلب صريح من المستخدم): القائمة الحقيقية الكاملة لمحطات هذا القطار بالذات، من details.php ----------
+  // نفس ما يعرضه موقع SNCFT نفسه (suivi-train) عند اختيار قطار — كل محطاته الحقيقية (بما فيها الصغيرة) مع Prévu/Réel الحقيقيَين
+  if(liveSeg && liveSeg.id){
+    fetchTrainDetails(liveSeg.id); // تحديث/تسخين الذاكرة المؤقتة (غير معطِّل — تُستعمل النتيجة في الدورة الحالية إن كانت متوفرة أصلاً، أو الدورة القادمة)
+    const cached = trainDetailsCache[liveSeg.id];
+    if(cached && cached.stops && cached.stops.length>=2){
+      const resolved = cached.stops.map(s=>{
+        const c = coordForStationName(s.name);
+        if(!c) queueGeocodeIfMissing(s.name); // نطلب إحداثيات أي محطة صغيرة غير معروفة بعد (نفس آلية Nominatim الموجودة أصلاً)
+        return {...s, lat:c?c[0]:null, lon:c?c[1]:null};
+      }).filter(s=>s.lat!=null);
+      if(resolved.length>=2){
+        // أقرب محطتين حقيقيتين (من هذه القائمة الكاملة بالذات) لموقع المستخدم — وليس تخميناً هندسياً عاماً
+        const withDist = resolved.map(s=>({...s, dist:haversine(lastPos,[s.lat,s.lon])})).sort((a,b)=>a.dist-b.dist);
+        const [dA, dB] = withDist;
+        if(fromEl) fromEl.textContent = dA.name;
+        if(toEl) toEl.textContent = dB.name;
+        textEl.textContent = 'بين '+dA.name+' ('+formatDist(dA.dist)+') و'+dB.name+' ('+formatDist(dB.dist)+') — القطار '+(liveSeg.train.num||'')+' ('+liveSeg.train.name+')';
+        const total = dA.dist+dB.dist;
+        const ratio = total>0 ? (dA.dist/total)*100 : 50;
+        if(userEl) userEl.style.right = Math.min(94,Math.max(6,ratio))+'%';
+        if(trainEl){
+          trainEl.style.display='block';
+          // موقع القطار: نسبة زمنية بين توقيت Réel/Statut (FORECAST_ARRIVAL) الحقيقيين للمحطتين — من details.php نفسه، لا تخمين
+          const nowD = new Date(); const nowM = nowD.getHours()*60+nowD.getMinutes();
+          const timeOf = s => { const t=s.forecast||s.plan; return t?minutesOf(t):null; };
+          const tA = timeOf(dA), tB = timeOf(dB);
+          let frac = 0.5;
+          if(tA!=null && tB!=null && tA!==tB) frac = Math.min(1,Math.max(0,(nowM-Math.min(tA,tB))/Math.abs(tB-tA)));
+          const trainRatio = (tA!=null && tB!=null && tA<=tB) ? (100-frac*100) : (frac*100);
+          trainEl.style.right = Math.min(94,Math.max(6,trainRatio))+'%';
+        }
+        return;
+      }
+    }
+  }
   const mainNearest2 = nearestUsedStations(lastPos, 2);
   let nearest2;
   if(liveSeg){
@@ -6707,7 +6772,7 @@ function checkTrackSegmentAlarm(){
     }
     if(matched && sA && sB){
       if(!segAlarmActive){
-        if(!isProximityAlertMuted()) triggerSegAlarm(sA, sB, matched);
+        if(!isProximityAlertMuted()) triggerSegAlarm(sA, sB, matched, distTrack);
         else if(typeof fallbackMutedVibration==='function') fallbackMutedVibration();
       } else {
         segAlarmStationA=sA.name; segAlarmStationB=sB.name;
@@ -6719,14 +6784,24 @@ function checkTrackSegmentAlarm(){
   // لا تطابق حالياً (القطار غادر المقطع، أو ابتعد المستخدم عن السكة): إيقاف تلقائي فوري إن كان الإنذار فعّالاً
   if(segAlarmActive) forceStopSegAlarm();
 }
-function triggerSegAlarm(sA, sB, matchedTrain){
+function triggerSegAlarm(sA, sB, matchedTrain, distTrack){
   segAlarmActive = true;
   segAlarmStationA = sA.name; segAlarmStationB = sB.name;
   const el = document.getElementById('segAlarmBanner'); if(el) el.style.display='flex';
   const textEl = document.getElementById('segAlarmText');
   if(textEl) textEl.innerHTML = 'أنت قريب من السكة، وقطار "'+(matchedTrain.name||matchedTrain.num||'')+'" مؤكَّد الآن بين محطتَي "'+sA.name+'" و"'+sB.name+'"!';
   startSegSiren();
-  speakDanger150();
+  // طلب المستخدم: رسالة مباشرة وبسيطة تذكر أن القطار وصل المحطة السابقة مباشرة وأنه على بعد بضع مئات من الأمتار منك
+  const distTxt = (isFinite(distTrack) ? Math.round(distTrack) : Math.round(Math.min(sA.dist||9999,sB.dist||9999)));
+  // طلب المستخدم: نفس التحذير بثلاث لغات تباعاً (عربي تونسي، فرنسي، إنجليزي) — كل واحدة بعد انتهاء التي قبلها مباشرة
+  const arTxt = 'احذر! القطر وصل للمحطة اللي قبلك، وتوّه على بعد '+distTxt+' متر منك برك. اخرج من السكة توّا، اخرج من السكة توّا!';
+  const frTxt = 'Attention ! Le train a atteint la gare précédente, il est à seulement '+distTxt+' mètres de toi. Quitte la voie tout de suite, quitte la voie tout de suite !';
+  const enTxt = 'Warning! The train has reached the previous station, it is only '+distTxt+' meters from you. Get off the tracks now, get off the tracks now!';
+  window.__qtSpeak(arTxt, {rate:0.8, pitch:0.55, priority:100, lang:'ar-TN', onend:function(){
+    window.__qtSpeak(frTxt, {rate:0.85, pitch:0.55, priority:100, lang:'fr-FR', onend:function(){
+      window.__qtSpeak(enTxt, {rate:0.85, pitch:0.55, priority:100, lang:'en-US'});
+    }});
+  }});
   if(navigator.vibrate) navigator.vibrate([150,80,150,80,150,80,500]);
 }
 function updateSegAlarmGraceStatusText(){
@@ -6749,7 +6824,7 @@ function startSegSiren(){
   segSirenOsc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
   segSirenOsc.type='sawtooth';
-  gain.gain.value=0.32;
+  gain.gain.value=0.6;
   segSirenOsc.connect(gain).connect(audioCtx.destination);
   segSirenOsc.start();
   segSirenOsc._sweep = setInterval(()=>{
