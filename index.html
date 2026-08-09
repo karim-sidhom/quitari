@@ -147,6 +147,25 @@ body{
 .line-item label{font-size:11px;color:#9fb0ff;}
 .small-note{font-size:11px;color:#a9b3e0;line-height:1.7;padding:6px 2px;}
 
+#binocularBox{
+  position:relative;overflow:hidden;border-radius:14px;padding:12px 14px;margin:8px 0 12px;
+  background:linear-gradient(145deg,rgba(13,26,110,.55),rgba(2,11,46,.85));
+  border:1px solid rgba(255,215,0,.35);
+  box-shadow:0 0 0 1px rgba(255,215,0,.12) inset,0 4px 14px rgba(0,0,0,.45);
+}
+#binocularBox::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,transparent,var(--gold),var(--gold3),var(--gold),transparent);
+  background-size:200% 100%;animation:shimmer 3s linear infinite;}
+#binocularBox .binoc-head{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+#binocularBox .binoc-icon{font-size:20px;animation:binocPulse 2.4s ease-in-out infinite;}
+@keyframes binocPulse{0%,100%{transform:scale(1);filter:drop-shadow(0 0 0 rgba(255,215,0,0));}
+  50%{transform:scale(1.12);filter:drop-shadow(0 0 6px rgba(255,215,0,.75));}}
+#binocularBox label{font-size:13px;color:var(--gold);font-weight:800;letter-spacing:.2px;}
+#binocularBox .binoc-row{display:flex;justify-content:space-between;align-items:center;
+  background:rgba(0,0,0,.22);border-radius:9px;padding:8px 10px;}
+#binocularBox .binoc-row span{font-size:12px;color:#cfd8ff;}
+#binocularBox .binoc-row b{font-size:14px;color:#fff;font-weight:800;}
+
 #alertOverlay{
   position:fixed;inset:0;background:rgba(180,0,0,.92);z-index:9999;
   display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;
@@ -1188,6 +1207,16 @@ var RADIO_TRACKS = [
     </div>
     <div id="statusCountdownLine" style="text-align:center;font-size:15px;font-weight:700;color:#ffd700;margin-top:4px;">🚆 القطار خلال: <span id="statusCountdown">--:--</span></div>
     <div id="statusQuickSummary" class="small-note" style="color:#7ee787;border-color:#7ee787;font-size:18px;font-weight:900;text-align:center;animation:statusSummaryBlink 2.2s ease-in-out infinite;"></div>
+    <div id="binocularBox">
+      <div class="binoc-head"><span class="binoc-icon">🔭</span><label>قطار شوهد بالمنظار</label></div>
+      <div class="binoc-row"><span>رقم القطار</span><b id="binocularTrainNum">--</b></div>
+      <div class="binoc-row" style="margin-top:6px;"><span>الوجهة</span><b id="binocularDestination">--</b></div>
+      <div class="binoc-row" style="margin-top:6px;"><span>آخر محطة مؤكدة (SNCFT Live)</span><b id="binocularLastStation">--</b></div>
+      <div class="binoc-row" style="margin-top:6px;"><span>نراقبه منذ</span><b id="binocularSeenSince">--</b></div>
+      <div class="binoc-row" style="margin-top:6px;"><span>توقيت الرصد</span><b id="binocularSeenTime">--</b></div>
+      <div class="binoc-row" style="margin-top:6px;"><span>📅 نظرياً يجب أن يكون الآن</span><b id="binocularTheoLocation">--</b></div>
+      <div id="binocularElsewhereNote" class="small-note" style="display:none;color:#ffcf6b;border-color:#ffcf6b;margin-top:6px;"></div>
+    </div>
     <button class="btn secondary" id="statusDetailsToggle" style="margin-top:6px;">🔎 المزيد من التفاصيل</button>
     <div id="statusDetailsWrap" style="display:none;margin-top:6px;">
     <div class="row"><span>GPS <span class="status-dot off" id="gpsDot"></span></span><b id="gpsAcc">--</b></div>
@@ -5999,11 +6028,68 @@ function recalcAndDisplay(){
   const curPosEl = document.getElementById('nearTrainCurPos');
   const catchEl = document.getElementById('catchTrainNote');
   const allStopsEl = document.getElementById('nearTrainAllStops');
+  const binocularEl = document.getElementById('binocularLastStation');
+  const binocularNumEl = document.getElementById('binocularTrainNum');
+  const binocularDestEl = document.getElementById('binocularDestination');
+  const binocularTimeEl = document.getElementById('binocularSeenTime');
+  const binocularSinceEl = document.getElementById('binocularSeenSince');
+  const binocularTheoEl = document.getElementById('binocularTheoLocation');
+  const binocularElsewhereEl = document.getElementById('binocularElsewhereNote');
   if(isFinite(result.dist) && result.trainId){
     const nearTrain = trains.find(t=>t.name===result.trainId);
     const stops = nearTrain ? parseStops(nearTrain.stopsText).filter(s=>!s.unknown && s.time) : [];
     const posNow = nearTrain ? trainPositionNow(nearTrain) : null;
     const delayMin = getLiveDelayForTrain(nearTrain) || 0;
+    // "🔭 قطار شوهد بالمنظار": آخر محطة أكّدها SNCFT Live فعلياً لهذا القطار بالذات (curFr)، مع رقمه ووجهته وتوقيت الرصد — مستقلة عن أي حساب نظري آخر
+    const liveEntry = nearTrain ? liveTrains.find(lt=> lt && lt.status==='EN_ROUTE' && trainNumberMatches(nearTrain.name, lt.num)) : null;
+    if(binocularEl) binocularEl.textContent = (liveEntry && liveEntry.curFr) ? liveEntry.curFr : '--';
+    if(binocularNumEl) binocularNumEl.textContent = (liveEntry && liveEntry.num) ? liveEntry.num : (result.trainId ? result.trainId.split('—')[0].trim() : '--');
+    if(binocularDestEl) binocularDestEl.textContent = stops.length ? stops[stops.length-1].name : '--';
+    if(binocularTimeEl) binocularTimeEl.textContent = liveEntry ? liveRefreshTimeText() : '--';
+    // "نراقبه منذ": SNCFT Live نفسه لا يوفر أي توقيت رصد — نتتبّعه محلياً: أول مرة نرى فيها هذا القطار (برقمه) مؤكَّداً
+    // عند نفس المحطة الحالية (curFr)، ونحتفظ بذلك الوقت طالما لم ينتقل القطار لمحطة تالية (عندها يُعاد الاحتساب من جديد)
+    if(binocularSinceEl){
+      if(liveEntry && liveEntry.num && liveEntry.curFr){
+        const key = liveEntry.num;
+        const prev = binocularSeenSince[key];
+        if(!prev || prev.curFr!==liveEntry.curFr){
+          binocularSeenSince[key] = {curFr:liveEntry.curFr, since:Date.now()};
+        }
+        const since = binocularSeenSince[key].since;
+        const mins = Math.max(0, Math.floor((Date.now()-since)/60000));
+        const sinceTimeTxt = new Date(since).toLocaleTimeString('ar-TN',{hour:'2-digit',minute:'2-digit'});
+        binocularSinceEl.textContent = sinceTimeTxt+' (منذ '+(mins<1 ? 'أقل من دقيقة' : mins+' د')+')';
+      } else {
+        binocularSinceEl.textContent = '--';
+      }
+    }
+    // "📅 نظرياً يجب أن يكون الآن": نفس موقع الجدول وحده بلا أي تصحيح بالتأخير — مستقل تماماً عن الموقع المرصود فعلياً عبر SNCFT Live
+    if(binocularTheoEl){
+      const theoPos = nearTrain ? trainPositionScheduleOnlyRaw(nearTrain) : null;
+      if(theoPos){
+        binocularTheoEl.textContent = theoPos.fromStation===theoPos.toStation
+          ? 'عند محطة '+theoPos.fromStation
+          : 'بين محطتي '+theoPos.fromStation+' و'+theoPos.toStation;
+      } else { binocularTheoEl.textContent = '--'; }
+    }
+    // "⚠️ ظهر أيضاً في مكان آخر على SNCFT Live": نفحص كل مُدخلات SNCFT Live بنفس رقم هذا القطار — إن وُجد أكثر من مقطع مختلف
+    // مذكور له فعلياً (curFr/nextFr مختلفَين عن المقطع المعتمَد أعلاه)، فهذا تضارب في بيانات SNCFT Live نفسها ونُنبّه له صراحة
+    if(binocularElsewhereEl){
+      if(liveEntry && liveEntry.num){
+        const others = liveTrains.filter(lt=> lt && lt!==liveEntry && lt.status==='EN_ROUTE' &&
+          trainNumberMatches(nearTrain ? nearTrain.name : '', lt.num) &&
+          !(stationNamesMatch(lt.curFr, liveEntry.curFr) && stationNamesMatch(lt.nextFr, liveEntry.nextFr)));
+        if(others.length){
+          binocularElsewhereEl.style.display='block';
+          binocularElsewhereEl.textContent = '⚠️ نفس رقم القطار ('+liveEntry.num+') مذكور أيضاً في مكان آخر على SNCFT Live: '+
+            others.map(o=> (o.curFr||'--')+' ← '+(o.nextFr||'--')).join(' | ');
+        } else {
+          binocularElsewhereEl.style.display='none';
+        }
+      } else {
+        binocularElsewhereEl.style.display='none';
+      }
+    }
     if(stops.length>=2){
       const first=stops[0], last=stops[stops.length-1];
       const estArr = delayMin ? minsToHHMM(minutesOf(last.time)+delayMin) : last.time;
@@ -6048,6 +6134,13 @@ function recalcAndDisplay(){
   } else {
     depEl.textContent='--'; arrEl.textContent='--'; curPosEl.textContent='--';
     catchEl.style.display='none'; allStopsEl.style.display='none';
+    if(binocularEl) binocularEl.textContent='--';
+    if(binocularNumEl) binocularNumEl.textContent='--';
+    if(binocularDestEl) binocularDestEl.textContent='--';
+    if(binocularTimeEl) binocularTimeEl.textContent='--';
+    if(binocularSinceEl) binocularSinceEl.textContent='--';
+    if(binocularTheoEl) binocularTheoEl.textContent='--';
+    if(binocularElsewhereEl) binocularElsewhereEl.style.display='none';
   }
   const dirInfo = trainDirectionInfo(result);
   const dirEl = document.getElementById('trainDirection');
@@ -6423,6 +6516,9 @@ window.dismissLiveAlarm=function(){
 // الموجودتين أصلاً — بلا أي علاقة بالإنذارين الآخرين (لا يقرأ ولا يعدّل متغيّراتهما).
 // ================================================================================================
 let segAlarmActive=false, segSirenOsc=null;
+// تتبّع "منذ متى نراقب هذا القطار بالمنظار" — محلياً فقط (SNCFT Live لا يوفر أي توقيت رصد داخل بياناته نفسها)
+// المفتاح رقم القطار؛ القيمة: آخر محطة مؤكدة رأيناها له + وقت أول رصد لهذه المحطة بالذات (يُعاد الاحتساب إن انتقل القطار لمحطة تالية)
+let binocularSeenSince = {};
 let segAlarmStationA=null, segAlarmStationB=null;
 let geocodedStationsCache = {};
 try{ geocodedStationsCache = JSON.parse(localStorage.getItem('segAlarmGeocodeCache')||'{}'); }catch(e){ geocodedStationsCache = {}; }
@@ -6591,12 +6687,17 @@ function checkTrackSegmentAlarm(){
   const nearTrack = isFinite(distTrack) && distTrack<=RISK_THRESHOLD_M;
   if(nearTrack){
     // أولوية جديدة: قطار EN_ROUTE مؤكَّد بإحداثيات محطتيه (curFr/nextFr) معروفتين — بلا انتظار Nominatim
+    // نفس شرط التطابق المستعمل في updateUserBetweenGeoStations: لا نثق بمحطتَي القطار المؤكَّد إلا إذا كانتا فعلاً
+    // ضمن أقرب محطتين حقيقيتين لموقع المستخدم — وإلا فالإنذار سيعرض محطتين لا تطابقان "📍 موقعك بالنسبة للمحطات" أعلاه
     const liveSeg = findLiveConfirmedSegment(lastPos);
+    const mainNearest2ForAlarm = nearestKnownStationsTo(lastPos, 2);
     let sA, sB, matched;
-    if(liveSeg){
+    if(liveSeg && mainNearest2ForAlarm.length>=2 &&
+       mainNearest2ForAlarm.some(s=>stationNamesMatch(s.name, liveSeg.sA.name)) &&
+       mainNearest2ForAlarm.some(s=>stationNamesMatch(s.name, liveSeg.sB.name))){
       sA = liveSeg.sA; sB = liveSeg.sB; matched = liveSeg.train;
     } else {
-      const nearest = nearestKnownStationsTo(lastPos, 2);
+      const nearest = mainNearest2ForAlarm;
       if(nearest.length>=2){
         sA = nearest[0]; sB = nearest[1];
         matched = liveTrains.find(lt=> lt && lt.status==='EN_ROUTE' &&
