@@ -663,6 +663,19 @@ body{
 }
 .station-name-label::before{ border-top-color:#ffd700; }
 .leaflet-tooltip.station-name-label{ pointer-events:none; }
+
+/* ---------- Slice "القطار الأقرب نظرياً" (théorique) — نفس أسلوب البطاقة الذهبية المرجعية، مع رقم القطار (N°) بارزاً ---------- */
+.theoHero{background:rgba(255,255,255,.05);border:1px solid rgba(255,215,0,.35);border-radius:10px;padding:10px;margin-bottom:8px;position:relative;overflow:hidden;}
+.theoHero-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+.theoHero-label{font-size:11px;color:var(--gold3);letter-spacing:.5px;font-weight:700;}
+.theoHero-dot{width:9px;height:9px;border-radius:50%;background:#5b6aa8;flex:0 0 auto;}
+.theoHero-dot.live{background:#2ecc71;box-shadow:0 0 8px 2px rgba(46,204,113,.7);}
+.theoHero-dot.late{background:#ff9f43;box-shadow:0 0 8px 2px rgba(255,159,67,.7);}
+.theoHero-num-wrap{display:flex;align-items:baseline;gap:8px;margin-bottom:6px;}
+.theoHero-num-label{font-size:12px;color:#9aa4d8;}
+.theoHero-num{font-size:28px;font-weight:800;color:var(--gold);direction:ltr;}
+.theoHero-title{font-size:15px;font-weight:700;color:#fff;margin-bottom:4px;}
+.theoHero-detail{font-size:12.5px;color:#c9d0ff;line-height:1.6;}
 </style>
 </head>
 <body>
@@ -1376,6 +1389,23 @@ var RADIO_TRACKS = [
         <div style="font-size:12px;color:#c7cbe0;margin-top:2px;opacity:.85;">لا يوجد قطار مؤكد عبر SNCFT Live قريب منك الآن</div>
       </div>
       <div id="kzLStopsList" style="width:100%;margin-top:14px;max-height:220px;overflow-y:auto;border-top:1px solid rgba(46,204,113,.3);padding-top:10px;"></div>
+    </div>
+  </div>
+
+  <!-- طلب المستخدم: slice ثابت في الصفحة الرئيسية (بلا حاجة لأي نقرة/فتح تفاصيل) — القطار الأقرب نظرياً فقط، مع N° بارز -->
+  <div class="card" id="theoHeroCard">
+    <h3>🚄 القطار الأقرب نظرياً</h3>
+    <div class="theoHero" id="theoHeroBox">
+      <div class="theoHero-top">
+        <span class="theoHero-label">جدول مصحَّح بالتأخير — بلا شرط تأكيد SNCFT Live</span>
+        <span class="theoHero-dot" id="theoHeroDot"></span>
+      </div>
+      <div class="theoHero-num-wrap">
+        <span class="theoHero-num-label">N° القطار</span>
+        <b class="theoHero-num" id="theoHeroNum">--</b>
+      </div>
+      <div class="theoHero-title" id="theoHeroTitle">--</div>
+      <div class="theoHero-detail" id="theoHeroDetail">جارٍ الحساب…</div>
     </div>
   </div>
 
@@ -5464,24 +5494,51 @@ function computeTopConfirmedTrains(userPos, n){
 function computeRiskModuleLiveAny(userPos){
   let best = {risk:0, lineName:'--', dist:Infinity, trainPos:null, trainId:null, trainNum:null, method:'SNCFT Live كامل', unscheduled:false, fromStation:null, toStation:null};
   if(!isLiveDataFresh()) return best;
+  // بطلب صريح من المستخدم: القطار المرجعي الوحيد لهذه الوحدة هو الأقرب "نظرياً" (computeTheoreticalClosest) —
+  // من رقمه نأخذ خط سيره الكامل (trains.find)، ثم نطلب من SNCFT Live محطته الحالية/التالية الفعليتين لهذا القطار بعينه فقط
+  // (trainPositionLiveDirect)، فتكون "الگارة الأقرب"/موقع الخطر دوماً مرتبطاً بالقطار الصحيح على مسارك — بدل البحث المستقل
+  // القديم في كامل بيانات Live الذي كان قد يُصادف قطاراً آخر أقرب جغرافياً لكنه على خط مختلف لا يمر بموقعك إطلاقاً
+  const theo = computeTheoreticalClosest(userPos);
+  if(theo && theo.trainId){
+    const matchedTrain = trains.find(t=>t.name===theo.trainId);
+    if(matchedTrain){
+      const pos = trainPositionLiveDirect(matchedTrain);
+      if(pos){
+        const dist = haversine(userPos,[pos.lat,pos.lon]);
+        const risk = Math.round(Math.max(0, 1 - dist/RISK_THRESHOLD_M)*100);
+        const delayTxt = pos.delayMin ? (' — متأخر '+pos.delayMin+' د') : '';
+        best = {
+          risk, dist,
+          lineName: matchedTrain.name+' ('+pos.fromStation+' → '+pos.toStation+')'+delayTxt,
+          trainPos:{lat:pos.lat, lon:pos.lon},
+          trainId: matchedTrain.name,
+          trainNum: extractTrainNumber(matchedTrain.name),
+          method:'SNCFT Live كامل', unscheduled:false,
+          fromStation: pos.fromStation, toStation: pos.toStation
+        };
+      }
+    }
+  }
+  // قطارات SNCFT Live الحقيقية غير الموجودة إطلاقاً في الجدول النظري (تعزيز/غير مُجدوَل) — تُفحص بشكل مستقل تماماً كالسابق،
+  // فقط إن كانت أقرب فعلاً من القطار المرجعي أعلاه (إن وُجد)، حتى لا نُخفي قطاراً حقيقياً يسير الآن قريباً منك
   liveTrains.forEach(lt=>{
     if(!lt || !lt.num) return;
     const matchedTrain = trains.find(t=>trainNumberMatches(t.name, lt.num));
-    if(!matchedTrain && isLiveOnlyEntryStale(lt)) return; // بيانات عالقة (قطار غير مرجعي فعلياً انتهت رحلته ولم يُحدَّث الخبر) — تسبب إنذاراً دائماً كاذباً إن لم نستبعدها هنا
-    const pos = matchedTrain ? trainPositionLiveDirect(matchedTrain) : liveOnlyTrainPosition(lt);
+    if(matchedTrain) return; // القطارات المُجدوَلة تُعالَج أعلاه فقط عبر القطار المرجعي (نظري+Live)، نتفادى التكرار/التضارب هنا
+    if(isLiveOnlyEntryStale(lt)) return;
+    const pos = liveOnlyTrainPosition(lt);
     if(!pos) return;
     const dist = haversine(userPos,[pos.lat,pos.lon]);
     if(dist<best.dist){
       const risk = Math.round(Math.max(0, 1 - dist/RISK_THRESHOLD_M)*100);
       const delayTxt = pos.delayMin ? (' — متأخر '+pos.delayMin+' د') : '';
-      const label = matchedTrain ? matchedTrain.name : ('قطار '+lt.num+' (غير موجود في الجدول النظري)');
       best = {
         risk, dist,
-        lineName: label+' ('+pos.fromStation+' → '+pos.toStation+')'+delayTxt,
+        lineName: 'قطار '+lt.num+' (غير موجود في الجدول النظري) ('+pos.fromStation+' → '+pos.toStation+')'+delayTxt,
         trainPos:{lat:pos.lat, lon:pos.lon},
-        trainId: matchedTrain ? matchedTrain.name : ('LIVE-'+lt.num),
-        trainNum: extractTrainNumber(matchedTrain ? matchedTrain.name : String(lt.num)),
-        method:'SNCFT Live كامل', unscheduled: !matchedTrain,
+        trainId:'LIVE-'+lt.num,
+        trainNum: extractTrainNumber(String(lt.num)),
+        method:'SNCFT Live كامل', unscheduled:true,
         fromStation: pos.fromStation, toStation: pos.toStation
       };
     }
@@ -5950,9 +6007,29 @@ function trainDirectionInfo(result){
   lastTrainId = result.trainId;
   return info;
 }
+// يملأ الـ slice الجديد "القطار الأقرب نظرياً" بالاعتماد فقط على result.theoBest (بلا أي شرط تأكيد SNCFT Live) — أهم عنصر فيه: N° رقم القطار
+function updateTheoHero(theoBest){
+  const numEl = document.getElementById('theoHeroNum');
+  const titleEl = document.getElementById('theoHeroTitle');
+  const detailEl = document.getElementById('theoHeroDetail');
+  const dotEl = document.getElementById('theoHeroDot');
+  if(!numEl) return;
+  if(!theoBest || !isFinite(theoBest.dist) || !theoBest.trainId){
+    numEl.textContent = '--';
+    titleEl.textContent = '--';
+    detailEl.textContent = 'لا يوجد قطار نظري قريب حالياً';
+    if(dotEl) dotEl.className = 'theoHero-dot';
+    return;
+  }
+  numEl.textContent = theoBest.trainNum || '--';
+  titleEl.textContent = theoBest.trainId;
+  detailEl.textContent = 'بين "'+(theoBest.fromStation||'--')+'" و"'+(theoBest.toStation||'--')+'" — المسافة: '+formatDist(theoBest.dist)+' — '+(theoBest.status||'');
+  if(dotEl) dotEl.className = 'theoHero-dot ' + (theoBest.risk>=50 ? 'late' : 'live');
+}
 function recalcAndDisplay(){
   if(!lastPos) return;
   const result = computeRisk(lastPos);
+  updateTheoHero(result.theoBest);
   // القطار الأقرب (بالاعتماد على موقعه الحقيقي المُقدّر من التوقيت) — لا يُعرض هنا إلا قطار مؤكد عبر SNCFT Live، أبداً قطار شبح مبني على الجدول فقط
   document.getElementById('nearLine').textContent = isFinite(result.dist) ? result.lineName+' — 🕒 آخر تحديث: '+liveRefreshTimeText()
     : (result.noLiveData ? 'لا تتوفر بيانات SNCFT Live الآن — لا يُعرض أي قطار' : 'لا يوجد قطار مؤكد قريب الآن');
@@ -6604,6 +6681,43 @@ function nearestKnownStationsTo(pos, n){
     .sort((a,b)=>a.dist-b.dist)
     .slice(0,n);
 }
+// كل أسماء المحطات التي تُظهرها بيانات SNCFT Live الآن فعلياً (محطة حالية/تالية لأي قطار مرصود حالياً، أياً كان)، بإحداثياتها المعروفة —
+// هذا مصدر أدق بطلب المستخدم: هي فعلاً المحطات التي يعرضها SNCFT Live نفسه الآن (بما فيها الصغيرة/الوسيطة)، وليست تخميناً عبر Nominatim
+function liveShownStations(){
+  if(!isLiveDataFresh()) return [];
+  const names = new Set();
+  liveTrains.forEach(lt=>{
+    if(lt && lt.curFr) names.add(lt.curFr);
+    if(lt && lt.nextFr) names.add(lt.nextFr);
+  });
+  // أي بحث تفصيلي (details.php) نُفِّذ فعلاً لأي قطار ولا يزال محفوظاً في trainDetailsCache — بطلب صريح من المستخدم:
+  // كل محطة ظهرت في نتيجة بحث كهذا يجب أن تظهر هنا أيضاً، لا أن تبقى حبيسة تلك النتيجة وحدها
+  Object.values(trainDetailsCache).forEach(entry=>{
+    (entry && entry.stops || []).forEach(s=>{ if(s && s.name) names.add(s.name); });
+  });
+  const list = [];
+  names.forEach(name=>{
+    const c = coordForStationName(name);
+    if(c) list.push({name, lat:c[0], lon:c[1]});
+  });
+  return list;
+}
+// بطلب المستخدم: يدمج محطات الجدول النظري (nearestUsedStations) مع المحطات (بما فيها الصغيرة/الوسيطة) التي يُظهرها
+// SNCFT Live نفسه الآن (liveShownStations) في مجمع واحد، ثم يُرجع الأقرب فعلاً من بينها جميعاً — بدل تفضيل محطات
+// الجدول تلقائياً حتى لو كانت هناك محطة وسيطة يعرضها SNCFT Live أقرب فعلياً لموقعك ولم تكن مُدرجة في نص الجدول النظري
+function nearestAnyStationTo(pos, n){
+  const used = nearestUsedStations(pos, 9999); // كل محطات الجدول مُرتَّبة، بلا حد أقصى مسبق — الدمج والتقليص يتم بعد ذلك
+  const known = liveShownStations().map(s=>({...s, dist:haversine(pos,[s.lat,s.lon])}));
+  const seen = new Set();
+  const merged = [];
+  used.concat(known).forEach(s=>{
+    if(seen.has(s.name)) return;
+    seen.add(s.name);
+    merged.push(s);
+  });
+  merged.sort((a,b)=>a.dist-b.dist);
+  return merged.slice(0, n);
+}
 // أقصر مسافة حقيقية بين المستخدم وأي خط سكة فعلي (SNCFT الرسمي أو OSM) — هندسية بحتة، بلا أي علاقة بأسماء المحطات
 function distanceToNearestTrack(lat,lon){
   const pt=[lat,lon];
@@ -6622,24 +6736,24 @@ function distanceToNearestTrack(lat,lon){
 function coordForStationName(name){
   return resolveStationCoord(name) || resolveGeocodedCoord(name);
 }
+// نفس المبدأ المُطبَّق في computeRiskModuleLiveAny (بطلب صريح من المستخدم): القطار المرجعي الوحيد هو الأقرب "نظرياً"
+// (computeTheoreticalClosest) — نطلب من SNCFT Live محطته الحالية/التالية الفعليتين لهذا القطار بعينه فقط، بدل البحث
+// المستقل القديم في كامل قطارات EN_ROUTE الذي كان قد يُصادف قطاراً آخر أقرب جغرافياً لكنه على خط مختلف لا يمر بموقعك إطلاقاً
 function findLiveConfirmedSegment(pos){
-  let best = null;
-  liveTrains.forEach(lt=>{
-    if(!lt || lt.status!=='EN_ROUTE' || !lt.curFr || !lt.nextFr) return;
-    const cA = coordForStationName(lt.curFr);
-    const cB = coordForStationName(lt.nextFr);
-    if(!cA || !cB) return; // نتجاهل هذا القطار إن لم نعرف بعد إحداثيات محطتيه (لا STATIONS ولا Nominatim)
-    const r = nearestPointOnTrackCoords(pos, [cA, cB]);
-    const dist = (r && isFinite(r.dist)) ? r.dist : Math.min(haversine(pos,cA), haversine(pos,cB));
-    if(!best || dist<best.dist){
-      best = {
-        train: lt, dist, id: lt.id,
-        sA:{name:lt.curFr, lat:cA[0], lon:cA[1], dist:haversine(pos,cA)},
-        sB:{name:lt.nextFr, lat:cB[0], lon:cB[1], dist:haversine(pos,cB)}
-      };
-    }
-  });
-  return best;
+  const theo = computeTheoreticalClosest(pos);
+  if(!theo || !theo.trainId) return null;
+  const lt = liveTrains.find(l => l && l.status==='EN_ROUTE' && l.curFr && l.nextFr && trainNumberMatches(theo.trainId, l.num));
+  if(!lt) return null;
+  const cA = coordForStationName(lt.curFr);
+  const cB = coordForStationName(lt.nextFr);
+  if(!cA || !cB) return null; // نتجاهل هذا القطار إن لم نعرف بعد إحداثيات محطتيه (لا STATIONS ولا Nominatim)
+  const r = nearestPointOnTrackCoords(pos, [cA, cB]);
+  const dist = (r && isFinite(r.dist)) ? r.dist : Math.min(haversine(pos,cA), haversine(pos,cB));
+  return {
+    train: lt, dist, id: lt.id,
+    sA:{name:lt.curFr, lat:cA[0], lon:cA[1], dist:haversine(pos,cA)},
+    sB:{name:lt.nextFr, lat:cB[0], lon:cB[1], dist:haversine(pos,cB)}
+  };
 }
 // الفحص الدوري الرئيسي لهذا الإنذار — يُستدعى في كل دورة تحديث GPS، بمعزل كامل عن الإنذارين الآخرين
 // يعرض دائماً موقع المستخدم بالنسبة لأقرب محطتين مكتشفتين ديناميكياً (إن وُجدتا) — بغض النظر تماماً عن تفعيل الإنذار من عدمه
@@ -6661,6 +6775,16 @@ function updateUserBetweenGeoStations(){
   // بطلب المستخدم: لا نثق في محطتَي هذا القطاع المؤكَّد إلا إذا كانتا فعلاً من ضمن نفس محطتَي "📍 موقعك بالنسبة للمحطات" أعلاه —
   // إن لم تتطابقا (قطار EN_ROUTE بعيد جغرافياً عن أقرب محطتين حقيقيتين لموقعك)، نستعمل مباشرة نفس محطتَي القسم أعلاه بدل ذلك
   const liveSeg = findLiveConfirmedSegment(lastPos);
+  // بطلب صريح من المستخدم: حتى إن لم يُؤكَّد القطار المرجعي EN_ROUTE بعد (فـ liveSeg فارغ)، إن كان له أي مُدخَل في بيانات
+  // SNCFT Live الآن (بغض النظر عن الحالة)، نطلق بحث details.php على مُعرِّفه أيضاً — أي محطة تظهر في نتيجة هذا البحث
+  // يجب أن تظهر (تُلتقط عبر liveShownStations أدناه)، لا أن تبقى غير مُستغَلة لمجرد أن القطار لم يُصنَّف EN_ROUTE بعد
+  if(!liveSeg || !liveSeg.id){
+    const theoForDetails = computeTheoreticalClosest(lastPos);
+    if(theoForDetails && theoForDetails.trainId && isLiveDataFresh()){
+      const anyLt = liveTrains.find(l => l && l.id && trainNumberMatches(theoForDetails.trainId, l.num));
+      if(anyLt) fetchTrainDetails(anyLt.id);
+    }
+  }
   // ---------- أولوية قصوى فعلية (بطلب صريح من المستخدم): القائمة الحقيقية الكاملة لمحطات هذا القطار بالذات، من details.php ----------
   // نفس ما يعرضه موقع SNCFT نفسه (suivi-train) عند اختيار قطار — كل محطاته الحقيقية (بما فيها الصغيرة) مع Prévu/Réel الحقيقيَين
   if(liveSeg && liveSeg.id){
@@ -6678,7 +6802,9 @@ function updateUserBetweenGeoStations(){
         const [dA, dB] = withDist;
         if(fromEl) fromEl.textContent = dA.name;
         if(toEl) toEl.textContent = dB.name;
-        textEl.textContent = 'بين '+dA.name+' ('+formatDist(dA.dist)+') و'+dB.name+' ('+formatDist(dB.dist)+') — القطار '+(liveSeg.train.num||'')+' ('+liveSeg.train.name+')';
+        // formatDist تُرجع أصلاً قوسين لأي مسافة ≥1000م (مثل "16.26 كم (16258 م)") — إضافة قوسين آخرين حولها هنا كانت تُنتج
+        // قوسين متداخلين، وهو ما يُسبّب (مع اختلاط عربي/لاتيني) تشويشاً بصرياً حقيقياً عبر خوارزمية bidi. لا نكرر القوسين بعد الآن.
+        textEl.textContent = 'بين '+dA.name+' '+formatDist(dA.dist)+' و'+dB.name+' '+formatDist(dB.dist)+' — القطار '+(liveSeg.train.num||'')+' ('+liveSeg.train.name+')';
         const total = dA.dist+dB.dist;
         const ratio = total>0 ? (dA.dist/total)*100 : 50;
         if(userEl) userEl.style.right = Math.min(94,Math.max(6,ratio))+'%';
@@ -6697,14 +6823,14 @@ function updateUserBetweenGeoStations(){
       }
     }
   }
-  const mainNearest2 = nearestUsedStations(lastPos, 2);
+  const mainNearest2 = nearestAnyStationTo(lastPos, 2);
   let nearest2;
   if(liveSeg){
     const matchesMain = mainNearest2.some(s=>stationNamesMatch(s.name, liveSeg.sA.name))
       && mainNearest2.some(s=>stationNamesMatch(s.name, liveSeg.sB.name));
     nearest2 = matchesMain ? [liveSeg.sA, liveSeg.sB] : mainNearest2;
   } else {
-    nearest2 = mainNearest2.length ? mainNearest2 : nearestKnownStationsTo(lastPos, 2);
+    nearest2 = mainNearest2;
   }
   if(nearest2.length===0){
     textEl.textContent='لا توجد محطات مكتشفة بعد';
@@ -6723,7 +6849,7 @@ function updateUserBetweenGeoStations(){
   const [sA, sB] = nearest2;
   if(fromEl) fromEl.textContent = sA.name;
   if(toEl) toEl.textContent = sB.name;
-  textEl.textContent = 'بين '+sA.name+' ('+formatDist(sA.dist)+') و'+sB.name+' ('+formatDist(sB.dist)+')';
+  textEl.textContent = 'بين '+sA.name+' '+formatDist(sA.dist)+' و'+sB.name+' '+formatDist(sB.dist);
   // موقعك التقريبي على الخط بين المحطتين، بناءً على نسبة المسافتين الحقيقيتين (نفس منطق right المستعمل في خط الزمن الأصلي أعلاه)
   const total = sA.dist + sB.dist;
   const ratio = total>0 ? (sA.dist/total)*100 : 50;
