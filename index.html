@@ -4921,7 +4921,7 @@ function trainsPassingSegment(nameA, nameB){
 }
 // نقطة الالتقاء المحتملة بين موقع المستخدم وهذا المقطع بالذات (نفس أسلوب kz_trainClosestApproach، لكن مقيَّد بمقطع واحد محدد فقط)
 function computeSegmentImpact(userPos, nameA, nameB){
-  const A = STATIONS[nameA], B = STATIONS[nameB];
+  const A = coordForStationName(nameA), B = coordForStationName(nameB);
   if(!A || !B) return null;
   const sub = (typeof kz_getTrackSubPath==='function') ? kz_getTrackSubPath(A, B, nameA, nameB) : null;
   const onTrack = sub ? kz_closestOnPolyline(userPos, sub) : null;
@@ -4936,8 +4936,6 @@ function computeSegmentImpact(userPos, nameA, nameB){
 let segTrCardAlarmActive = false;
 // طلب المستخدم: توقيت الالتقاء الأقرب الآن + حالة تأكيده عبر SNCFT Live — مستقلان تماماً عن حالة الإنذار أعلاه، يُحدَّثان في كل دورة عرض
 let segTrCardNearestImpactMs = null, segTrCardNearestImpactConfirmed = false;
-// إصلاح: بمجرد عرض بيانات صالحة مرة واحدة، تبقى ظاهرة على الشاشة حتى لو فشل تحديد المحطتين مؤقتاً في دورة لاحقة (بدل الاختفاء والعودة لـ"بانتظار تحديد الموقع")
-let segTrCardHasData = false;
 // عدّاد تنازلي حي (ثانية بثانية) حتى توقيت الالتقاء الأقرب — مستقل تماماً عن دورة recalcAndDisplay لكي يبقى سلساً
 function updateSegTrCardImpactBadge(){
   const timeEl = document.getElementById('segTrCardImpactTimeTxt');
@@ -5005,49 +5003,70 @@ const SEG_ALARM_DIST_M = 150;
 // impactNameA/impactNameB اختياريان: إن أُعطيا (محطتان أدق، بما فيها الصغيرة/الوسيطة عبر nearestAnyStationTo)، تُستعملان فقط لحساب نقطة الالتقاء/المسافة
 // لدقة أعلى، بينما تبقى قائمة القطارات (nameA/nameB) مبنية على محطات الجدول النظري كما هي (لأن نص الجدول لا يذكر غالباً المحطات الصغيرة)
 // fineStations: مصفوفة [{name,dist}, {name,dist}] من nearestAnyStationTo — تُستعمل لعرض شريط الموقع المرئي (نفس شكل segPositionCard بالحرف)
-function renderSegmentTrainsList(nameA, nameB, userPos, impactNameA, impactNameB, fineStations){
+function renderSegmentTrainsList(nameA, nameB, userPos, impactNameA, impactNameB, fineStations, fullStops){
   const vizFromEl = document.getElementById('segTrCardVizFromName');
   const vizToEl = document.getElementById('segTrCardVizToName');
   const vizUserEl = document.getElementById('segTrCardVizUser');
   const vizTextEl = document.getElementById('segTrCardPositionText');
   const box = document.getElementById('segmentTrainsList');
   if(!box) return;
-  if(!nameA || !nameB || !STATIONS[nameA] || !STATIONS[nameB] || !userPos){
-    segTrCardAlarm_stop();
-    // إصلاح: لا نُصفّر العرض إن سبق أن أظهرنا بيانات صالحة — نُبقي آخر عرض معروف بدل اختفائه مؤقتاً
-    // (كان يحدث سابقاً عند أي فشل عابر في تحديد المحطتين، فيختفي القسم فجأة ثم يعود لاحقاً)
-    if(!segTrCardHasData){
-      box.innerHTML='';
-      if(vizTextEl) vizTextEl.textContent='بانتظار تحديد الموقع...';
-      if(vizFromEl) vizFromEl.textContent='--'; if(vizToEl) vizToEl.textContent='--';
-      if(vizUserEl) vizUserEl.style.right='50%';
-      segTrCardNearestImpactMs = null; segTrCardNearestImpactConfirmed = false;
-      updateSegTrCardImpactBadge();
-    }
+  // بطلب صريح من المستخدم: لا حاجة إطلاقاً لإحداثيات أي محطة لعرض القائمة أو تشغيل الإنذار — الاسم + التوقيت (من الجدول/SNCFT Live)
+  // يكفيان لقائمة القطارات والتوقيت، والمسافة الحقيقية للإنذار تُحسب هندسياً مباشرة من موقع المستخدم إلى السكة نفسها (distanceToNearestTrack)،
+  // بمعزل تام عن أي اسم محطة. الإحداثيات (إن توفّرت) تُستعمل فقط لتحسين دقة عرض الشريط المرئي والتوقيت التقديري داخل المقطع، لا أكثر.
+  if(!nameA || !nameB || !userPos){
+    box.innerHTML=''; segTrCardAlarm_stop();
+    if(vizTextEl) vizTextEl.textContent='بانتظار تحديد الموقع...';
+    if(vizFromEl) vizFromEl.textContent='--'; if(vizToEl) vizToEl.textContent='--';
+    if(vizUserEl) vizUserEl.style.right='50%';
+    const stopsElClear = document.getElementById('segTrCardStopsList');
+    if(stopsElClear) stopsElClear.innerHTML='';
+    segTrCardNearestImpactMs = null; segTrCardNearestImpactConfirmed = false;
+    updateSegTrCardImpactBadge();
     return;
   }
-  segTrCardHasData = true;
-  // شريط الموقع المرئي (نفس شكل segPositionCard بالحرف): يعتمد على fineStations إن توفّرت (أدق، تشمل المحطات الصغيرة)، وإلا يسقط على nameA/nameB
-  const vA = (fineStations && fineStations[0]) ? fineStations[0] : {name:nameA, dist:haversine(userPos, STATIONS[nameA])};
-  const vB = (fineStations && fineStations[1]) ? fineStations[1] : {name:nameB, dist:haversine(userPos, STATIONS[nameB])};
+  const coordA = coordForStationName(nameA), coordB = coordForStationName(nameB);
+  // شريط الموقع المرئي: يعتمد على fineStations إن توفّرت (مسافات جاهزة أصلاً)، وإلا على إحداثيات المحطتين إن عُرفت، وإلا يُعرض بلا مسافة رقمية
+  const vA = (fineStations && fineStations[0]) ? fineStations[0] : {name:nameA, dist: coordA ? haversine(userPos, coordA) : null};
+  const vB = (fineStations && fineStations[1]) ? fineStations[1] : {name:nameB, dist: coordB ? haversine(userPos, coordB) : null};
   if(vizFromEl) vizFromEl.textContent = vA.name;
   if(vizToEl) vizToEl.textContent = vB.name;
-  if(vizTextEl) vizTextEl.textContent = 'بين '+vA.name+' '+formatDist(vA.dist)+' و'+vB.name+' '+formatDist(vB.dist);
-  if(vizUserEl){
-    const totalV = vA.dist+vB.dist;
-    const ratioV = totalV>0 ? (vA.dist/totalV)*100 : 50;
-    vizUserEl.style.right = Math.min(94,Math.max(6,ratioV))+'%';
+  vizTextEl && (vizTextEl.textContent = 'بين '+vA.name+' '+(vA.dist!=null?formatDist(vA.dist):'')+' و'+vB.name+' '+(vB.dist!=null?formatDist(vB.dist):''));
+  // طلب المستخدم بالحرف: عرض المحطات الوسيطة الحقيقية (مثل Nabeul Marchandises/Nabeul Voyageurs) بتوقيتها الواضح والدقيق —
+  // كما يعرضها SNCFT Live نفسه عبر details.php (fullStops)، بدل الاكتفاء بمحطتين فقط
+  const vizStopsEl = document.getElementById('segTrCardStopsList');
+  if(vizStopsEl){
+    if(fullStops && fullStops.length){
+      const nowM = minsNow();
+      vizStopsEl.innerHTML = fullStops.map(s=>{
+        const t = s.forecast || s.plan;
+        const passed = t && minutesOf(t) < nowM;
+        return '<div class="row" style="padding:3px 0;'+(passed?'opacity:.5;':'')+'"><span>'+s.name+'</span><b>'+(t||'--')+'</b></div>';
+      }).join('');
+    } else {
+      vizStopsEl.innerHTML = '';
+    }
   }
-  // الأدق للمسافة/نقطة الالتقاء: المحطتان الفعليتان الأقرب (حتى الصغيرة/الوسيطة) إن أُعطيتا وكانتا معروفتَي الإحداثيات
-  const useImpactA = (impactNameA && STATIONS[impactNameA]) ? impactNameA : nameA;
-  const useImpactB = (impactNameB && STATIONS[impactNameB]) ? impactNameB : nameB;
-  const impact = computeSegmentImpact(userPos, useImpactA, useImpactB);
+  if(vizUserEl){
+    if(vA.dist!=null && vB.dist!=null){
+      const totalV = vA.dist+vB.dist;
+      const ratioV = totalV>0 ? (vA.dist/totalV)*100 : 50;
+      vizUserEl.style.right = Math.min(94,Math.max(6,ratioV))+'%';
+    } else {
+      vizUserEl.style.right = '50%';
+    }
+  }
+  // نقطة الالتقاء التقديرية داخل المقطع (u): تحسين دقة اختياري فقط إن عُرفت إحداثيات المحطتين — وإلا افتراضياً منتصف المقطع زمنياً (0.5)، بلا أي تعطيل
+  const useImpactA = (impactNameA && coordForStationName(impactNameA)) ? impactNameA : (coordA ? nameA : null);
+  const useImpactB = (impactNameB && coordForStationName(impactNameB)) ? impactNameB : (coordB ? nameB : null);
+  const impact = (useImpactA && useImpactB) ? computeSegmentImpact(userPos, useImpactA, useImpactB) : null;
+  // المسافة الحقيقية لتشغيل الإنذار: هندسية بحتة من موقع المستخدم إلى أقرب خط سكة فعلي — بمعزل تام عن أسماء/إحداثيات المحطات
+  const trackDist = (typeof distanceToNearestTrack==='function') ? distanceToNearestTrack(userPos[0], userPos[1]) : (impact ? impact.dist : Infinity);
   const now = Date.now();
   const list = trainsPassingSegment(nameA, nameB).map(e=>{
     let fromTimeMs = todayAt(e.fromTimeTxt).getTime();
     let toTimeMs = todayAt(e.toTimeTxt).getTime();
     if(toTimeMs < fromTimeMs) toTimeMs += 24*3600000; // مقطع يعبر منتصف الليل
-    const u = impact ? impact.u : 0;
+    const u = impact ? impact.u : 0.5;
     let impactTimeMs = fromTimeMs + u*(toTimeMs-fromTimeMs) + e.delayMin*60000;
     // كان الخطأ هنا: هامش 6 ساعات كان يجعل قطاراً مرّ منذ دقائق فقط يبقى "الأقرب" (لأن وقتاً سالباً بسيطاً يُرتَّب قبل الأوقات المستقبلية) — بدل القطار القادم فعلياً
     if(impactTimeMs < now - 5*60000) impactTimeMs += 24*3600000; // مرّ منذ أكثر من 5 دقائق — نفس الرحلة غداً بنفس التوقيت
@@ -5079,12 +5098,15 @@ function renderSegmentTrainsList(nameA, nameB, userPos, impactNameA, impactNameB
     }
     return {lt, delayMin, impactTimeMs};
   });
-  // شرط الإنذار الحرفي: مسافة ≤150م + ضمن نافذة ±3 دقائق حول توقيت التقاء أي قطار (نظري أو شبح له توقيت حقيقي الآن)، أو قطار شبح بلا توقيت معروف بعد (نعتبر وجوده وحده مؤشر إلحاح) — يتوقف فوراً إن تجاوزت المسافة 150م مهما كان الوقت
-  if(!impact || impact.dist>SEG_ALARM_DIST_M){
+  // شرط الإنذار الحرفي: مسافة ≤150م (هندسية بحتة إلى السكة، بلا أي علاقة بإحداثيات محطة) + ضمن نافذة ±3 دقائق حول توقيت التقاء أي قطار
+  // (نظري أو شبح له توقيت حقيقي الآن)، أو قطار شبح بلا توقيت معروف بعد (نعتبر وجوده وحده مؤشر إلحاح) — يتوقف فوراً إن تجاوزت المسافة 150م مهما كان الوقت
+  if(!isFinite(trackDist) || trackDist>SEG_ALARM_DIST_M){
     segTrCardAlarm_stop();
   } else {
     const ghostWithinWindow = ghostEnriched.some(g=> g.impactTimeMs==null || (now>=(g.impactTimeMs-SEG_ALARM_WINDOW_MS) && now<=(g.impactTimeMs+SEG_ALARM_WINDOW_MS)));
-    const withinWindow = list.some(e=> now>=(e.impactTimeMs-SEG_ALARM_WINDOW_MS) && now<=(e.impactTimeMs+SEG_ALARM_WINDOW_MS)) || ghostWithinWindow;
+    // بطلب صريح من المستخدم: نافذة الإنذار ±3 دقائق تعتمد فقط على توقيت مؤكَّد فعلياً عبر SNCFT Live (e.confirmed)، وليس التوقيت النظري الخام —
+    // إن لم يكن أي قطار مؤكَّداً حالياً (SNCFT Live لا يُظهر شيئاً الآن)، لا يُشغَّل الإنذار من هذا الجدول إطلاقاً (يبقى الجدول الزمني معروضاً للمعلومة فقط)
+    const withinWindow = list.some(e=> e.confirmed && now>=(e.impactTimeMs-SEG_ALARM_WINDOW_MS) && now<=(e.impactTimeMs+SEG_ALARM_WINDOW_MS)) || ghostWithinWindow;
     if(withinWindow) segTrCardAlarm_start(); else segTrCardAlarm_stop();
   }
   // توقيت الالتقاء الأقرب الآن للشارة الكبيرة: الأقرب بين القطارات النظرية وقطارات الشبح ذات التوقيت الحقيقي المعروف معاً
@@ -5093,8 +5115,8 @@ function renderSegmentTrainsList(nameA, nameB, userPos, impactNameA, impactNameB
   segTrCardNearestImpactMs = allTimed.length ? allTimed[0].impactTimeMs : null;
   segTrCardNearestImpactConfirmed = allTimed.length ? allTimed[0].confirmed : false;
   updateSegTrCardImpactBadge();
-  const impactTxt = impact ? formatDist(impact.dist) : '--';
-  let html = '<div class="small-note">🎯 نقطة الالتقاء المحتملة على هذا المقطع ('+useImpactA+' ↔ '+useImpactB+'): <b>'+impactTxt+'</b> من موقعك</div>';
+  const impactTxt = isFinite(trackDist) ? formatDist(trackDist) : '--';
+  let html = '<div class="small-note">🎯 مسافتك الحقيقية إلى السكة الآن: <b>'+impactTxt+'</b></div>';
   if(!list.length){
     html += '<div class="small-note" style="color:#7ee787;border-color:#7ee787">🚫 لا يوجد أي قطار مبرمج على هذا المقطع بالذات.</div>';
   } else {
@@ -7052,7 +7074,7 @@ function updateUserBetweenGeoStations(){
           const trainRatio = (tA!=null && tB!=null && tA<=tB) ? (100-frac*100) : (frac*100);
           trainEl.style.right = Math.min(94,Math.max(6,trainRatio))+'%';
         }
-        renderSegmentTrainsList(dA.name, dB.name, lastPos, dA.name, dB.name, [dA, dB]);
+        renderSegmentTrainsList(dA.name, dB.name, lastPos, dA.name, dB.name, [dA, dB], withDist);
         return;
       }
     }
@@ -11714,6 +11736,8 @@ document.getElementById('toggleStationsBtn').click(); // نعرض كل المح�
       <div id="segTrCardImpactCountdown" style="font-size:17px;font-weight:800;color:#7ee787;margin-top:2px;">--:--</div>
     </div>
     <div id="segTrCardPositionText" style="font-size:13px;color:#bfe3ff;text-align:center;margin-top:12px;">بانتظار تحديد الموقع...</div>
+    <!-- طلب المستخدم بالحرف: المحطات الوسيطة الحقيقية (بما فيها الصغيرة) بتوقيتها الواضح والدقيق، كما يعرضها SNCFT Live نفسه -->
+    <div id="segTrCardStopsList" style="margin-top:8px;border-top:1px solid rgba(255,255,255,.1);padding-top:6px;"></div>
   </div>
   <div id="segTrCardAlarmBanner" style="display:none;text-align:center;font-weight:900;font-size:16px;color:#fff;margin-bottom:6px;">🚨 قطار على بعد أقل من 150م — خلال ±3 دقائق من الآن!</div>
   <div id="segmentTrainsList" style="margin-top:4px;"></div>
