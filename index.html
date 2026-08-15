@@ -4936,6 +4936,8 @@ function computeSegmentImpact(userPos, nameA, nameB){
 let segTrCardAlarmActive = false;
 // طلب المستخدم: توقيت الالتقاء الأقرب الآن + حالة تأكيده عبر SNCFT Live — مستقلان تماماً عن حالة الإنذار أعلاه، يُحدَّثان في كل دورة عرض
 let segTrCardNearestImpactMs = null, segTrCardNearestImpactConfirmed = false;
+// إصلاح: بمجرد عرض بيانات صالحة مرة واحدة، تبقى ظاهرة على الشاشة حتى لو فشل تحديد المحطتين مؤقتاً في دورة لاحقة (بدل الاختفاء والعودة لـ"بانتظار تحديد الموقع")
+let segTrCardHasData = false;
 // عدّاد تنازلي حي (ثانية بثانية) حتى توقيت الالتقاء الأقرب — مستقل تماماً عن دورة recalcAndDisplay لكي يبقى سلساً
 function updateSegTrCardImpactBadge(){
   const timeEl = document.getElementById('segTrCardImpactTimeTxt');
@@ -5011,14 +5013,20 @@ function renderSegmentTrainsList(nameA, nameB, userPos, impactNameA, impactNameB
   const box = document.getElementById('segmentTrainsList');
   if(!box) return;
   if(!nameA || !nameB || !STATIONS[nameA] || !STATIONS[nameB] || !userPos){
-    box.innerHTML=''; segTrCardAlarm_stop();
-    if(vizTextEl) vizTextEl.textContent='بانتظار تحديد الموقع...';
-    if(vizFromEl) vizFromEl.textContent='--'; if(vizToEl) vizToEl.textContent='--';
-    if(vizUserEl) vizUserEl.style.right='50%';
-    segTrCardNearestImpactMs = null; segTrCardNearestImpactConfirmed = false;
-    updateSegTrCardImpactBadge();
+    segTrCardAlarm_stop();
+    // إصلاح: لا نُصفّر العرض إن سبق أن أظهرنا بيانات صالحة — نُبقي آخر عرض معروف بدل اختفائه مؤقتاً
+    // (كان يحدث سابقاً عند أي فشل عابر في تحديد المحطتين، فيختفي القسم فجأة ثم يعود لاحقاً)
+    if(!segTrCardHasData){
+      box.innerHTML='';
+      if(vizTextEl) vizTextEl.textContent='بانتظار تحديد الموقع...';
+      if(vizFromEl) vizFromEl.textContent='--'; if(vizToEl) vizToEl.textContent='--';
+      if(vizUserEl) vizUserEl.style.right='50%';
+      segTrCardNearestImpactMs = null; segTrCardNearestImpactConfirmed = false;
+      updateSegTrCardImpactBadge();
+    }
     return;
   }
+  segTrCardHasData = true;
   // شريط الموقع المرئي (نفس شكل segPositionCard بالحرف): يعتمد على fineStations إن توفّرت (أدق، تشمل المحطات الصغيرة)، وإلا يسقط على nameA/nameB
   const vA = (fineStations && fineStations[0]) ? fineStations[0] : {name:nameA, dist:haversine(userPos, STATIONS[nameA])};
   const vB = (fineStations && fineStations[1]) ? fineStations[1] : {name:nameB, dist:haversine(userPos, STATIONS[nameB])};
