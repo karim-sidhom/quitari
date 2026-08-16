@@ -7592,11 +7592,13 @@ function stopSegStationSiren(){
   }
 }
 window.dismissSegStationAlarm=function(){
-  checkSegStationAlarm(); // إعادة تحقق فورية: قد لا يعود القطار مطابقاً فعلاً منذ آخر دورة، فيتوقف الإنذار من تلقاء نفسه هنا
+  // بطلب صريح من المستخدم: الزر يجب أن يوقف الصوت فعلاً فوراً عند الضغط عليه — لا يبقى يرنّ لمجرد استمرار الشرط
+  stopSegStationSiren();
+  if(navigator.vibrate) navigator.vibrate([80,40,80]);
+  checkSegStationAlarm(); // إعادة تحقق فورية: قد لا يعود القطار مطابقاً فعلاً منذ آخر دورة، فتُغلق اللافتة كاملة هنا
   if(segStationAlarmActive){
-    if(navigator.vibrate) navigator.vibrate([80,40,80]);
+    // اللافتة تبقى ظاهرة (الخطر لا يزال قائماً) لكن الصوت صامت الآن؛ لن يعود الصوت إلا إن زال الشرط تماماً ثم عاد من جديد
     updateSegStationAlarmGraceStatusText();
-    return;
   }
 };
 // ================================================================================================
