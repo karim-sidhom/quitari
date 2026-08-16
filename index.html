@@ -2561,10 +2561,7 @@ function resolveStationCoord(name){
 // لا يوجد أي حقل توقيت في بيانات SNCFT Live نفسها (لا lt.heure ولا lt.time)، ولا جدول نظري لهذه القطارات لمقارنته بالوقت الحالي كما نفعل مع القطارات المعروفة (isTrainLiveConfirmed)
 // لذلك نراقب بأنفسنا: هل محطته/تأخيره تغيّر فعلاً عبر عدة دورات جلب متتالية؟ إن بقيت نفس القيم دون أي تغيّر لفترة طويلة، فهذا مؤشر قوي على انقطاع مُرسِله (Transpondeur) — وليس بالضرورة أن رحلته انتهت
 const liveOnlyHistory = new Map(); // num(string) -> {signature, lastChangedAt}
-// بطلب صريح من المستخدم ("المُبيد" — The Terminator): لم يعد 20 دقيقة تعني "إخفاء فوري" — بل الحد الأقصى الذي نواصل بعده
-// تقدير مسيرة القطار افتراضياً (استكمالاً هندسياً على نفس اتجاه سيره الأخير) قبل اعتباره فعلاً انتهت رحلته وإخفائه نهائياً
-const GONE_DARK_MS = 3*60*1000; // 3 دقائق بلا أي تغيّر = مؤشر كافٍ على انقطاع الإرسال، يبدأ بعدها الاستكمال الافتراضي
-const STALE_UNSCHEDULED_MAX_MS = 60*60*1000; // بعد ساعة كاملة من الصمت التام، حتى الاستكمال الافتراضي لم يعد موثوقاً كفاية
+const GONE_DARK_MS = 3*60*1000; // 3 دقائق بلا أي تغيّر = مؤشر كافٍ على انقطاع الإرسال، يبدأ بعدها الاستكمال الافتراضي عبر المُبيد
 function updateLiveOnlyHistory(){
   const now = Date.now();
   const seenNums = new Set();
@@ -2581,10 +2578,9 @@ function updateLiveOnlyHistory(){
   // تنظيف الذاكرة: أي رقم لم يعد يظهر إطلاقاً في آخر جلب نحذفه، حتى لا تتراكم أرقام قديمة إلى الأبد
   Array.from(liveOnlyHistory.keys()).forEach(k=>{ if(!seenNums.has(k)) liveOnlyHistory.delete(k); });
 }
+// بطلب صريح من المستخدم: بلا أي حد زمني أقصى يُخفي القطار — المُبيد يواصل تقديره ما دام مُرسِله لم يُرصَد مجدداً، مهما طالت المدة
 function isLiveOnlyEntryStale(lt){
-  const prev = liveOnlyHistory.get(String(lt.num));
-  if(!prev) return false; // أول ظهور له الآن؛ لا نملك تاريخاً كافياً للحكم عليه بعد، فنعرضه بحذر بدل إخفائه فوراً
-  return (Date.now()-prev.lastChangedAt) > STALE_UNSCHEDULED_MAX_MS;
+  return false;
 }
 // مدة الصمت التام (بالمللي ثانية) منذ آخر تغيّر فعلي في محطتيه/تأخيره — 0 إن لم نملك تاريخاً كافياً بعد
 function liveOnlySilentMs(lt){
