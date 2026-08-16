@@ -2607,20 +2607,49 @@ function liveOnlyTrainPositionRaw(lt){
 }
 // ---------- "المُبيد" (The Terminator) — بطلب صريح من المستخدم ----------
 // لا يتوقف عن حساب مسيرة القطار لمجرد انقطاع إرسال مُرسِله (Transpondeur): بعد GONE_DARK_MS من الصمت التام، يواصل
-// تقدير موقعه افتراضياً باستكمال هندسي على نفس اتجاه سيره الأخير المعروف (bearing من محطته الحالية نحو التالية)،
-// بسرعة متوسطة تقديرية (AVG_TRAIN_SPEED_KMH)، بدل تجميد موقعه على آخر نقطة معروفة أو إخفائه بعد فترة صمت قصيرة
+// تقدير موقعه افتراضياً بسرعة متوسطة تقديرية (AVG_TRAIN_SPEED_KMH) — على تعرّج السكة الحقيقي (kz_getTrackSubPath، نفس
+// المسار المستعمل في بقية التطبيق) بدل خط مستقيم جغرافي بحت، ما دامت المسافة التقديرية ضمن طول هذا المقطع الحقيقي المعروف؛
+// وإلا (تجاوزها) نكمل الباقي بخط مستقيم من نفس اتجاهه الأخير عند نهاية المقطع، كاحتياط فقط لغياب معرفة بما بعده
 function terminatorExtrapolatedPosition(lt){
   const silentMs = liveOnlySilentMs(lt);
   if(silentMs < GONE_DARK_MS) return null; // لم يمضِ وقت كافٍ بعد لاعتباره منقطعاً فعلاً — موقعه الحقيقي المباشر يكفي
   const curC = resolveStationCoord(lt.curFr), nextC = resolveStationCoord(lt.nextFr);
   if(!curC || !nextC) return null; // بلا اتجاه سير معروف (محطتان)، لا يمكن استكمال أي مسيرة افتراضية
-  const base = liveOnlyTrainPositionRaw(lt); // منتصف آخر مقطع معروف كنقطة انطلاق الاستكمال
-  if(!base) return null;
   const hours = silentMs/3600000;
   const distM = hours*AVG_TRAIN_SPEED_KMH*1000;
-  const brg = bearingBetween(curC, nextC);
-  const dest = destinationPoint(base.lat, base.lon, brg, distM);
-  const snapped = snapToNearestTrack(dest[0], dest[1], 3000);
+  const sub = (typeof kz_getTrackSubPath==='function') ? kz_getTrackSubPath(curC, nextC, lt.curFr, lt.nextFr) : null;
+  let lat, lon;
+  if(sub && sub.length>=2){
+    let total=0; for(let i=0;i<sub.length-1;i++) total += haversineTN(sub[i], sub[i+1]);
+    const baseDist = total/2; // منتصف المقطع الحقيقي — نفس نقطة الانطلاق المستعملة في liveOnlyTrainPositionRaw
+    const targetDist = Math.min(total, baseDist+distM);
+    let acc=0, pt=sub[sub.length-1];
+    for(let i=0;i<sub.length-1;i++){
+      const segLen = haversineTN(sub[i], sub[i+1]);
+      if(acc+segLen >= targetDist){
+        const t = segLen>0 ? (targetDist-acc)/segLen : 0;
+        pt = [sub[i][0]+(sub[i+1][0]-sub[i][0])*t, sub[i][1]+(sub[i+1][1]-sub[i][1])*t];
+        break;
+      }
+      acc += segLen;
+    }
+    lat = pt[0]; lon = pt[1];
+    // تجاوزت المسافة التقديرية طول هذا المقطع الحقيقي كاملاً (بلغ نهايته): نكمل الباقي بخط مستقيم من نفس اتجاهه الأخير هناك
+    if(baseDist+distM > total){
+      const extra = (baseDist+distM) - total;
+      const brg = bearingBetween(sub[Math.max(0,sub.length-2)], sub[sub.length-1]);
+      const dest = destinationPoint(lat, lon, brg, extra);
+      lat = dest[0]; lon = dest[1];
+    }
+  } else {
+    // احتياط: لا تتبّع دقيق لهذا المقطع بعينه في بيانات خطوط السكة الحقيقية — نعود لخط مستقيم جغرافي (bearing) كما سابقاً
+    const base = liveOnlyTrainPositionRaw(lt);
+    if(!base) return null;
+    const brg = bearingBetween(curC, nextC);
+    const dest = destinationPoint(base.lat, base.lon, brg, distM);
+    lat = dest[0]; lon = dest[1];
+  }
+  const snapped = snapToNearestTrack(lat, lon, 3000);
   return {lat:snapped.lat, lon:snapped.lon, fromStation:lt.curFr||'?', toStation:lt.nextFr||'?',
     delayMin:Number(lt.delay)||0, silentMinutes:Math.round(silentMs/60000), extrapolated:true};
 }
