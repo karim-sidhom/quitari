@@ -5005,6 +5005,17 @@ function segTrCardAlarm_stop(){
 }
 const SEG_ALARM_WINDOW_MS = 3*60000; // ±3 دقائق حول توقيت الالتقاء
 const SEG_ALARM_DIST_M = 150;
+// بطلب المستخدم: سرعة متوسطة تقديرية لقطار SNCFT على الخطوط الإقليمية (بالكم/سا) — تُستعمل فقط كاحتياط لتصحيح توقيت
+// محطة معروفة (من الجدول) حسب المسافة المتبقية من تلك المحطة إلى موقع المستخدم الفعلي، حين لا تتوفر بيانات Réel/Prévu
+// لمحطتين متتاليتين لحساب استيفاء زمني هندسي دقيق. القيمة تقريبية وقابلة للتعديل من هنا فقط.
+const AVG_TRAIN_SPEED_KMH = 60;
+// يحوّل توقيت محطة معروفة (plan/forecast) إلى توقيت تقديري عند موقع المستخدم، بإضافة/طرح (المسافة بالكم ÷ السرعة المتوسطة)
+// كم من ساعات — الإشارة تُحدَّد عبر approaching (true إن كان القطار قادماً نحو تلك المحطة، أي وقت وصوله لموقعك قبلها زمنياً)
+function estimateTimeFromNearestStation(stationTimeMs, distanceMeters, approaching){
+  if(stationTimeMs==null || !isFinite(stationTimeMs) || distanceMeters==null || !isFinite(distanceMeters)) return stationTimeMs;
+  const offsetMs = (distanceMeters/1000/AVG_TRAIN_SPEED_KMH)*3600000;
+  return approaching ? (stationTimeMs - offsetMs) : (stationTimeMs + offsetMs);
+}
 // يملأ #segmentTrainsList: قائمة القطارات المارة بهذا المقطع مرتّبة حسب أقرب توقيت التقاء فعلي، ويشغّل/يوقف إنذار البطاقة حسب الشرط أعلاه
 // impactNameA/impactNameB اختياريان: إن أُعطيا (محطتان أدق، بما فيها الصغيرة/الوسيطة عبر nearestAnyStationTo)، تُستعملان فقط لحساب نقطة الالتقاء/المسافة
 // لدقة أعلى، بينما تبقى قائمة القطارات (nameA/nameB) مبنية على محطات الجدول النظري كما هي (لأن نص الجدول لا يذكر غالباً المحطات الصغيرة)
@@ -5121,6 +5132,15 @@ function renderSegmentTrainsList(nameA, nameB, userPos, impactNameA, impactNameB
         if(t){
           let tm = todayAt(t).getTime();
           if(tm < now - 5*60000) tm += 24*3600000;
+          // بطلب المستخدم: نصحّح هذا التوقيت (توقيت المحطة الأقرب نفسها من الجدول) بالمسافة الفعلية المتبقية بين تلك
+          // المحطة وموقع المستخدم، عبر سرعة متوسطة تقديرية لقطار (AVG_TRAIN_SPEED_KMH) — بدل عرض توقيت المحطة كما هو
+          // بلا أي تصحيح لموقعك أنت بالذات (احتياط فقط، يُستعمل حين لا تتوفر محطتان متتاليتان للاستيفاء الهندسي أعلاه)
+          const stationCoord = coordForStationName(stationName || relevantName);
+          if(stationCoord && userPos){
+            const distToStation = haversine(userPos, stationCoord);
+            const approaching = (relevantName === lt.nextFr); // القطار لم يصل بعد لهذه المحطة: موقعك قبلها زمنياً
+            tm = estimateTimeFromNearestStation(tm, distToStation, approaching);
+          }
           impactTimeMs = tm;
         }
       }
@@ -5146,6 +5166,14 @@ function renderSegmentTrainsList(nameA, nameB, userPos, impactNameA, impactNameB
     if(nearestWithStops && nearestWithStops.allStops.length>1){
       const stops = nearestWithStops.allStops;
       const n = stops.length;
+      // إصلاح بطلب المستخدم: عندما تتوفر القائمة الحقيقية الكاملة لمحطات هذا القطار (allStops)، كانت المحطتان
+      // المعروضتان في صندوقَي الطرفين (segTrCardVizFromName/ToName) تبقيان محطتَي "الأقرب لموقعك" (vA/vB) رغم
+      // اختلافهما تماماً عن محطتَي بداية/نهاية هذا القطار الحقيقيتين — فتظهران متجاورتين بصرياً مع أول/آخر نقطة
+      // على الخط (مثال حقيقي رآه المستخدم: "Nabeul Voyageurs" بجانب "Tunis Ville" الحقيقية دون أي علاقة بينهما).
+      // الحل: بما أن الخط نفسه يعرض الآن كل محطات هذا القطار الحقيقية، الصندوقان يعكسان أول/آخر محطة من نفس
+      // القائمة الحقيقية بالذات (لا تخميناً منفصلاً)، فيتطابق ما يُكتب في الصندوقين مع طرفَي الخط تماماً.
+      if(vizFromEl) vizFromEl.textContent = stops[0].name;
+      if(vizToEl) vizToEl.textContent = stops[n-1].name;
       const curIdx = nearestWithStops.stationName ? stops.findIndex(s=>stationNamesMatch(s.name, nearestWithStops.stationName)) : -1;
       // طلب المستخدم بالحرف: نستعمل توقيتَي المحطة الحالية والتالية معاً لحساب موضع القطار الحقيقي بين النقطتين (لا تثبيته
       // على نقطة المحطة فقط) — بنسبة الوقت المنقضي فعلياً من الفاصل الزمني بينهما، بدل تجميده على محطة واحدة حتى تتحدّث البيانات
@@ -7022,11 +7050,17 @@ function liveShownStations(){
 function nearestAnyStationTo(pos, n){
   const used = nearestUsedStations(pos, 9999); // كل محطات الجدول مُرتَّبة، بلا حد أقصى مسبق — الدمج والتقليص يتم بعد ذلك
   const known = liveShownStations().map(s=>({...s, dist:haversine(pos,[s.lat,s.lon])}));
+  // إصلاح: الدمج كان يقارن s.name حرفياً (حساس لحالة الأحرف)، فنفس المحطة الفعلية تُحسب مرتين إن جاءت مرة بحالة أحرف
+  // من جدول الأوقات (مثال: "Nabeul") ومرة بحالة أحرف مختلفة من SNCFT Live (مثال: "NABEUL") — وتظهر البطاقة عندها
+  // بنفس اسم المحطة مكرَّراً على طرفَي المقطع (وكأنه اسم ثابت "en dur"، رغم أنه حساب مكرّر لنفس النقطة بالخطأ).
+  // الحل: التطابق عبر normName (بلا حساسية لحالة الأحرف ولا للتشكيل)، مع الإبقاء على أول ظهور (تفضيلاً لحالة الأحرف
+  // الأصلية من جدول الأوقات، أوضح للقراءة من الحالة الكبيرة الآتية من SNCFT Live).
   const seen = new Set();
   const merged = [];
   used.concat(known).forEach(s=>{
-    if(seen.has(s.name)) return;
-    seen.add(s.name);
+    const key = normName(s.name);
+    if(!key || seen.has(key)) return;
+    seen.add(key);
     merged.push(s);
   });
   merged.sort((a,b)=>a.dist-b.dist);
