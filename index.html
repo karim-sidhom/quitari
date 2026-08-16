@@ -1767,6 +1767,9 @@ let liveAlarmActive=false, liveSirenOsc=null;
 const LIVE_ALARM_POST_PASSAGE_GRACE_MS = 30*60*1000; // 30 دقيقة، نفس مدة الإنذار الرئيسي لكن بمتغيّرات مستقلة
 let liveAlarmLockTrain=null, liveAlarmLockToStation=null, liveAlarmLockConfirmedAt=null;
 let liveAlarmMinDistSeen = Infinity;
+// بطلب صريح من المستخدم: وقت مرور القطار المسبِّب بموقع المستخدم بالضبط، يُحسب مرة واحدة فقط عند القفل (انظر computeLiveAlarmPassageTimeMs) —
+// طالما هذا الوقت لم يمرّ بعد، القفل يبقى فعّالاً بالكامل ولا يتغيّر القطار المقفول، بصرف النظر عن أي تذبذب لاحق في مسافة SNCFT Live المباشرة
+let liveAlarmPassageTimeMs=null;
 // ---------- طلب صريح من المستخدم: خط الزمن الأزرق (الرئيسي) وخط الزمن الأخضر (SNCFT Live حصرياً) يجب أن يبقيا
 // معلَّقين على القطار بعد مروره المؤكَّد لمدة 30 دقيقة إضافية، مع استمرار عرض "الوقت الحقيقي" (المصحَّح بالتأخير الآن أو آخر قيمة مؤكَّدة)
 // بدل الانتقال الفوري لقطار آخر أو عرض جدول قديم غير منطقي ----------
@@ -6820,6 +6823,24 @@ function alarmGraceElapsed(){
 // حتى قطار لا وجود له في الجدول). يعمل بالتوازي التام مع الإنذار الرئيسي (triggerAlert) دون قراءة أو تعديل أي
 // من متغيّراته (alertActive وwarاحقاتها) ويُعرض في شريط سفلي مستقل (#liveAlarmBanner) بدل الشاشة الحمراء الكاملة.
 // ================================================================================================
+// بطلب صريح من المستخدم: وقت مرور هذا القطار بالذات بموقع المستخدم بالضبط — استيفاءً هندسياً بين توقيتَي محطتيه الحاليتين
+// (fromStation/toStation عند لحظة القفل)، مصحَّحاً بالتأخير المرصود فعلياً. يُحسب مرة واحدة فقط عند القفل ولا يُعاد حسابه
+// لاحقاً، لأن الهدف بالتحديد ألا يتأثر القفل بأي تذبذب لاحق في بيانات SNCFT Live المباشرة (كان هذا يُسبّب فكّ القفل خطأً)
+function computeLiveAlarmPassageTimeMs(train, fromStation, toStation, userPos){
+  if(!train || !fromStation || !toStation || !userPos) return null;
+  const stops = parseStops(train.stopsText).filter(s=>!s.unknown && s.time);
+  const a = stops.find(s=>s.name===fromStation), b = stops.find(s=>s.name===toStation);
+  if(!a || !b) return null;
+  const impact = computeSegmentImpact(userPos, fromStation, toStation);
+  const u = (impact && isFinite(impact.u)) ? Math.min(1, Math.max(0, impact.u)) : 0.5;
+  let t0 = todayAt(a.time).getTime(), t1 = todayAt(b.time).getTime();
+  if(t1 < t0) t1 += 24*3600000;
+  let tm = t0 + u*(t1-t0);
+  const delayMin = getLiveDelayForTrain(train) || 0;
+  tm += delayMin*60000;
+  if(tm < Date.now() - 5*60000) tm += 24*3600000;
+  return tm;
+}
 // يفحص فقط وحدتَي SNCFT Live (مباشر + كامل) ويُشغِّل/يُدير الإنذار المستقل بمعزل كامل عن الإنذار الرئيسي
 function checkLiveOnlyAlarm(result){
   const liveOnlyModules = [];
@@ -6843,6 +6864,8 @@ function triggerLiveOnlyAlarm(liveOnlyModules){
       liveAlarmLockToStation = pos ? pos.toStation : null;
       liveAlarmLockConfirmedAt = null;
       liveAlarmMinDistSeen = Infinity; // إعادة ضبط أدنى مسافة لهذا الحدث الجديد
+      // بطلب المستخدم: نحسب وقت مرور هذا القطار بموقعك الآن، مرة واحدة فقط عند القفل — هذا الوقت وحده يحكم فكّ القفل لاحقاً
+      liveAlarmPassageTimeMs = (pos && lastPos) ? computeLiveAlarmPassageTimeMs(culpritTrain, pos.fromStation, pos.toStation, lastPos) : null;
     }
   }
   const el = document.getElementById('liveAlarmBanner');
@@ -6895,6 +6918,10 @@ function liveAlarmLockedTrainDistance(){
 }
 function liveAlarmUnlockConditionMet(){
   if(!liveAlarmLockTrain) return true;
+  // بطلب صريح من المستخدم: طالما وقت مرور القطار المقفول بموقعك (المحسوب مرة واحدة عند القفل) لم يمرّ بعد، القفل يبقى
+  // فعّالاً بالكامل ولا يتغيّر القطار المقفول أبداً — بصرف النظر تماماً عن أي تذبذب لاحق في مسافة SNCFT Live المباشرة
+  if(liveAlarmPassageTimeMs!=null) return Date.now() >= liveAlarmPassageTimeMs;
+  // احتياط فقط إن تعذّر حساب وقت المرور عند القفل (مثال: تعذّر تحديد إحداثيات إحدى المحطتين آنذاك)
   if(liveAlarmGraceElapsed()) return true;
   if(liveAlarmLockedTrainDistance() > RISK_THRESHOLD_M) return true;
   return false;
@@ -6931,6 +6958,7 @@ function forceStopLiveAlarm(){
   const el = document.getElementById('liveAlarmBanner'); if(el) el.style.display='none';
   stopLiveSiren();
   liveAlarmLockTrain=null; liveAlarmLockToStation=null; liveAlarmLockConfirmedAt=null;
+  liveAlarmPassageTimeMs=null;
   liveAlarmMinDistSeen = Infinity;
   const gEl = document.getElementById('liveAlarmGraceStatus'); if(gEl) gEl.textContent='';
 }
