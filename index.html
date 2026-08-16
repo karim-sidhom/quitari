@@ -292,6 +292,25 @@ body{
 #segAlarmBanner .btn{max-width:280px;background:#ff8c00;}
 #segAlarmGraceStatus{font-size:12px;margin-top:8px;opacity:.85;color:#ffd6d6;}
 
+/* ---------- إنذار رابع مستقل تماماً بطلب صريح من المستخدم: "استهداف بالاسم" — بلا أي شرط آخر (لا رقم قطار، لا مسافة، لا تأكيد
+   جدول نظري): أي مُدخل في بيانات SNCFT Live المباشرة تحمل محطته الحالية أو التالية اسم إحدى محطتَي مقطعك الحالي (أقرب محطتين
+   لموقعك) يُعتبر مستهدفاً فوراً. مستقل تماماً عن الإنذارات الثلاثة أعلاه (لا يقرأ ولا يعدّل متغيّراتها)، بلافتة سفلية خاصة به
+   بلون مميّز (كهرماني/تركوازي) ونغمة صوتية مختلفة (triangle) لتمييزه صوتياً عن البقية لو عمل بالتوازي معها ---------- */
+#segStationAlarmBanner{
+  position:fixed;left:0;right:0;bottom:0;z-index:10001;
+  background:linear-gradient(180deg,rgba(0,120,130,.97),rgba(0,40,50,.97));
+  display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+  padding:16px 14px calc(16px + env(safe-area-inset-bottom,0px));
+  animation:segStationAlarmPulse 0.9s infinite;
+  box-shadow:0 -4px 24px rgba(0,220,235,.6);
+  border-top:2px solid #4de3f0;
+}
+@keyframes segStationAlarmPulse{0%,100%{background:linear-gradient(180deg,rgba(0,120,130,.97),rgba(0,40,50,.97))}50%{background:linear-gradient(180deg,rgba(0,180,195,.97),rgba(0,70,85,.97))}}
+#segStationAlarmBanner h2{font-size:19px;margin:0 0 8px;color:#c8f7fb;}
+#segStationAlarmBanner p{font-size:14px;margin:0 0 12px;line-height:1.7;color:#fff;max-width:520px;}
+#segStationAlarmBanner .btn{max-width:280px;background:#00a8b8;}
+#segStationAlarmGraceStatus{font-size:12px;margin-top:8px;opacity:.85;color:#c8f7fb;}
+
 .station-clock-wrap{display:flex;justify-content:center;align-items:center;gap:34px;margin:10px 0 4px;}
 .traffic-light{
   display:flex;flex-direction:column;gap:7px;padding:8px 6px;border-radius:14px;
@@ -1687,6 +1706,15 @@ const GHOST_VIDEO_SRC = 'data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yY
   <p id="segAlarmGraceStatus"></p>
 </div>
 
+<!-- إنذار "استهداف بالاسم": مستقل تماماً بطلب صريح من المستخدم — بلا أي شرط سوى مطابقة الاسم: أي قطار SNCFT Live مباشر
+     (بغض النظر عن رقمه) تحمل محطته الحالية أو التالية اسم إحدى محطتَي مقطعك الحالي يُستهدَف فوراً -->
+<div id="segStationAlarmBanner">
+  <h2>🎯🚨 استهداف بالاسم (SNCFT Live)</h2>
+  <p id="segStationAlarmText">قطار SNCFT Live مباشر يحمل اسم محطة من مقطعك الحالي!</p>
+  <button class="btn" onclick="dismissSegStationAlarm()">فهمت، أوقف صوت هذا الإنذار</button>
+  <p id="segStationAlarmGraceStatus"></p>
+</div>
+
 <div id="trainReminderOverlay">
   <h1>🔔 تذكير قِطاري</h1>
   <p id="trainReminderText"></p>
@@ -2500,7 +2528,8 @@ function resolveStationCoord(name){
   }
   return null;
 }
-// كل مُدخل في بيانات SNCFT Live لا يطابق رقمه أي قطار من قطاراتنا المعروفة — أي قطار "غير مجدول نظرياً" لكنه مؤكد فعلياً الآن عبر SNCFT Live
+// بطلب صريح من المستخدم: بلا أي منطق استبعاد بحسب الرقم إطلاقاً — يُفضّل ظهور نفس القطار مرتين (إنذاران) على خطر إخفاء
+// قطار حقيقي بالخطأ بسبب تخمين تطابق رقم قد يكون غير صحيح (الأرقام تُعاد استعمالها لعدة رحلات مختلفة في نفس اليوم)
 // ---------- كشف قطارات SNCFT Live "العالقة" بين غير المجدولين ----------
 // لا يوجد أي حقل توقيت في بيانات SNCFT Live نفسها (لا lt.heure ولا lt.time)، ولا جدول نظري لهذه القطارات لمقارنته بالوقت الحالي كما نفعل مع القطارات المعروفة (isTrainLiveConfirmed)
 // لذلك نراقب بأنفسنا: هل محطته/تأخيره تغيّر فعلاً عبر عدة دورات جلب متتالية؟ إن بقيت نفس القيم دون أي تغيّر لفترة طويلة، فهذا مؤشر قوي على بيانات عالقة (قطار انتهت رحلته لكن الخادم لم يحدّث الخبر) وليس قطاراً يتحرك فعلاً الآن
@@ -2511,7 +2540,6 @@ function updateLiveOnlyHistory(){
   const seenNums = new Set();
   liveTrains.forEach(lt=>{
     if(!lt || !lt.num) return;
-    if(trains.some(t=>trainNumberMatches(t.name, lt.num))) return; // نراقب فقط القطارات غير المجدولة (الزرقاء)
     const numKey = String(lt.num);
     seenNums.add(numKey);
     const sig = (lt.curFr||'')+'|'+(lt.nextFr||'')+'|'+(Number(lt.delay)||0);
@@ -2530,7 +2558,7 @@ function isLiveOnlyEntryStale(lt){
 }
 function liveOnlyEntries(){
   if(!isLiveDataFresh()) return [];
-  return liveTrains.filter(lt => lt && lt.num && !trains.some(t=>trainNumberMatches(t.name, lt.num)) && !isLiveOnlyEntryStale(lt));
+  return liveTrains.filter(lt => lt && lt.num && !isLiveOnlyEntryStale(lt));
 }
 // موقع تقديري لقطار SNCFT Live غير مجدول: منتصف المسافة بين محطته الحالية والتالية إن عُرفتا كلتاهما، وإلا عند المحطة المعروفة وحدها
 function liveOnlyTrainPositionRaw(lt){
@@ -5819,8 +5847,7 @@ function computeTopConfirmedTrains(userPos, n){
   if(isLiveDataFresh()){
     liveTrains.forEach(lt=>{
       if(!lt || !lt.num) return;
-      const matchedTrain = trains.find(t=>trainNumberMatches(t.name, lt.num));
-      if(matchedTrain) return; // موجود أصلاً أعلاه عبر trains.forEach، نتفادى التكرار
+      // بطلب صريح من المستخدم: بلا أي استبعاد بحسب الرقم — يُضاف دوماً، حتى لو ظهر مكرَّراً مع قطار نظري بنفس الرقم
       if(isLiveOnlyEntryStale(lt)) return;
       const pos = liveOnlyTrainPosition(lt);
       if(!pos) return;
@@ -5868,8 +5895,7 @@ function computeRiskModuleLiveAny(userPos){
   // فقط إن كانت أقرب فعلاً من القطار المرجعي أعلاه (إن وُجد)، حتى لا نُخفي قطاراً حقيقياً يسير الآن قريباً منك
   liveTrains.forEach(lt=>{
     if(!lt || !lt.num) return;
-    const matchedTrain = trains.find(t=>trainNumberMatches(t.name, lt.num));
-    if(matchedTrain) return; // القطارات المُجدوَلة تُعالَج أعلاه فقط عبر القطار المرجعي (نظري+Live)، نتفادى التكرار/التضارب هنا
+    // بطلب صريح من المستخدم: بلا أي استبعاد بحسب الرقم — يُضاف دوماً، حتى لو ظهر مكرَّراً مع قطار نظري بنفس الرقم
     if(isLiveOnlyEntryStale(lt)) return;
     const pos = liveOnlyTrainPosition(lt);
     if(!pos) return;
@@ -6653,6 +6679,8 @@ function recalcAndDisplay(){
   checkLiveOnlyAlarm(result);
   // إنذار ثالث مستقل تماماً: "تنبيه المقطع" (فكرة المستخدم) — انظر checkTrackSegmentAlarm أعلاه لتفاصيل المنطق
   checkTrackSegmentAlarm();
+  // إنذار رابع مستقل تماماً: "استهداف بالاسم" (فكرة المستخدم) — بلا أي شرط سوى مطابقة اسم المحطة، انظر checkSegStationAlarm أعلاه
+  checkSegStationAlarm();
   // المُعلن الصوتي للمسافة: يتكلم فوراً بمجرد أن تصل المسافة إلى 150م أو أقل، حسب أي وحدة من الوحدات الأربع (وليس بالضرورة كلها معاً) —
   // نفس منطق "لا قطارات شبح تُخفي خطراً حقيقياً" المعمول به في triggerAlert. يُعاد تصفير الإعلان فقط بعد خروج كل الوحدات من نطاق 150م
   const dist150Candidates = [result.dist, result.theoBest && result.theoBest.dist, result.liveAnyBest && result.liveAnyBest.dist]
@@ -6908,22 +6936,30 @@ function stopLiveSiren(){
   }
 }
 // المسافة الحالية بين المستخدم والقطار المسبِّب لهذا الإنذار المستقل — تعتمد حصراً على الموقع المباشر عبر SNCFT Live
+// بطلب المستخدم: كلما توفّرت بيانات SNCFT Live المباشرة من جديد لهذا القطار بالذات (بعد انقطاع مؤقت مثلاً)، نعيد حساب
+// وقت المرور (liveAlarmPassageTimeMs) بالتأخير المُحدَّث الآن فعلاً — بدل إبقائه مجمَّداً على التأخير المعروف عند القفل فقط.
+// هذا لا يُغيّر القطار المقفول أبداً (يبقى نفسه)، فقط يُحدِّث تقدير وقت مروره كلما توفّرت بيانات فعلية أدق
 function liveAlarmLockedTrainDistance(){
   if(!liveAlarmLockTrain || !lastPos) return Infinity;
   const pos = trainPositionLiveDirect(liveAlarmLockTrain);
   if(!pos) return Infinity;
+  const refreshed = computeLiveAlarmPassageTimeMs(liveAlarmLockTrain, pos.fromStation, pos.toStation, lastPos);
+  if(refreshed!=null) liveAlarmPassageTimeMs = refreshed;
   const d = haversine(lastPos, [pos.lat, pos.lon]);
   if(isFinite(d) && d < liveAlarmMinDistSeen) liveAlarmMinDistSeen = d;
   return d;
 }
 function liveAlarmUnlockConditionMet(){
   if(!liveAlarmLockTrain) return true;
-  // بطلب صريح من المستخدم: طالما وقت مرور القطار المقفول بموقعك (المحسوب مرة واحدة عند القفل) لم يمرّ بعد، القفل يبقى
-  // فعّالاً بالكامل ولا يتغيّر القطار المقفول أبداً — بصرف النظر تماماً عن أي تذبذب لاحق في مسافة SNCFT Live المباشرة
+  // نستدعيها دوماً أولاً (بصرف النظر عن أي الشرطين أدناه سيُستعمل فعلياً): تُحدِّث وقت المرور (liveAlarmPassageTimeMs)
+  // كلما توفّرت بيانات SNCFT Live مباشرة جديدة صالحة لهذا القطار بالذات، وتُحدِّث أيضاً أدنى مسافة مرصودة له
+  const distNow = liveAlarmLockedTrainDistance();
+  // بطلب صريح من المستخدم: طالما وقت مرور القطار المقفول بموقعك (المُحدَّث أعلاه كلما توفّرت بيانات جديدة) لم يمرّ بعد،
+  // القفل يبقى فعّالاً بالكامل ولا يتغيّر القطار المقفول أبداً — بصرف النظر عن أي تذبذب/غياب مؤقت في الموقع المباشر
   if(liveAlarmPassageTimeMs!=null) return Date.now() >= liveAlarmPassageTimeMs;
-  // احتياط فقط إن تعذّر حساب وقت المرور عند القفل (مثال: تعذّر تحديد إحداثيات إحدى المحطتين آنذاك)
+  // احتياط فقط إن تعذّر حساب وقت المرور نهائياً (لا عند القفل ولا لاحقاً): نعود للشرط القديم
   if(liveAlarmGraceElapsed()) return true;
-  if(liveAlarmLockedTrainDistance() > RISK_THRESHOLD_M) return true;
+  if(distNow > RISK_THRESHOLD_M) return true;
   return false;
 }
 function liveAlarmGraceElapsed(){
@@ -7355,6 +7391,126 @@ window.dismissSegAlarm=function(){
   if(segAlarmActive){
     if(navigator.vibrate) navigator.vibrate([80,40,80]);
     updateSegAlarmGraceStatusText();
+    return;
+  }
+};
+// ================================================================================================
+// ---------- إنذار رابع مستقل تماماً بطلب صريح من المستخدم: "استهداف بالاسم" ----------
+// المبدأ: بلا أي شرط سوى مطابقة الاسم — لا رقم قطار، لا مسافة، لا تأكيد جدول نظري، بغض النظر عن أي قطار "x" آخر يُفحص في
+// أي وحدة أخرى من التطبيق. أي مُدخل في بيانات SNCFT Live المباشرة (liveTrains) تحمل محطته الحالية (curFr) أو التالية (nextFr)
+// اسم إحدى محطتَي مقطعك الحالي (أقرب محطتين لموقعك، عبر nearestAnyStationTo نفسها المستعملة في بطاقة "القطارات المارة بمقطعك")
+// يُعتبر مستهدفاً فوراً وتُشغَّل له هذه اللافتة المنفصلة. مستقل تماماً عن الإنذارات الثلاثة أعلاه: لا يقرأ ولا يعدّل متغيّراتها.
+// ================================================================================================
+let segStationAlarmActive=false, segStationAlarmSirenOsc=null;
+let segStationAlarmCulpritTxt=null; // نص وصف القطار المستهدف حالياً (رقم + محطتاه)، لعرضه في نص حالة السماح
+// بطلب المستخدم: بمجرد التثبيت (الاستهداف)، الإنذار يبقى ثابتاً — لا يُطفَأ لمجرد غياب المطابقة في دورة واحدة عابرة
+// (بيانات SNCFT Live قد تتأخر لحظياً بين كل جلب والذي يليه). لا يُطفأ فعلياً إلا بعد عدة دورات متتالية بلا أي مطابقة
+const SEG_STATION_ALARM_MISS_TOLERANCE = 3;
+let segStationAlarmMissCount = 0;
+function checkSegStationAlarm(){
+  if(!lastPos || !isLiveDataFresh()){
+    if(segStationAlarmActive) forceStopSegStationAlarm();
+    return;
+  }
+  // بطلب صريح من المستخدم: لا معنى فيزيائياً لهذا الإنذار إن كنت أصلاً بعيداً عن أي سكة حقيقية — لا قطار "يطير" ليصلك
+  // من بعيد. شرط القرب من السكة أساسي هنا (مثل بقية إنذارات القرب في التطبيق)، مطابقة اسم المحطة وحدها لا تكفي أبداً
+  const distTrack = (typeof distanceToNearestTrack==='function') ? distanceToNearestTrack(lastPos[0], lastPos[1]) : Infinity;
+  if(!isFinite(distTrack) || distTrack > RISK_THRESHOLD_M){
+    if(segStationAlarmActive) forceStopSegStationAlarm();
+    return;
+  }
+  const nearest2 = nearestAnyStationTo(lastPos, 2);
+  if(nearest2.length<2){
+    if(segStationAlarmActive) forceStopSegStationAlarm();
+    return;
+  }
+  const [sA, sB] = nearest2;
+  const culprit = liveTrains.find(lt => lt && (
+    stationNamesMatch(lt.curFr, sA.name) || stationNamesMatch(lt.nextFr, sA.name) ||
+    stationNamesMatch(lt.curFr, sB.name) || stationNamesMatch(lt.nextFr, sB.name)
+  ));
+  if(culprit){
+    segStationAlarmMissCount = 0;
+    triggerSegStationAlarm(culprit, sA, sB);
+  } else if(segStationAlarmActive){
+    segStationAlarmMissCount++;
+    if(segStationAlarmMissCount >= SEG_STATION_ALARM_MISS_TOLERANCE) forceStopSegStationAlarm();
+  }
+}
+function triggerSegStationAlarm(culprit, sA, sB){
+  segStationAlarmCulpritTxt = 'قطار '+(culprit.num||'؟')+' ('+(culprit.curFr||'؟')+' → '+(culprit.nextFr||'؟')+')';
+  if(!segStationAlarmActive){
+    segStationAlarmActive = true;
+    startSegStationSiren();
+    if(navigator.vibrate) navigator.vibrate([200,100,200,100,600]);
+  }
+  // بطلب صريح من المستخدم: SNCFT Live يُعطي فعلاً اسم كل محطة وتوقيت وصوله الحقيقي إليها (عبر details.php) — يجب طلبه
+  // لهذا القطار المستهدَف بالذات أيضاً، لا الاكتفاء بعرض "المحطة الحالية/التالية" فقط بلا أي توقيت حقيقي مرفق
+  let horaireTxt = '';
+  if(culprit.id){
+    fetchTrainDetails(culprit.id); // غير معطِّل — تُستعمل النتيجة إن كانت جاهزة أصلاً في الذاكرة المؤقتة، أو الدورة القادمة
+    const cached = trainDetailsCache[culprit.id];
+    if(cached && cached.stops && cached.stops.length){
+      // التوقيت الحقيقي لأي من محطتَي مقطعك بالذات (أياً منهما ذُكرت في تفاصيل هذا القطار)، وليس تخميناً
+      const stopA = cached.stops.find(s=>stationNamesMatch(s.name, sA.name));
+      const stopB = cached.stops.find(s=>stationNamesMatch(s.name, sB.name));
+      const stop = stopA || stopB;
+      if(stop){
+        const t = stop.forecast || stop.plan;
+        if(t) horaireTxt = ' — ⏰ توقيته الحقيقي عند "'+stop.name+'": '+t+(stop.forecast && stop.forecast!==stop.plan ? ' (فعلي/محدَّث)' : ' (مبرمَج)');
+      }
+    }
+  }
+  const el = document.getElementById('segStationAlarmBanner'); if(el) el.style.display='flex';
+  const textEl = document.getElementById('segStationAlarmText');
+  if(textEl) textEl.innerHTML = segStationAlarmCulpritTxt+' يحمل اسم محطة من مقطعك الحالي ("'+sA.name+'" / "'+sB.name+'")'+horaireTxt+' — بصرف النظر عن رقمه أو أي تأكيد آخر.';
+  updateSegStationAlarmGraceStatusText();
+}
+function updateSegStationAlarmGraceStatusText(){
+  const el = document.getElementById('segStationAlarmGraceStatus');
+  if(!el || !segStationAlarmActive) return;
+  el.textContent = '🎯 '+(segStationAlarmCulpritTxt||'')+' لا يزال مطابقاً لاسم محطة من مقطعك الحالي — سيتوقف هذا الإنذار تلقائياً بمجرد ابتعاد محطتيه عن مقطعك.';
+}
+function forceStopSegStationAlarm(){
+  segStationAlarmActive=false;
+  segStationAlarmCulpritTxt=null;
+  segStationAlarmMissCount=0;
+  const el = document.getElementById('segStationAlarmBanner'); if(el) el.style.display='none';
+  stopSegStationSiren();
+  const gEl = document.getElementById('segStationAlarmGraceStatus'); if(gEl) gEl.textContent='';
+}
+// نغمة مختلفة تماماً عن باقي الإنذارات (triangle، غير مستعملة في أي إنذار آخر) لتمييزه صوتياً لو عمل بالتوازي معها
+function startSegStationSiren(){
+  if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+  if(audioCtx.state==='suspended'){ audioCtx.resume(); }
+  if(segStationAlarmSirenOsc) return;
+  segStationAlarmSirenOsc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  segStationAlarmSirenOsc.type='triangle';
+  gain.gain.value=0.5;
+  segStationAlarmSirenOsc.connect(gain).connect(audioCtx.destination);
+  segStationAlarmSirenOsc.start();
+  segStationAlarmSirenOsc._sweep = setInterval(()=>{
+    if(audioCtx.state==='suspended'){ audioCtx.resume(); }
+    const t=audioCtx.currentTime;
+    segStationAlarmSirenOsc.frequency.setValueAtTime(520,t);
+    segStationAlarmSirenOsc.frequency.linearRampToValueAtTime(820,t+0.4);
+    segStationAlarmSirenOsc.frequency.linearRampToValueAtTime(520,t+0.8);
+  },900);
+}
+function stopSegStationSiren(){
+  if(segStationAlarmSirenOsc){
+    if(segStationAlarmSirenOsc._sweep) clearInterval(segStationAlarmSirenOsc._sweep);
+    try{ segStationAlarmSirenOsc.stop(); }catch(e){}
+    segStationAlarmSirenOsc.disconnect();
+    segStationAlarmSirenOsc=null;
+  }
+}
+window.dismissSegStationAlarm=function(){
+  checkSegStationAlarm(); // إعادة تحقق فورية: قد لا يعود القطار مطابقاً فعلاً منذ آخر دورة، فيتوقف الإنذار من تلقاء نفسه هنا
+  if(segStationAlarmActive){
+    if(navigator.vibrate) navigator.vibrate([80,40,80]);
+    updateSegStationAlarmGraceStatusText();
     return;
   }
 };
