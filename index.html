@@ -311,6 +311,24 @@ body{
 #segStationAlarmBanner .btn{max-width:280px;background:#00a8b8;}
 #segStationAlarmGraceStatus{font-size:12px;margin-top:8px;opacity:.85;color:#c8f7fb;}
 
+/* ---------- إنذار خامس مستقل تماماً بطلب صريح من المستخدم: "المُبيد" (The Terminator) — لا يتوقف عن الحساب لمجرد
+   انقطاع إرسال مُرسِل القطار (Transpondeur): يواصل تقدير مسيرته افتراضياً (انظر terminatorExtrapolatedPosition) ويُنذر
+   إن اقترب تقديرياً منك. لافتة سفلية بلون أحمر/أسود معدني مميّز، ونغمة نبضية مختلفة عن كل الإنذارات الأخرى ---------- */
+#terminatorAlarmBanner{
+  position:fixed;left:0;right:0;bottom:0;z-index:10001;
+  background:linear-gradient(180deg,rgba(40,0,0,.97),rgba(10,10,10,.97));
+  display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+  padding:16px 14px calc(16px + env(safe-area-inset-bottom,0px));
+  animation:terminatorAlarmPulse 0.6s steps(1) infinite;
+  box-shadow:0 -4px 24px rgba(255,0,0,.5);
+  border-top:2px solid #ff2b2b;
+}
+@keyframes terminatorAlarmPulse{0%,49%{background:linear-gradient(180deg,rgba(60,0,0,.97),rgba(10,10,10,.97))}50%,100%{background:linear-gradient(180deg,rgba(20,0,0,.97),rgba(0,0,0,.97))}}
+#terminatorAlarmBanner h2{font-size:19px;margin:0 0 8px;color:#ff6b6b;}
+#terminatorAlarmBanner p{font-size:14px;margin:0 0 12px;line-height:1.7;color:#fff;max-width:520px;}
+#terminatorAlarmBanner .btn{max-width:280px;background:#8a0000;}
+#terminatorAlarmGraceStatus{font-size:12px;margin-top:8px;opacity:.85;color:#ffb0b0;}
+
 .station-clock-wrap{display:flex;justify-content:center;align-items:center;gap:34px;margin:10px 0 4px;}
 .traffic-light{
   display:flex;flex-direction:column;gap:7px;padding:8px 6px;border-radius:14px;
@@ -1715,6 +1733,15 @@ const GHOST_VIDEO_SRC = 'data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yY
   <p id="segStationAlarmGraceStatus"></p>
 </div>
 
+<!-- إنذار "المُبيد" (The Terminator): مستقل تماماً بطلب صريح من المستخدم — يواصل تقدير مسيرة أي قطار افتراضياً حتى
+     لو انقطع إرسال مُرسِله (Transpondeur)، بدل تجميد موقعه أو إخفائه بعد فترة صمت قصيرة -->
+<div id="terminatorAlarmBanner">
+  <h2>🤖🚨 المُبيد (The Terminator)</h2>
+  <p id="terminatorAlarmText">قطار منقطع الإرسال يُقدَّر اقترابه منك — لا يتوقف الحساب رغم صمت SNCFT Live!</p>
+  <button class="btn" onclick="dismissTerminatorAlarm()">فهمت، أوقف صوت هذا الإنذار</button>
+  <p id="terminatorAlarmGraceStatus"></p>
+</div>
+
 <div id="trainReminderOverlay">
   <h1>🔔 تذكير قِطاري</h1>
   <p id="trainReminderText"></p>
@@ -2532,9 +2559,12 @@ function resolveStationCoord(name){
 // قطار حقيقي بالخطأ بسبب تخمين تطابق رقم قد يكون غير صحيح (الأرقام تُعاد استعمالها لعدة رحلات مختلفة في نفس اليوم)
 // ---------- كشف قطارات SNCFT Live "العالقة" بين غير المجدولين ----------
 // لا يوجد أي حقل توقيت في بيانات SNCFT Live نفسها (لا lt.heure ولا lt.time)، ولا جدول نظري لهذه القطارات لمقارنته بالوقت الحالي كما نفعل مع القطارات المعروفة (isTrainLiveConfirmed)
-// لذلك نراقب بأنفسنا: هل محطته/تأخيره تغيّر فعلاً عبر عدة دورات جلب متتالية؟ إن بقيت نفس القيم دون أي تغيّر لفترة طويلة، فهذا مؤشر قوي على بيانات عالقة (قطار انتهت رحلته لكن الخادم لم يحدّث الخبر) وليس قطاراً يتحرك فعلاً الآن
+// لذلك نراقب بأنفسنا: هل محطته/تأخيره تغيّر فعلاً عبر عدة دورات جلب متتالية؟ إن بقيت نفس القيم دون أي تغيّر لفترة طويلة، فهذا مؤشر قوي على انقطاع مُرسِله (Transpondeur) — وليس بالضرورة أن رحلته انتهت
 const liveOnlyHistory = new Map(); // num(string) -> {signature, lastChangedAt}
-const STALE_UNSCHEDULED_MAX_MS = 20*60*1000; // 20 دقيقة بلا أي تغيّر في المحطة الحالية/التالية/التأخير = نعتبرها بيانات عالقة ولا نعرضها كقطار حقيقي متحرك
+// بطلب صريح من المستخدم ("المُبيد" — The Terminator): لم يعد 20 دقيقة تعني "إخفاء فوري" — بل الحد الأقصى الذي نواصل بعده
+// تقدير مسيرة القطار افتراضياً (استكمالاً هندسياً على نفس اتجاه سيره الأخير) قبل اعتباره فعلاً انتهت رحلته وإخفائه نهائياً
+const GONE_DARK_MS = 3*60*1000; // 3 دقائق بلا أي تغيّر = مؤشر كافٍ على انقطاع الإرسال، يبدأ بعدها الاستكمال الافتراضي
+const STALE_UNSCHEDULED_MAX_MS = 60*60*1000; // بعد ساعة كاملة من الصمت التام، حتى الاستكمال الافتراضي لم يعد موثوقاً كفاية
 function updateLiveOnlyHistory(){
   const now = Date.now();
   const seenNums = new Set();
@@ -2556,6 +2586,12 @@ function isLiveOnlyEntryStale(lt){
   if(!prev) return false; // أول ظهور له الآن؛ لا نملك تاريخاً كافياً للحكم عليه بعد، فنعرضه بحذر بدل إخفائه فوراً
   return (Date.now()-prev.lastChangedAt) > STALE_UNSCHEDULED_MAX_MS;
 }
+// مدة الصمت التام (بالمللي ثانية) منذ آخر تغيّر فعلي في محطتيه/تأخيره — 0 إن لم نملك تاريخاً كافياً بعد
+function liveOnlySilentMs(lt){
+  const prev = liveOnlyHistory.get(String(lt.num));
+  if(!prev) return 0;
+  return Date.now()-prev.lastChangedAt;
+}
 function liveOnlyEntries(){
   if(!isLiveDataFresh()) return [];
   return liveTrains.filter(lt => lt && lt.num && !isLiveOnlyEntryStale(lt));
@@ -2573,7 +2609,29 @@ function liveOnlyTrainPositionRaw(lt){
   const nm = curC ? (lt.curFr||'?') : (lt.nextFr||'?');
   return {lat:c[0], lon:c[1], fromStation:nm, toStation:nm, delayMin};
 }
+// ---------- "المُبيد" (The Terminator) — بطلب صريح من المستخدم ----------
+// لا يتوقف عن حساب مسيرة القطار لمجرد انقطاع إرسال مُرسِله (Transpondeur): بعد GONE_DARK_MS من الصمت التام، يواصل
+// تقدير موقعه افتراضياً باستكمال هندسي على نفس اتجاه سيره الأخير المعروف (bearing من محطته الحالية نحو التالية)،
+// بسرعة متوسطة تقديرية (AVG_TRAIN_SPEED_KMH)، بدل تجميد موقعه على آخر نقطة معروفة أو إخفائه بعد فترة صمت قصيرة
+function terminatorExtrapolatedPosition(lt){
+  const silentMs = liveOnlySilentMs(lt);
+  if(silentMs < GONE_DARK_MS) return null; // لم يمضِ وقت كافٍ بعد لاعتباره منقطعاً فعلاً — موقعه الحقيقي المباشر يكفي
+  const curC = resolveStationCoord(lt.curFr), nextC = resolveStationCoord(lt.nextFr);
+  if(!curC || !nextC) return null; // بلا اتجاه سير معروف (محطتان)، لا يمكن استكمال أي مسيرة افتراضية
+  const base = liveOnlyTrainPositionRaw(lt); // منتصف آخر مقطع معروف كنقطة انطلاق الاستكمال
+  if(!base) return null;
+  const hours = silentMs/3600000;
+  const distM = hours*AVG_TRAIN_SPEED_KMH*1000;
+  const brg = bearingBetween(curC, nextC);
+  const dest = destinationPoint(base.lat, base.lon, brg, distM);
+  const snapped = snapToNearestTrack(dest[0], dest[1], 3000);
+  return {lat:snapped.lat, lon:snapped.lon, fromStation:lt.curFr||'?', toStation:lt.nextFr||'?',
+    delayMin:Number(lt.delay)||0, silentMinutes:Math.round(silentMs/60000), extrapolated:true};
+}
 function liveOnlyTrainPosition(lt){
+  // بطلب المستخدم: القطار "المنقطع" لا يُجمَّد على آخر موقع معروف — يُستكمل افتراضياً عبر المُبيد إن انقطع إرساله فعلاً
+  const terminated = terminatorExtrapolatedPosition(lt);
+  if(terminated) return terminated;
   const r = liveOnlyTrainPositionRaw(lt);
   if(!r) return null;
   const s = snapToNearestTrack(r.lat, r.lon, 3000);
@@ -6681,6 +6739,8 @@ function recalcAndDisplay(){
   checkTrackSegmentAlarm();
   // إنذار رابع مستقل تماماً: "استهداف بالاسم" (فكرة المستخدم) — بلا أي شرط سوى مطابقة اسم المحطة، انظر checkSegStationAlarm أعلاه
   checkSegStationAlarm();
+  // إنذار خامس مستقل تماماً: "المُبيد" (The Terminator، فكرة المستخدم) — يواصل تقدير مسيرة القطار افتراضياً حتى لو انقطع إرساله، انظر checkTerminatorAlarm أعلاه
+  checkTerminatorAlarm();
   // المُعلن الصوتي للمسافة: يتكلم فوراً بمجرد أن تصل المسافة إلى 150م أو أقل، حسب أي وحدة من الوحدات الأربع (وليس بالضرورة كلها معاً) —
   // نفس منطق "لا قطارات شبح تُخفي خطراً حقيقياً" المعمول به في triggerAlert. يُعاد تصفير الإعلان فقط بعد خروج كل الوحدات من نطاق 150م
   const dist150Candidates = [result.dist, result.theoBest && result.theoBest.dist, result.liveAnyBest && result.liveAnyBest.dist]
@@ -7511,6 +7571,95 @@ window.dismissSegStationAlarm=function(){
   if(segStationAlarmActive){
     if(navigator.vibrate) navigator.vibrate([80,40,80]);
     updateSegStationAlarmGraceStatusText();
+    return;
+  }
+};
+// ================================================================================================
+// ---------- إنذار خامس مستقل تماماً بطلب صريح من المستخدم: "المُبيد" (The Terminator) ----------
+// المبدأ: أي قطار SNCFT Live مباشر (بغض النظر عن رقمه أو وجوده في الجدول النظري) انقطع إرسال مُرسِله فعلاً
+// (terminatorExtrapolatedPosition تُرجع موقعاً فقط بعد GONE_DARK_MS من الصمت التام) يستمر حسابه افتراضياً — إن اقترب
+// موقعه التقديري منك (≤150م، كبقية إنذارات القرب)، يُشغَّل هذا الإنذار المستقل بلافتته الخاصة. لا يتوقف الحساب لمجرد
+// صمت SNCFT Live، ولا يُخفى القطار كما كان يحدث سابقاً بعد 20 دقيقة فقط من الصمت.
+// ================================================================================================
+let terminatorAlarmActive=false, terminatorAlarmSirenOsc=null;
+let terminatorAlarmCulpritTxt=null;
+function checkTerminatorAlarm(){
+  if(!lastPos || !isLiveDataFresh()){
+    if(terminatorAlarmActive) forceStopTerminatorAlarm();
+    return;
+  }
+  let best=null;
+  liveTrains.forEach(lt=>{
+    if(!lt || !lt.num) return;
+    const pos = terminatorExtrapolatedPosition(lt); // null إن لم ينقطع فعلاً بعد، أو تعذّر تحديد اتجاه سيره
+    if(!pos) return;
+    const dist = haversine(lastPos, [pos.lat, pos.lon]);
+    if(!best || dist<best.dist) best = {lt, pos, dist};
+  });
+  if(best && best.dist<=RISK_THRESHOLD_M){
+    triggerTerminatorAlarm(best.lt, best.pos, best.dist);
+  } else if(terminatorAlarmActive){
+    forceStopTerminatorAlarm();
+  }
+}
+function triggerTerminatorAlarm(lt, pos, dist){
+  // الوقت التقديري المتبقي حتى وصوله لموقعك بالضبط، بنفس السرعة المتوسطة المستعملة في الاستكمال (AVG_TRAIN_SPEED_KMH)
+  const etaMin = Math.max(0, Math.round((dist/1000)/AVG_TRAIN_SPEED_KMH*60));
+  terminatorAlarmCulpritTxt = 'قطار '+(lt.num||'؟')+' (منقطع الإرسال منذ '+pos.silentMinutes+' د)';
+  if(!terminatorAlarmActive){
+    terminatorAlarmActive = true;
+    startTerminatorSiren();
+    if(navigator.vibrate) navigator.vibrate([100,50,100,50,100,50,100,50,700]);
+  }
+  const el = document.getElementById('terminatorAlarmBanner'); if(el) el.style.display='flex';
+  const textEl = document.getElementById('terminatorAlarmText');
+  if(textEl) textEl.innerHTML = terminatorAlarmCulpritTxt+' — يُقدَّر أنه على بعد '+formatDist(dist)+' منك الآن (نحو '+etaMin+' د تقريباً)، رغم توقف SNCFT Live عن تحديثه.';
+  updateTerminatorAlarmGraceStatusText();
+}
+function updateTerminatorAlarmGraceStatusText(){
+  const el = document.getElementById('terminatorAlarmGraceStatus');
+  if(!el || !terminatorAlarmActive) return;
+  el.textContent = '🤖 '+(terminatorAlarmCulpritTxt||'')+' لا يزال مقدَّراً ضمن 150م منك — سيتوقف هذا الإنذار تلقائياً بمجرد ابتعاده تقديرياً أو استئناف إرساله الحقيقي.';
+}
+function forceStopTerminatorAlarm(){
+  terminatorAlarmActive=false;
+  terminatorAlarmCulpritTxt=null;
+  const el = document.getElementById('terminatorAlarmBanner'); if(el) el.style.display='none';
+  stopTerminatorSiren();
+  const gEl = document.getElementById('terminatorAlarmGraceStatus'); if(gEl) gEl.textContent='';
+}
+// نبضة روبوتية سريعة (square بترددين متبادلين بسرعة) — مختلفة إيقاعياً عن كل الإنذارات الأخرى لتمييزها صوتياً
+function startTerminatorSiren(){
+  if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+  if(audioCtx.state==='suspended'){ audioCtx.resume(); }
+  if(terminatorAlarmSirenOsc) return;
+  terminatorAlarmSirenOsc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  terminatorAlarmSirenOsc.type='square';
+  gain.gain.value=0.45;
+  terminatorAlarmSirenOsc.connect(gain).connect(audioCtx.destination);
+  terminatorAlarmSirenOsc.start();
+  terminatorAlarmSirenOsc._sweep = setInterval(()=>{
+    if(audioCtx.state==='suspended'){ audioCtx.resume(); }
+    const t=audioCtx.currentTime;
+    terminatorAlarmSirenOsc.frequency.setValueAtTime(220,t);
+    terminatorAlarmSirenOsc.frequency.setValueAtTime(330,t+0.12);
+    terminatorAlarmSirenOsc.frequency.setValueAtTime(220,t+0.24);
+  },260);
+}
+function stopTerminatorSiren(){
+  if(terminatorAlarmSirenOsc){
+    if(terminatorAlarmSirenOsc._sweep) clearInterval(terminatorAlarmSirenOsc._sweep);
+    try{ terminatorAlarmSirenOsc.stop(); }catch(e){}
+    terminatorAlarmSirenOsc.disconnect();
+    terminatorAlarmSirenOsc=null;
+  }
+}
+window.dismissTerminatorAlarm=function(){
+  checkTerminatorAlarm(); // إعادة تحقق فورية: قد يكون ابتعد تقديرياً أو استأنف إرساله الحقيقي منذ آخر دورة
+  if(terminatorAlarmActive){
+    if(navigator.vibrate) navigator.vibrate([80,40,80]);
+    updateTerminatorAlarmGraceStatusText();
     return;
   }
 };
