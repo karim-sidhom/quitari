@@ -8449,10 +8449,22 @@ function ann_stopForAlarm(){
   const el = document.getElementById('qitariRadioAudio');
   if(el) el.volume = ANN_RADIO_NORMAL_VOL;
 }
-function ann_speak(text){
+// طلب المستخدم: الإعلان (اسم المحطة ثم القطارات) كان يُقطَع "بلا سبب" لأن أولويته (40) كانت الأدنى بين كل
+// وحدات الصوت في التطبيق، فأي نداء آخر (فرحوم 80، رسالة الأمان 70، ارتياح مرور القطار 60...) كان يقطعه فوراً
+// حتى لو لم يكن هناك أي خطر حقيقي. الحل: رفع أولويته إلى 95 — أعلى من كل الوحدات الروتينية، ولا يبقى فوقه
+// سوى إنذارات الخطر الحقيقية (أولوية 100) التي يجب أن تقطعه دائماً لأسباب أمان. كما يُقال الآن بالعربية ثم
+// بالإنجليزية تباعاً (الإنجليزية بعد انتهاء العربية مباشرة) بدل العربية فقط.
+const ANN_PRIORITY = 95;
+function ann_speak(text, textEn){
   ann_fadeRadioVolume(ANN_RADIO_DUCK_VOL, 600); // تخفيض تدريجي كما في السيارات الكبيرة، وليس قطعاً فجائياً
   const restore = ()=>ann_fadeRadioVolume(ANN_RADIO_NORMAL_VOL, 1200);
-  window.__qtSpeak(text, {priority:40, onend:restore, onerror:restore});
+  if(textEn){
+    window.__qtSpeak(text, {priority:ANN_PRIORITY, lang:'ar-SA', onend:function(){
+      window.__qtSpeak(textEn, {priority:ANN_PRIORITY, lang:'en-US', onend:restore, onerror:restore});
+    }, onerror:restore});
+  } else {
+    window.__qtSpeak(text, {priority:ANN_PRIORITY, onend:restore, onerror:restore});
+  }
 }
 // يبحث عن أقرب محطة مستعملة فعلياً، ثم كل القطارات التي ستمر بها خلال نافذة الزمن المسموحة، ويصوغ إعلاناً واحداً بأسلوب المطار
 function ann_announceUpcomingTrains(){
@@ -8488,19 +8500,24 @@ function ann_announceUpcomingTrains(){
   events.sort((a,b)=>a.mins-b.mins);
 
   let phrase = 'أقرب محطة إليك هي محطة '+stationName+'. ';
+  let phraseEn = 'The nearest station to you is '+stationName+' station. ';
   events.slice(0,3).forEach(e=>{
     const whenTxt = e.mins<=1 ? 'الآن' : 'خلال '+e.mins+' دقيقة';
+    const whenTxtEn = e.mins<=1 ? 'now' : 'in '+e.mins+' minute'+(e.mins===1?'':'s');
     if(e.type==='dep'){
       phrase += whenTxt+'، سينطلق قطار رقم '+e.num+' متجهاً إلى '+e.dest+'. ';
+      phraseEn += whenTxtEn+', train number '+e.num+' will depart heading to '+e.dest+'. ';
     } else if(e.type==='arr'){
       phrase += whenTxt+'، سيصل قطار رقم '+e.num+' قادماً من '+e.orig+'. ';
+      phraseEn += whenTxtEn+', train number '+e.num+' will arrive coming from '+e.orig+'. ';
     } else {
       phrase += whenTxt+'، سيمر قطار رقم '+e.num+' قادماً من '+e.orig+' متجهاً إلى '+e.dest+'. ';
+      phraseEn += whenTxtEn+', train number '+e.num+' will pass through, coming from '+e.orig+' heading to '+e.dest+'. ';
     }
   });
 
   annLastSpokenAt = now;
-  ann_speak(phrase);
+  ann_speak(phrase, phraseEn);
 }
 
 // الحلقة الرئيسية لخط الزمن — تُستدعى من نفس دورة GPS المستعملة في بقية التطبيق (انظر نهاية recalcAndDisplay)
@@ -8628,9 +8645,22 @@ function kz_computeAndRender(result){
   }
   // عدّاد تنازلي على كامل الشاشة: يظهر فقط حين يكون المستخدم ضمن 150م من السكة (نفس شرط distanceOk أعلاه) وتبقى 60 ثانية أو أقل على مرور القطار.
   // مستقل تماماً عن صفارة kz_setAlarm أعلاه — طبقة تحذير إضافية أكثر إلحاحاً، بلا أي تعديل على حساب أقرب قطار.
-  const secondsUntilArrival = minutesUntilArrival*60;
+  // ملاحظة مهمة (سبب ظهور أرقام غير منتظمة بدل 60،59،58...): minsNow() تُرجع دقائق صحيحة بلا ثوانٍ، فحساب
+  // secondsUntilArrival = minutesUntilArrival*60 يعطي دائماً مضاعفات الدقيقة (60، 0، 60-...)، وكان يُعاد حسابه
+  // من جديد كل دورة استناداً إلى "الآن" (Date.now() + ثوانٍ متبقية)، فيتحرّك هدف العدّاد نفسه مع كل دورة بدل أن
+  // يبقى نقطة زمنية ثابتة — وهذا بالذات ما كان يُنتج القفزات والأرقام غير المتسلسلة. الحل: نحسب اللحظة المطلقة
+  // (بالثانية) لوصول القطار مباشرة من effectiveTimeMin، فتبقى ثابتة عبر كل الدورات ما دام effectiveTimeMin نفسه
+  // لم يتغيّر (eventKey نفسه)، فينزل العدّاد بثبات ثانية بثانية.
+  const arrivalDate = new Date();
+  arrivalDate.setHours(0,0,0,0);
+  arrivalDate.setMinutes(Math.round(next.effectiveTimeMin));
+  let arrivalMs = arrivalDate.getTime();
+  const diffH = (arrivalMs - Date.now())/3600000;
+  if(diffH < -18) arrivalMs += 86400000;
+  if(diffH > 18) arrivalMs -= 86400000;
+  const secondsUntilArrival = (arrivalMs - Date.now())/1000;
   if(distanceOk && secondsUntilArrival<=60 && secondsUntilArrival>-5){
-    startFinalCountdown(eventKey, Date.now() + Math.max(0,secondsUntilArrival)*1000, next.train.name);
+    startFinalCountdown(eventKey, arrivalMs, next.train.name);
   } else {
     stopFinalCountdown();
   }
