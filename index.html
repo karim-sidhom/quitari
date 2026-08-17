@@ -11985,13 +11985,16 @@ document.getElementById('toggleStationsBtn').click(); // نعرض كل المح�
   if(qInput) qInput.addEventListener('keydown', function(e){ if(e.key === 'Enter') askFarhoumGenie(); });
 
   // الاستماع الصوتي: الجني ينصت ثم يجيب مباشرة
+  // طلب المستخدم بالحرف: يريد أن يفهمه فرحوم "حتى بالصيني" — أي بصرف النظر عن اللغة/اللهجة التي يتحدث بها فعلياً
+  // (دارجة تونسية، أسماء محطات بنطق فرنسي...). لا توجد لهجة "ar-TN" في محركات التعرّف الصوتي بالمتصفحات، فالحل هنا:
+  // محاولات متتالية بلغات مختلفة على نفس التسجيل الصوتي الجديد (كل محاولة تعني إصغاء جديد فعلي)، مع اختبار كل نتيجة
+  // (وكل بديل ضمنها عبر maxAlternatives) على قائمة أسماء المحطات الحقيقية — أول نتيجة تُطابق محطة معروفة تُستعمل فوراً؛
+  // إن لم تُطابق أي محاولة أي محطة، نكمل بآخر نص مسموع فيظهر رد فرحوم المعتاد بأنه لم يتعرّف على اسم محطة
+  var FRH_LISTEN_LANGS = ['ar-SA','fr-FR','zh-CN'];
   var frhRecognition = null;
   function startFarhoumListening(){
-    var bubble = document.getElementById('farhoumBubble');
-    var micBtn = document.getElementById('farhoumMicBtn');
-    var hint = document.getElementById('farhoumMicHint');
     var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-
+    var bubble = document.getElementById('farhoumBubble');
     if(!SR){
       var msgNo = 'عذراً يا صاحب السعادة، هذا المتصفح لا يتيح لي الإصغاء إليك، اكتب سؤالك من فضلك.';
       if(bubble) bubble.textContent = msgNo;
@@ -12005,23 +12008,47 @@ document.getElementById('toggleStationsBtn').click(); // نعرض كل المح�
       frhSpeak(msgIns);
       return;
     }
-
     window.__qtStop();
     if(frhRecognition){ try{ frhRecognition.stop(); }catch(e){} }
+    frhListenAttempt(0, []);
+  }
+  window.startFarhoumListening = startFarhoumListening;
+
+  function frhListenAttempt(langIdx, triedTranscripts){
+    var bubble = document.getElementById('farhoumBubble');
+    var micBtn = document.getElementById('farhoumMicBtn');
+    var hint = document.getElementById('farhoumMicHint');
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+
     frhRecognition = new SR();
-    frhRecognition.lang = 'ar-SA';
+    frhRecognition.lang = FRH_LISTEN_LANGS[langIdx];
     frhRecognition.interimResults = false;
-    frhRecognition.maxAlternatives = 1;
+    frhRecognition.maxAlternatives = 3; // بدائل أكثر لكل محاولة تحسّن فرصة العثور على تطابق اسم محطة حقيقي
 
     if(micBtn) micBtn.classList.add('listening');
     if(hint) hint.style.display = 'block';
-    if(bubble) bubble.textContent = 'أنا مصغٍ إليك يا صاحب السعادة...';
+    if(bubble) bubble.textContent = langIdx===0
+      ? 'أنا مصغٍ إليك يا صاحب السعادة...'
+      : 'لم أتعرّف على اسم محطة، أعد قوله بوضوح رجاءً...';
 
     frhRecognition.onresult = function(event){
-      var said = event.results[0][0].transcript;
+      var alts = event.results[0];
+      var said = alts[0].transcript;
+      var matched = null;
+      for(var i=0;i<alts.length;i++){
+        if(frhExtractStations(alts[i].transcript)){ matched = alts[i].transcript; break; }
+      }
+      triedTranscripts.push(said);
       var inp = document.getElementById('farhoumQuestion');
-      if(inp) inp.value = said;
-      askFarhoumGenie();
+      if(matched){
+        if(inp) inp.value = matched;
+        askFarhoumGenie();
+      } else if(langIdx < FRH_LISTEN_LANGS.length - 1){
+        frhListenAttempt(langIdx+1, triedTranscripts);
+      } else {
+        if(inp) inp.value = triedTranscripts[0] || said;
+        askFarhoumGenie();
+      }
     };
     frhRecognition.onerror = function(event){
       var errType = event && event.error;
@@ -12053,7 +12080,6 @@ document.getElementById('toggleStationsBtn').click(); // نعرض كل المح�
       setTimeout(function(){ try{ frhRecognition.start(); }catch(e3){} }, 250);
     }
   }
-  window.startFarhoumListening = startFarhoumListening;
 
   // ================= وضع الخطر: فرحوم يحمرّ ويكبر ويغطي الشاشة عند أي إنذار كيفما كان نوعه =================
   var frhDangerPrevActive = false;
