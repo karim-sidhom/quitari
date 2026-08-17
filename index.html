@@ -6498,6 +6498,11 @@ function updateTheoHero(theoBest){
 function recalcAndDisplay(){
   if(!lastPos) return;
   const result = computeRisk(lastPos);
+  // طلب المستخدم: إعلان المحطة كان أحياناً لا يُقال إطلاقاً، والسبب المحتمل: أي خطأ JS في أي مكان لاحق من هذه
+  // الدالة الكبيرة (كثير عناصر DOM يُفترض وجودها بلا تحقق) يوقف تنفيذها بالكامل بصمت، فلا تصل التعليمة أبداً
+  // إلى استدعاء ann_announceUpcomingTrains() في آخر الدالة. الحل: نستدعيها هنا مباشرة وبمعزل تام (try/catch خاص بها)
+  // بمجرد حساب النتيجة الأساسية، حتى لا يمنعها أي عطل لاحق في أي وحدة أخرى من التطبيق مهما كان.
+  try{ ann_announceUpcomingTrains(); }catch(e){ console.error('ann_announceUpcomingTrains a échoué:', e); }
   updateTheoHero(result.theoBest);
   // القطار الأقرب (بالاعتماد على موقعه الحقيقي المُقدّر من التوقيت) — لا يُعرض هنا إلا قطار مؤكد عبر SNCFT Live، أبداً قطار شبح مبني على الجدول فقط
   document.getElementById('nearLine').textContent = isFinite(result.dist) ? result.lineName+' — 🕒 آخر تحديث: '+liveRefreshTimeText()
@@ -6774,13 +6779,13 @@ function recalcAndDisplay(){
     lockConfirmTrainId=null; lockConfirmCount=0; // لا خطر في هذه الدورة — إعادة تصفير عدّاد التأكيد لحدث لاحق جديد
   }
   // إنذار إضافي مستقل تماماً: يعمل بالتوازي مع الإنذار أعلاه، بلا أي اعتماد عليه ولا تأثير منه أو عليه — انظر checkLiveOnlyAlarm أدناه
-  checkLiveOnlyAlarm(result);
+  try{ checkLiveOnlyAlarm(result); }catch(e){ console.error('checkLiveOnlyAlarm a échoué:', e); }
   // إنذار ثالث مستقل تماماً: "تنبيه المقطع" (فكرة المستخدم) — انظر checkTrackSegmentAlarm أعلاه لتفاصيل المنطق
-  checkTrackSegmentAlarm();
+  try{ checkTrackSegmentAlarm(); }catch(e){ console.error('checkTrackSegmentAlarm a échoué:', e); }
   // إنذار رابع مستقل تماماً: "استهداف بالاسم" (فكرة المستخدم) — بلا أي شرط سوى مطابقة اسم المحطة، انظر checkSegStationAlarm أعلاه
-  checkSegStationAlarm();
+  try{ checkSegStationAlarm(); }catch(e){ console.error('checkSegStationAlarm a échoué:', e); }
   // إنذار خامس مستقل تماماً: "المُبيد" (The Terminator، فكرة المستخدم) — يواصل تقدير مسيرة القطار افتراضياً حتى لو انقطع إرساله، انظر checkTerminatorAlarm أعلاه
-  checkTerminatorAlarm();
+  try{ checkTerminatorAlarm(); }catch(e){ console.error('checkTerminatorAlarm a échoué:', e); }
   // المُعلن الصوتي للمسافة: يتكلم فوراً بمجرد أن تصل المسافة إلى 150م أو أقل، حسب أي وحدة من الوحدات الأربع (وليس بالضرورة كلها معاً) —
   // نفس منطق "لا قطارات شبح تُخفي خطراً حقيقياً" المعمول به في triggerAlert. يُعاد تصفير الإعلان فقط بعد خروج كل الوحدات من نطاق 150م
   const dist150Candidates = [result.dist, result.theoBest && result.theoBest.dist, result.liveAnyBest && result.liveAnyBest.dist]
@@ -6794,11 +6799,14 @@ function recalcAndDisplay(){
   } else {
     dist150VoiceAnnounced=false;
   }
-  kz_computeAndRender(result); // خط الزمن المدمج — نفس دورة التحديث، موقع مشترك، دون أي تعارض مع الوحدات الثلاث أعلاه، يشارك theoBest/liveAnyBest بلا إعادة حساب
-  kzL_computeAndRender(); // خط الزمن المستقل الجديد (SNCFT Live حصرياً) — نفس دورة تحديث GPS، لكن بمنطق/قفل/إنذار خاص به بالكامل
-  ann_announceUpcomingTrains(); // المُعلن الصوتي لأقرب محطة — نفس دورة التحديث أيضاً
-  checkAlarmPostPassageGrace(); // فحص شرط الـ30 دقيقة بعد تأكيد SNCFT Live لوصول القطار المسبِّب للإنذار — لا علاقة له بحساب أقرب قطار
-  checkLiveAlarmPostPassageGrace(); // نفس الفحص لكن للإنذار المستقل الجديد (SNCFT Live فقط) — بمتغيّرات وحالة منفصلة تماماً
+  // طلب المستخدم: كل وحدة من الوحدات التالية "مستقلة تماماً" حسب التعليقات الأصلية، لكنها كانت فعلياً متسلسلة
+  // بلا حماية — أي عطل في واحدة يمنع كل ما بعدها من التنفيذ في نفس الدورة. الآن كل واحدة محمية بمعزل عن الأخريات.
+  try{ kz_computeAndRender(result); }catch(e){ console.error('kz_computeAndRender a échoué:', e); } // خط الزمن المدمج — نفس دورة التحديث، موقع مشترك، دون أي تعارض مع الوحدات الثلاث أعلاه، يشارك theoBest/liveAnyBest بلا إعادة حساب
+  try{ kzL_computeAndRender(); }catch(e){ console.error('kzL_computeAndRender a échoué:', e); } // خط الزمن المستقل الجديد (SNCFT Live حصرياً) — نفس دورة تحديث GPS، لكن بمنطق/قفل/إنذار خاص به بالكامل
+  // ملاحظة: ann_announceUpcomingTrains() صار يُستدعى الآن في بداية الدالة (بمعزل تام بـ try/catch خاص بها) لضمان
+  // عدم توقّفها أبداً بسبب أي عطل لاحق في هذه الدالة — أُزيل الاستدعاء المكرر من هنا لتفادي إعلانين في نفس الدورة.
+  try{ checkAlarmPostPassageGrace(); }catch(e){ console.error('checkAlarmPostPassageGrace a échoué:', e); } // فحص شرط الـ30 دقيقة بعد تأكيد SNCFT Live لوصول القطار المسبِّب للإنذار — لا علاقة له بحساب أقرب قطار
+  try{ checkLiveAlarmPostPassageGrace(); }catch(e){ console.error('checkLiveAlarmPostPassageGrace a échoué:', e); } // نفس الفحص لكن للإنذار المستقل الجديد (SNCFT Live فقط) — بمتغيّرات وحالة منفصلة تماماً
 }
 // يتحقق دورياً هل تجاوز القطار المسبِّب للإنذار محطته التالية فعلياً حسب SNCFT Live، ثم يحتسب 30 دقيقة من تلك اللحظة قبل السماح بإيقاف الإنذار تلقائياً.
 // لا يغيّر أي شيء في حساب "أقرب قطار" لبقية الوحدات — يستعمل فقط دالة الفحص الموجودة أصلاً (kz_liveShowsPassedStation) دون تعديلها.
@@ -8496,25 +8504,33 @@ function ann_announceUpcomingTrains(){
       events.push({type:'thru', mins:Math.round(diff), num:trainNum, orig:stops[0].name, dest:stops[stops.length-1].name});
     }
   });
-  if(events.length===0) return;
+  // طلب المستخدم: "il annonce pas la gare" — كانت الدالة تلغي الإعلان بالكامل (ولا تقول حتى اسم المحطة)
+  // متى ما لم يوجد أي قطار خلال الـ90 دقيقة القادمة في هذه المحطة بالذات. بما أن القطارات متباعدة زمنياً،
+  // هذا يعني عملياً أن اسم المحطة لا يُعلَن أبداً في أغلب الأوقات. الآن: نُعلن اسم المحطة دائماً، ونضيف
+  // تفاصيل القطارات القادمة إن وُجدت، وإلا نقول ببساطة أنه لا قطار متوقَّع قريباً.
   events.sort((a,b)=>a.mins-b.mins);
 
   let phrase = 'أقرب محطة إليك هي محطة '+stationName+'. ';
   let phraseEn = 'The nearest station to you is '+stationName+' station. ';
-  events.slice(0,3).forEach(e=>{
-    const whenTxt = e.mins<=1 ? 'الآن' : 'خلال '+e.mins+' دقيقة';
-    const whenTxtEn = e.mins<=1 ? 'now' : 'in '+e.mins+' minute'+(e.mins===1?'':'s');
-    if(e.type==='dep'){
-      phrase += whenTxt+'، سينطلق قطار رقم '+e.num+' متجهاً إلى '+e.dest+'. ';
-      phraseEn += whenTxtEn+', train number '+e.num+' will depart heading to '+e.dest+'. ';
-    } else if(e.type==='arr'){
-      phrase += whenTxt+'، سيصل قطار رقم '+e.num+' قادماً من '+e.orig+'. ';
-      phraseEn += whenTxtEn+', train number '+e.num+' will arrive coming from '+e.orig+'. ';
-    } else {
-      phrase += whenTxt+'، سيمر قطار رقم '+e.num+' قادماً من '+e.orig+' متجهاً إلى '+e.dest+'. ';
-      phraseEn += whenTxtEn+', train number '+e.num+' will pass through, coming from '+e.orig+' heading to '+e.dest+'. ';
-    }
-  });
+  if(events.length===0){
+    phrase += 'لا يوجد قطار متوقَّع في هذه المحطة خلال الساعة والنصف القادمة.';
+    phraseEn += 'No train is expected at this station in the next 90 minutes.';
+  } else {
+    events.slice(0,3).forEach(e=>{
+      const whenTxt = e.mins<=1 ? 'الآن' : 'خلال '+e.mins+' دقيقة';
+      const whenTxtEn = e.mins<=1 ? 'now' : 'in '+e.mins+' minute'+(e.mins===1?'':'s');
+      if(e.type==='dep'){
+        phrase += whenTxt+'، سينطلق قطار رقم '+e.num+' متجهاً إلى '+e.dest+'. ';
+        phraseEn += whenTxtEn+', train number '+e.num+' will depart heading to '+e.dest+'. ';
+      } else if(e.type==='arr'){
+        phrase += whenTxt+'، سيصل قطار رقم '+e.num+' قادماً من '+e.orig+'. ';
+        phraseEn += whenTxtEn+', train number '+e.num+' will arrive coming from '+e.orig+'. ';
+      } else {
+        phrase += whenTxt+'، سيمر قطار رقم '+e.num+' قادماً من '+e.orig+' متجهاً إلى '+e.dest+'. ';
+        phraseEn += whenTxtEn+', train number '+e.num+' will pass through, coming from '+e.orig+' heading to '+e.dest+'. ';
+      }
+    });
+  }
 
   annLastSpokenAt = now;
   ann_speak(phrase, phraseEn);
