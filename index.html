@@ -5226,6 +5226,19 @@ function renderSegmentTrainsList(nameA, nameB, userPos, impactNameA, impactNameB
       const areAdjacent = curIdx!==-1 && nextIdx!==-1 && Math.abs(nextIdx-curIdx)===1;
       const tCurTxt = curStop ? (curStop.forecast || curStop.plan) : null;
       const tNextTxt = (areAdjacent && nextStop) ? (nextStop.forecast || nextStop.plan) : null;
+      // طلب المستخدم بالحرف: توقيت الالتقاء يجب ألا يخرج أبداً عن قوس (parenthèse) توقيتَي curFr وnextFr كما تُبلّغهما
+      // SNCFT Live لهذا القطار بالذات — فهذان التوقيتان معروفان وحقيقيان بصرف النظر عن مدى دقة الاستيفاء الهندسي أو
+      // عن نجاح فحص التتالي (areAdjacent، الذي يخدم فقط دقة نسبة uSeg، لا صحة القوس الزمني نفسه). لذا نحسب القوس هنا
+      // من توقيتَي curStop/nextStop مباشرة (بلا اشتراط التتالي)، ونُلزم أي توقيت ناتج (من أي فرع كان أدناه) بالبقاء داخله
+      const tNextRawTxt = nextStop ? (nextStop.forecast || nextStop.plan) : null;
+      let bracketMin = null, bracketMax = null;
+      if(tCurTxt && tNextRawTxt){
+        let bCurMs = todayAt(tCurTxt).getTime();
+        let bNextMs = todayAt(tNextRawTxt).getTime();
+        if(bNextMs < bCurMs) bNextMs += 24*3600000;
+        bracketMin = Math.min(bCurMs, bNextMs);
+        bracketMax = Math.max(bCurMs, bNextMs);
+      }
       if(tCurTxt && tNextTxt){
         let uSeg = 0.5; // افتراضي إن تعذّر الحساب الهندسي
         const curCoord = coordForStationName(lt.curFr);
@@ -5240,6 +5253,7 @@ function renderSegmentTrainsList(nameA, nameB, userPos, impactNameA, impactNameB
         if(tNextMs < tCurMs) tNextMs += 24*3600000;
         let tm = tCurMs + uSeg*(tNextMs - tCurMs);
         if(tm < now - 5*60000) tm += 24*3600000;
+        if(bracketMin!=null && bracketMax!=null) tm = Math.min(bracketMax, Math.max(bracketMin, tm));
         impactTimeMs = tm;
       } else {
         const t = forecastTime || planTime;
@@ -5255,6 +5269,7 @@ function renderSegmentTrainsList(nameA, nameB, userPos, impactNameA, impactNameB
             const approaching = (relevantName === lt.nextFr); // القطار لم يصل بعد لهذه المحطة: موقعك قبلها زمنياً
             tm = estimateTimeFromNearestStation(tm, distToStation, approaching);
           }
+          if(bracketMin!=null && bracketMax!=null) tm = Math.min(bracketMax, Math.max(bracketMin, tm));
           impactTimeMs = tm;
         }
       }
