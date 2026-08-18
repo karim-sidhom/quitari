@@ -1825,6 +1825,8 @@ let liveAlarmMinDistSeen = Infinity;
 // بطلب صريح من المستخدم: وقت مرور القطار المسبِّب بموقع المستخدم بالضبط، يُحسب مرة واحدة فقط عند القفل (انظر computeLiveAlarmPassageTimeMs) —
 // طالما هذا الوقت لم يمرّ بعد، القفل يبقى فعّالاً بالكامل ولا يتغيّر القطار المقفول، بصرف النظر عن أي تذبذب لاحق في مسافة SNCFT Live المباشرة
 let liveAlarmPassageTimeMs=null;
+// طلب المستخدم: بمجرد بلوغ liveAlarmPassageTimeMs، نبدأ عدّاد 30 دقيقة إضافية (grâce) قبل فكّ القفل فعلياً
+let liveAlarmPassageGraceStartAt=null;
 // ---------- طلب صريح من المستخدم: خط الزمن الأزرق (الرئيسي) وخط الزمن الأخضر (SNCFT Live حصرياً) يجب أن يبقيا
 // معلَّقين على القطار بعد مروره المؤكَّد لمدة 30 دقيقة إضافية، مع استمرار عرض "الوقت الحقيقي" (المصحَّح بالتأخير الآن أو آخر قيمة مؤكَّدة)
 // بدل الانتقال الفوري لقطار آخر أو عرض جدول قديم غير منطقي ----------
@@ -7065,6 +7067,7 @@ function triggerLiveOnlyAlarm(liveOnlyModules){
       liveAlarmMinDistSeen = Infinity; // إعادة ضبط أدنى مسافة لهذا الحدث الجديد
       // بطلب المستخدم: نحسب وقت مرور هذا القطار بموقعك الآن، مرة واحدة فقط عند القفل — هذا الوقت وحده يحكم فكّ القفل لاحقاً
       liveAlarmPassageTimeMs = (pos && lastPos) ? computeLiveAlarmPassageTimeMs(culpritTrain, pos.fromStation, pos.toStation, lastPos) : null;
+      liveAlarmPassageGraceStartAt = null;
     }
   }
   const el = document.getElementById('liveAlarmBanner');
@@ -7127,7 +7130,12 @@ function liveAlarmUnlockConditionMet(){
   const distNow = liveAlarmLockedTrainDistance();
   // بطلب صريح من المستخدم: طالما وقت مرور القطار المقفول بموقعك (المُحدَّث أعلاه كلما توفّرت بيانات جديدة) لم يمرّ بعد،
   // القفل يبقى فعّالاً بالكامل ولا يتغيّر القطار المقفول أبداً — بصرف النظر عن أي تذبذب/غياب مؤقت في الموقع المباشر
-  if(liveAlarmPassageTimeMs!=null) return Date.now() >= liveAlarmPassageTimeMs;
+  if(liveAlarmPassageTimeMs!=null){
+    if(Date.now() < liveAlarmPassageTimeMs) return false;
+    // طلب المستخدم: بمجرد بلوغ وقت المرور المحسوب، لا نفكّ القفل فوراً — نبقيه 30 دقيقة إضافية (نفس معيار LIVE_ALARM_POST_PASSAGE_GRACE_MS)
+    if(liveAlarmPassageGraceStartAt===null) liveAlarmPassageGraceStartAt = Date.now();
+    return (Date.now()-liveAlarmPassageGraceStartAt) >= LIVE_ALARM_POST_PASSAGE_GRACE_MS;
+  }
   // احتياط فقط إن تعذّر حساب وقت المرور نهائياً (لا عند القفل ولا لاحقاً): نعود للشرط القديم
   if(liveAlarmGraceElapsed()) return true;
   if(distNow > RISK_THRESHOLD_M) return true;
@@ -7166,6 +7174,7 @@ function forceStopLiveAlarm(){
   stopLiveSiren();
   liveAlarmLockTrain=null; liveAlarmLockToStation=null; liveAlarmLockConfirmedAt=null;
   liveAlarmPassageTimeMs=null;
+  liveAlarmPassageGraceStartAt=null;
   liveAlarmMinDistSeen = Infinity;
   const gEl = document.getElementById('liveAlarmGraceStatus'); if(gEl) gEl.textContent='';
 }
