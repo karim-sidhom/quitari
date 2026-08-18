@@ -5316,6 +5316,7 @@ function renderSegmentTrainsList(nameA, nameB, userPos, impactNameA, impactNameB
       if(!segTrCardUnresolvedSeenAt[key]) segTrCardUnresolvedSeenAt[key] = now;
     } else {
       delete segTrCardUnresolvedSeenAt[key];
+      globalEtaVoiceMark('segTrCard|'+key, (e.impactTimeMs-now)/60000);
     }
   });
   Object.keys(segTrCardUnresolvedSeenAt).forEach(k=>{ if(!segTrCardSeenKeys.has(k)) delete segTrCardUnresolvedSeenAt[k]; });
@@ -7119,6 +7120,9 @@ function liveAlarmLockedTrainDistance(){
   if(!pos) return Infinity;
   const refreshed = computeLiveAlarmPassageTimeMs(liveAlarmLockTrain, pos.fromStation, pos.toStation, lastPos);
   if(refreshed!=null) liveAlarmPassageTimeMs = refreshed;
+  if(liveAlarmPassageTimeMs!=null){
+    globalEtaVoiceMark('liveAlarm|'+liveAlarmLockTrain.name, (liveAlarmPassageTimeMs-Date.now())/60000);
+  }
   const d = haversine(lastPos, [pos.lat, pos.lon]);
   if(isFinite(d) && d < liveAlarmMinDistSeen) liveAlarmMinDistSeen = d;
   return d;
@@ -7753,6 +7757,7 @@ function checkTerminatorAlarm(){
 function triggerTerminatorAlarm(lt, pos, dist){
   // الوقت التقديري المتبقي حتى وصوله لموقعك بالضبط، بنفس السرعة المتوسطة المستعملة في الاستكمال (AVG_TRAIN_SPEED_KMH)
   const etaMin = Math.max(0, Math.round((dist/1000)/AVG_TRAIN_SPEED_KMH*60));
+  globalEtaVoiceMark('terminator|'+(lt.num||'?'), etaMin);
   terminatorAlarmCulpritTxt = 'قطار '+(lt.num||'؟')+' (منقطع الإرسال منذ '+pos.silentMinutes+' د)';
   if(!terminatorAlarmActive){
     terminatorAlarmActive = true;
@@ -8253,6 +8258,7 @@ function kz_updateGhostBox(prefix, fromStation, toStation, excludeTrain){
       }
     }
     eventKey = prefix+'|ghostTheo|'+ghost.num+'|'+(ghost.scheduledArrival||'');
+    globalEtaVoiceMark(prefix+'|ghostTheo|'+ghost.num, minutesUntilArrival);
   }
   box.style.display='block';
   const vid = document.getElementById(prefix+'GhostVideo');
@@ -8432,6 +8438,20 @@ function kz_renderTrainViz(next){
 function kz_speakArabic(text){
   window.__qtSpeak(text, {priority:70});
 }
+// طلب المستخدم: عند 5 دقائق ثم 3 دقائق من أي قطار يرصده أي وحدة من وحدات التطبيق (لا فرق أيها)، صوت واحد موحَّد
+// ينطق التنبيه — مفتاح فريد لكل قطار/وحدة يمنع التكرار، وينتهي صلاحيته بعد 10 دقائق بلا تحديث (القطار غادر الرصد)
+// فيُعاد احتساب التنبيه من جديد إن ظهر قطار آخر أو نفس القطار لاحقاً
+const GLOBAL_ETA_VOICE = {};
+const GLOBAL_ETA_VOICE_STALE_MS = 10*60000;
+function globalEtaVoiceMark(key, etaMin){
+  if(!key || etaMin==null || !isFinite(etaMin)) return;
+  const now = Date.now();
+  Object.keys(GLOBAL_ETA_VOICE).forEach(k=>{ if(now-GLOBAL_ETA_VOICE[k].lastSeenAt > GLOBAL_ETA_VOICE_STALE_MS) delete GLOBAL_ETA_VOICE[k]; });
+  const st = GLOBAL_ETA_VOICE[key] || (GLOBAL_ETA_VOICE[key] = {f5:false, f3:false, lastSeenAt:now});
+  st.lastSeenAt = now;
+  if(!st.f5 && etaMin<=5 && etaMin>-1){ st.f5=true; window.__qtSpeak('انتباه، القطار على بعد خمس دقائق منك', {priority:80}); }
+  if(!st.f3 && etaMin<=3 && etaMin>-1){ st.f3=true; window.__qtSpeak('انتباه، القطار على بعد ثلاث دقائق منك', {priority:85}); }
+}
 // طلب المستخدم: عند 150م، رسالة موحّدة وجادّة بنبرة صوت خفيضة "غليظة"، تُقال بالعربية بصرف النظر عن
 // أي إنذار من إنذارات 150م أطلقها (الرئيسي، الأزرق، الأخضر، الشبح، غير المؤكَّد، 150م المطلق، الصوتي التكميلي) —
 // نفس الرسالة تماماً في كل مكان بدل الرسائل المختلفة السابقة الخاصة بكل إنذار على حدة
@@ -8561,12 +8581,17 @@ function ann_stopForAlarm(){
 // سوى إنذارات الخطر الحقيقية (أولوية 100) التي يجب أن تقطعه دائماً لأسباب أمان. كما يُقال الآن بالعربية ثم
 // بالإنجليزية تباعاً (الإنجليزية بعد انتهاء العربية مباشرة) بدل العربية فقط.
 const ANN_PRIORITY = 95;
-function ann_speak(text, textEn){
+function ann_speak(text, textFr, textEn){
   ann_fadeRadioVolume(ANN_RADIO_DUCK_VOL, 600); // تخفيض تدريجي كما في السيارات الكبيرة، وليس قطعاً فجائياً
   const restore = ()=>ann_fadeRadioVolume(ANN_RADIO_NORMAL_VOL, 1200);
-  if(textEn){
+  if(textFr || textEn){
     window.__qtSpeak(text, {priority:ANN_PRIORITY, lang:'ar-SA', onend:function(){
-      window.__qtSpeak(textEn, {priority:ANN_PRIORITY, lang:'en-US', onend:restore, onerror:restore});
+      const speakEn = ()=> textEn ? window.__qtSpeak(textEn, {priority:ANN_PRIORITY, lang:'en-US', onend:restore, onerror:restore}) : restore();
+      if(textFr){
+        window.__qtSpeak(textFr, {priority:ANN_PRIORITY, lang:'fr-FR', onend:speakEn, onerror:speakEn});
+      } else {
+        speakEn();
+      }
     }, onerror:restore});
   } else {
     window.__qtSpeak(text, {priority:ANN_PRIORITY, onend:restore, onerror:restore});
@@ -8609,29 +8634,35 @@ function ann_announceUpcomingTrains(){
   events.sort((a,b)=>a.mins-b.mins);
 
   let phrase = 'أقرب محطة إليك هي محطة '+stationName+'. ';
+  let phraseFr = 'La gare la plus proche de vous est la gare de '+stationName+'. ';
   let phraseEn = 'The nearest station to you is '+stationName+' station. ';
   if(events.length===0){
     phrase += 'لا يوجد قطار متوقَّع في هذه المحطة خلال الساعة والنصف القادمة.';
+    phraseFr += 'Aucun train n\'est prévu à cette gare dans les 90 prochaines minutes.';
     phraseEn += 'No train is expected at this station in the next 90 minutes.';
   } else {
     events.slice(0,3).forEach(e=>{
       const whenTxt = e.mins<=1 ? 'الآن' : 'خلال '+e.mins+' دقيقة';
+      const whenTxtFr = e.mins<=1 ? 'maintenant' : 'dans '+e.mins+' minute'+(e.mins===1?'':'s');
       const whenTxtEn = e.mins<=1 ? 'now' : 'in '+e.mins+' minute'+(e.mins===1?'':'s');
       if(e.type==='dep'){
         phrase += whenTxt+'، سينطلق قطار رقم '+e.num+' متجهاً إلى '+e.dest+'. ';
+        phraseFr += whenTxtFr+', le train numéro '+e.num+' partira en direction de '+e.dest+'. ';
         phraseEn += whenTxtEn+', train number '+e.num+' will depart heading to '+e.dest+'. ';
       } else if(e.type==='arr'){
         phrase += whenTxt+'، سيصل قطار رقم '+e.num+' قادماً من '+e.orig+'. ';
+        phraseFr += whenTxtFr+', le train numéro '+e.num+' arrivera en provenance de '+e.orig+'. ';
         phraseEn += whenTxtEn+', train number '+e.num+' will arrive coming from '+e.orig+'. ';
       } else {
         phrase += whenTxt+'، سيمر قطار رقم '+e.num+' قادماً من '+e.orig+' متجهاً إلى '+e.dest+'. ';
+        phraseFr += whenTxtFr+', le train numéro '+e.num+' passera, en provenance de '+e.orig+' en direction de '+e.dest+'. ';
         phraseEn += whenTxtEn+', train number '+e.num+' will pass through, coming from '+e.orig+' heading to '+e.dest+'. ';
       }
     });
   }
 
   annLastSpokenAt = now;
-  ann_speak(phrase, phraseEn);
+  ann_speak(phrase, phraseFr, phraseEn);
 }
 
 // الحلقة الرئيسية لخط الزمن — تُستدعى من نفس دورة GPS المستعملة في بقية التطبيق (انظر نهاية recalcAndDisplay)
@@ -8653,10 +8684,12 @@ function kz_computeAndRender(result){
     elLiveViz.textContent = liveOk ? result.liveAnyBest.risk+'% — '+result.liveAnyBest.lineName+' ('+formatDist(result.liveAnyBest.dist)+')' : '--';
   }
   if(!lastPos){
-    elName.textContent=''; elOfficial.textContent='--:--'; if(elBadge) elBadge.textContent=''; if(elDist) elDist.textContent='';
-    kzLockedTrain=null; kzPassageConfirmedAt=null; kz_renderStops(null); kz_setAlarm(false); kzCurrentAlarmKey=null; kzAlarmDismissed=false; kzAnnounced5MinKey=null; kzFrh2minKey=null; kzFrh90sKey=null;
-    kz_hideSafeMessage(); kz_hideTrainViz(); stopFinalCountdown();
-    const elCmp0 = document.getElementById('kzCompareLines'); if(elCmp0) elCmp0.style.display='none';
+    // طلب المستخدم بالحرف — "قاعدة المنفضة": لا نُفرغ العرض أبداً لمجرد غياب GPS مؤقتاً (لا اسم القطار، لا الوقت، لا المسافة،
+    // لا قائمة المحطات، ولا حالة الإنذار) — نُبقي آخر معلومة حقيقية معروضة كما هي، ونكتفي بإضافة مؤشر "GPS غائب" فوقها،
+    // إلى أن يعود GPS بموقع حقيقي جديد يستبدلها فعلياً (تماماً كمنفضة لا تُرفع إلا ببديل جاهز مكانها)
+    if(elBadge && elBadge.textContent.indexOf('📡 GPS غائب الآن')===-1){
+      elBadge.textContent = '📡 GPS غائب الآن — ' + (elBadge.textContent||'');
+    }
     return;
   }
   const events = kz_computeZoneEvents(lastPos, KZ_ZONE_RADIUS_M);
@@ -8735,10 +8768,7 @@ function kz_computeAndRender(result){
   if(minutesUntilArrival<-720) minutesUntilArrival+=1440;
   if(minutesUntilArrival>720) minutesUntilArrival-=1440;
   const eventKey = next.train.name+'|'+next.toStation+'|'+Math.round(next.effectiveTimeMin);
-  if(minutesUntilArrival<=5 && minutesUntilArrival>-1 && kzAnnounced5MinKey!==eventKey){
-    kzAnnounced5MinKey = eventKey;
-    kz_speakArabic('تنبيه، قطار على بعد خمس دقائق منك.');
-  }
+  globalEtaVoiceMark('kz|'+next.train.name, minutesUntilArrival);
   const distanceOk = next.dist <= RISK_THRESHOLD_M;
   const withinAlarmWindow = distanceOk && (minutesUntilArrival<=3);
   if(eventKey !== kzCurrentAlarmKey){ kzCurrentAlarmKey = eventKey; kzAlarmDismissed = false; }
@@ -8993,10 +9023,7 @@ function kzL_computeAndRender(){
   if(minutesUntilArrival<-720) minutesUntilArrival+=1440;
   if(minutesUntilArrival>720) minutesUntilArrival-=1440;
   const eventKey = 'L|'+next.train.name+'|'+next.toStation+'|'+Math.round(next.effectiveTimeMin);
-  if(minutesUntilArrival<=5 && minutesUntilArrival>-1 && kzLAnnounced5MinKey!==eventKey){
-    kzLAnnounced5MinKey = eventKey;
-    kz_speakArabic('تنبيه من خط الزمن المستقل، قطار مؤكد عبر SNCFT Live على بعد خمس دقائق منك.');
-  }
+  globalEtaVoiceMark('kzL|'+next.train.name, minutesUntilArrival);
   const distanceOk = next.dist <= RISK_THRESHOLD_M;
   const withinAlarmWindow = distanceOk && (minutesUntilArrival<=3);
   if(eventKey !== kzLCurrentAlarmKey){ kzLCurrentAlarmKey = eventKey; kzLAlarmDismissed = false; }
