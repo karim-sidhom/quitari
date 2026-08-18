@@ -2538,13 +2538,28 @@ function findLiveDelayForRoute(route){
 }
 // يتحقق أن هذا القطار بالذات مؤكد فعلياً الآن عبر بيانات SNCFT Live (رقم القطار يطابق + إحدى محطاته تطابق المحطة الحالية/التالية في البيانات المباشرة)
 // هذا الشرط أساسي لمنع "القطارات الشبح": لا يُعرض أي قطار كأقرب قطار أو في جدول التوقفات إلا إذا كان مؤكداً هنا — وليس فقط لأن توقيته المجدول يقول إنه يجب أن يكون في الخدمة الآن
+const CONFIRM_PETITE_GARE_M = 3000; // هامش قبول محطة صغيرة/وسيطة غير مذكورة بالاسم في جدول القطار، إن كانت قريبة فعلاً من مساره
 function isTrainLiveConfirmed(train){
   if(!isLiveDataFresh()) return false;
   const stops = parseStops(train.stopsText).filter(s=>!s.unknown && s.time);
   if(stops.length<2) return false;
   return liveTrains.some(lt=>{
     if(!trainNumberMatches(train.name, lt.num)) return false;
-    return stops.some(s=> stationNamesMatch(s.name, lt.curFr) || stationNamesMatch(s.name, lt.nextFr));
+    // 1) مطابقة مباشرة بالاسم مع محطات الجدول الرسمي لهذا القطار
+    if(stops.some(s=> stationNamesMatch(s.name, lt.curFr) || stationNamesMatch(s.name, lt.nextFr))) return true;
+    // 2) محطة صغيرة/وسيطة غير مذكورة بالاسم في جدول هذا القطار (بلا توقّف مبرمج): نقبلها إن كانت
+    // إحداثياتها قريبة فعلاً من مسار هذا القطار بالذات (بين محطتين متتاليتين من جدوله)، بدل رفضها
+    // آلياً فقط لأن اسمها غير موجود حرفياً — وهذا كان يجعل التأكيد يختفي كل مرة يمرّ القطار بمحطة صغيرة
+    const liveNames = [lt.curFr, lt.nextFr].filter(Boolean);
+    return liveNames.some(name=>{
+      const coord = resolveStationCoord(name);
+      if(!coord) return false;
+      for(let i=0;i<stops.length-1;i++){
+        const seg = nearestOnTrack(coord, [[stops[i].lat, stops[i].lon],[stops[i+1].lat, stops[i+1].lon]]);
+        if(seg.dist <= CONFIRM_PETITE_GARE_M) return true;
+      }
+      return false;
+    });
   });
 }
 // ---------- قطارات SNCFT Live بدون أي مقابل في الجدول النظري (رقم قطار مرصود مباشرة لكنه غير موجود إطلاقاً بين قطاراتنا) ----------
