@@ -5181,12 +5181,12 @@ function renderSegmentTrainsList(nameA, nameB, userPos, impactNameA, impactNameB
   // بطلب صريح ونهائي من المستخدم: هذه البطاقة تعتمد حصرياً على SNCFT Live، بلا أي علاقة بالجدول النظري من أي نوع —
   // كل قطار تُظهره SNCFT Live حالياً عند إحدى محطتَي هذا المقطع (curFr أو nextFr) يُعرض، بصرف النظر التام عمّا إذا كان
   // رقمه يطابق قطاراً نظرياً أم لا. لا "قطار شبح" منفصل، لا استبعاد بحسب المطابقة النظرية — كل شيء واحد وموحَّد.
+  // طلب المستخدم بالحرف: فقط القطارات القريبة فعلياً من موقعك الحقيقي (vA/vB، المحطتان الدقيقتان المحيطتان بك) —
+  // لا كل قطار يلامس محطتَي المقطع الكبيرتين (nameA/nameB) حتى لو كان بعيداً جداً عنك فعلياً على نفس المقطع
   const liveMatches = (typeof isLiveDataFresh==='function' && isLiveDataFresh() && typeof liveTrains!=='undefined') ? liveTrains.filter(lt=>
     lt && (
-      stationNamesMatch(lt.curFr, nameA) || stationNamesMatch(lt.nextFr, nameA) ||
-      stationNamesMatch(lt.curFr, nameB) || stationNamesMatch(lt.nextFr, nameB) ||
-      stationNamesMatch(lt.curFr, useImpactA) || stationNamesMatch(lt.nextFr, useImpactA) ||
-      stationNamesMatch(lt.curFr, useImpactB) || stationNamesMatch(lt.nextFr, useImpactB)
+      stationNamesMatch(lt.curFr, vA.name) || stationNamesMatch(lt.nextFr, vA.name) ||
+      stationNamesMatch(lt.curFr, vB.name) || stationNamesMatch(lt.nextFr, vB.name)
     )
   ) : [];
   const list = liveMatches.map(lt=>{
@@ -5249,21 +5249,44 @@ function renderSegmentTrainsList(nameA, nameB, userPos, impactNameA, impactNameB
         if(bracketMin!=null && bracketMax!=null) tm = Math.min(bracketMax, Math.max(bracketMin, tm));
         impactTimeMs = tm;
       } else {
-        const t = forecastTime || planTime;
-        if(t){
-          let tm = todayAt(t).getTime();
+        // طلب المستخدم بالحرف: بدل افتراض سرعة عامة تقديرية (AVG_TRAIN_SPEED_KMH)، نحسب السرعة الفعلية لهذا القطار
+        // على هذا المقطع بالذات من محطتين حقيقيتين نعرف توقيتيهما ومسافتيهما الحقيقيتين لموقعك (vA/vB، نفس المحطتين
+        // الدقيقتين المعروضتين في الشريط المرئي) — المسافة الكلية بينهما ÷ الزمن الكلي بينهما = السرعة الحقيقية،
+        // ثم نطبّق هذه السرعة على مسافتك من المحطة الأقرب زمنياً لحساب وقت وصول القطار لموقعك بالضبط
+        const stopsForLookup = allStops || fullStops;
+        const findStopTime = (nm)=>{
+          if(!nm || !stopsForLookup) return null;
+          const s = stopsForLookup.find(x=>stationNamesMatch(x.name, nm));
+          return s ? (s.forecast || s.plan || null) : null;
+        };
+        const tAtxt = findStopTime(vA.name);
+        const tBtxt = findStopTime(vB.name);
+        if(tAtxt && tBtxt && vA.dist!=null && vB.dist!=null && (vA.dist+vB.dist)>0){
+          let tAms = todayAt(tAtxt).getTime();
+          let tBms = todayAt(tBtxt).getTime();
+          if(tBms < tAms) tBms += 24*3600000;
+          let tStart, tEnd, dStart, dEnd;
+          if(tAms <= tBms){ tStart=tAms; tEnd=tBms; dStart=vA.dist; dEnd=vB.dist; }
+          else { tStart=tBms; tEnd=tAms; dStart=vB.dist; dEnd=vA.dist; }
+          const totalD = dStart+dEnd;
+          let tm = tStart + (dStart/totalD)*(tEnd-tStart);
           if(tm < now - 5*60000) tm += 24*3600000;
-          // بطلب المستخدم: نصحّح هذا التوقيت (توقيت المحطة الأقرب نفسها من الجدول) بالمسافة الفعلية المتبقية بين تلك
-          // المحطة وموقع المستخدم، عبر سرعة متوسطة تقديرية لقطار (AVG_TRAIN_SPEED_KMH) — بدل عرض توقيت المحطة كما هو
-          // بلا أي تصحيح لموقعك أنت بالذات (احتياط فقط، يُستعمل حين لا تتوفر محطتان متتاليتان للاستيفاء الهندسي أعلاه)
-          const stationCoord = coordForStationName(stationName || relevantName);
-          if(stationCoord && userPos){
-            const distToStation = haversine(userPos, stationCoord);
-            const approaching = (relevantName === lt.nextFr); // القطار لم يصل بعد لهذه المحطة: موقعك قبلها زمنياً
-            tm = estimateTimeFromNearestStation(tm, distToStation, approaching);
-          }
           if(bracketMin!=null && bracketMax!=null) tm = Math.min(bracketMax, Math.max(bracketMin, tm));
           impactTimeMs = tm;
+        } else {
+          const t = forecastTime || planTime;
+          if(t){
+            let tm = todayAt(t).getTime();
+            if(tm < now - 5*60000) tm += 24*3600000;
+            const stationCoord = coordForStationName(stationName || relevantName);
+            if(stationCoord && userPos){
+              const distToStation = haversine(userPos, stationCoord);
+              const approaching = (relevantName === lt.nextFr);
+              tm = estimateTimeFromNearestStation(tm, distToStation, approaching);
+            }
+            if(bracketMin!=null && bracketMax!=null) tm = Math.min(bracketMax, Math.max(bracketMin, tm));
+            impactTimeMs = tm;
+          }
         }
       }
     }
