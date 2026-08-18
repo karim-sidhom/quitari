@@ -5054,6 +5054,14 @@ function computeSegmentImpact(userPos, nameA, nameB){
 // طلب المستخدم بالحرف: يعمل فقط إن كانت المسافة إلى السكة ≤150م، وضمن نافذة ±3 دقائق حول توقيت الالتقاء الفعلي (المصحَّح بالتأخير)؛
 // يتوقف فوراً بمجرد ابتعاد المستخدم لأكثر من 150م، بصرف النظر عن أي شرط آخر
 let segTrCardAlarmActive = false;
+// طلب المستخدم: قطار بلا توقيت التقاء معروف (impactTimeMs=null) يُعتبر "قريباً الآن" مؤقتاً فقط — إن استمر بلا توقيت
+// لأكثر من هذه المهلة (بيانات SNCFT Live لا تتحدّث لهذا القطار بالذات)، لا نعتبره مبرراً كافياً لإبقاء الإنذار يرن للأبد
+const SEG_UNRESOLVED_GRACE_MS = 10*60000;
+let segTrCardUnresolvedSeenAt = {}; // key: معرّف القطار → أول وقت رُصد فيه بلا توقيت معروف
+// طلب المستخدم: نفس معيار ALARM_POST_PASSAGE_GRACE_MS المطبَّق في بقية التطبيق (30 دقيقة) — بعد انتهاء نافذة قطار
+// مقفول عليه، يبقى الإنذار فعّالاً هذه المدة، إلا إن ظهر قطار آخر أقرب زمنياً الآن فيُلغى القفل فوراً لصالحه
+const SEG_TRCARD_POST_PASSAGE_GRACE_MS = 30*60000;
+let segTrCardLockKey = null, segTrCardLockConfirmedAt = null;
 // طلب المستخدم: توقيت الالتقاء الأقرب الآن + حالة تأكيده عبر SNCFT Live — مستقلان تماماً عن حالة الإنذار أعلاه، يُحدَّثان في كل دورة عرض
 let segTrCardNearestImpactMs = null, segTrCardNearestImpactConfirmed = false;
 // عدّاد تنازلي حي (ثانية بثانية) حتى توقيت الالتقاء الأقرب — مستقل تماماً عن دورة recalcAndDisplay لكي يبقى سلساً
@@ -5292,12 +5300,51 @@ function renderSegmentTrainsList(nameA, nameB, userPos, impactNameA, impactNameB
     }
     return {lt, delayMin, impactTimeMs, stationName, planTime, forecastTime, allStops, sortKey: impactTimeMs!=null ? impactTimeMs : now};
   }).sort((a,b)=>a.sortKey-b.sortKey);
-  // شرط الإنذار الحرفي: مسافة ≤150م (هندسية بحتة) + ضمن نافذة ±3 دقائق حول توقيت حقيقي معروف، أو قطار بلا توقيت معروف بعد (وجوده وحده كافٍ فوراً)
+  // شرط الإنذار: مسافة ≤150م + ضمن نافذة ±3 دقائق حول توقيت حقيقي معروف، أو قطار بلا توقيت معروف بعد أقل من مهلة
+  // السماح (SEG_UNRESOLVED_GRACE_MS) — ثم بعد انتهاء نافذة أي قطار مقفول عليه، يبقى الإنذار فعّالاً 30 دقيقة إضافية
+  // (نفس معيار ALARM_POST_PASSAGE_GRACE_MS المطبَّق في بقية التطبيق)، إلا إن ظهر قطار آخر أقرب زمنياً الآن ضمن
+  // نافذته الخاصة — فحينها نُلغي القفل القديم فوراً ونتحوّل لإنذار القطار الجديد الأقرب، بلا انتظار الـ30 دقيقة
+  const segTrCardSeenKeys = new Set();
+  const segTrCardKeyOf = (e)=> (e.lt && (e.lt.id || e.lt.num || e.lt.curFr || e.lt.nextFr)) || null;
+  list.forEach(e=>{
+    const key = segTrCardKeyOf(e);
+    if(!key) return;
+    segTrCardSeenKeys.add(key);
+    if(e.impactTimeMs==null){
+      if(!segTrCardUnresolvedSeenAt[key]) segTrCardUnresolvedSeenAt[key] = now;
+    } else {
+      delete segTrCardUnresolvedSeenAt[key];
+    }
+  });
+  Object.keys(segTrCardUnresolvedSeenAt).forEach(k=>{ if(!segTrCardSeenKeys.has(k)) delete segTrCardUnresolvedSeenAt[k]; });
   if(!isFinite(trackDist) || trackDist>SEG_ALARM_DIST_M){
     segTrCardAlarm_stop();
+    segTrCardLockKey = null; segTrCardLockConfirmedAt = null;
   } else {
-    const withinWindow = list.some(e=> e.impactTimeMs==null || (now>=(e.impactTimeMs-SEG_ALARM_WINDOW_MS) && now<=(e.impactTimeMs+SEG_ALARM_WINDOW_MS)));
-    if(withinWindow) segTrCardAlarm_start(); else segTrCardAlarm_stop();
+    const segTrCardIsActiveNow = (e)=>{
+      if(e.impactTimeMs==null){
+        const key = segTrCardKeyOf(e);
+        const seenAt = key ? segTrCardUnresolvedSeenAt[key] : null;
+        return seenAt!=null && (now-seenAt)<=SEG_UNRESOLVED_GRACE_MS;
+      }
+      return now>=(e.impactTimeMs-SEG_ALARM_WINDOW_MS) && now<=(e.impactTimeMs+SEG_ALARM_WINDOW_MS);
+    };
+    const segTrCardActiveEntry = list.find(segTrCardIsActiveNow);
+    if(segTrCardActiveEntry){
+      segTrCardLockKey = segTrCardKeyOf(segTrCardActiveEntry);
+      segTrCardLockConfirmedAt = null;
+      segTrCardAlarm_start();
+    } else if(segTrCardLockKey!==null){
+      if(segTrCardLockConfirmedAt===null) segTrCardLockConfirmedAt = now;
+      if((now-segTrCardLockConfirmedAt) < SEG_TRCARD_POST_PASSAGE_GRACE_MS){
+        segTrCardAlarm_start();
+      } else {
+        segTrCardLockKey = null; segTrCardLockConfirmedAt = null;
+        segTrCardAlarm_stop();
+      }
+    } else {
+      segTrCardAlarm_stop();
+    }
   }
   // توقيت الالتقاء الأقرب الآن للشارة الكبيرة
   const timedOnly = list.filter(e=>e.impactTimeMs!=null);
