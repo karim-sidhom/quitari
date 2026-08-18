@@ -5163,18 +5163,9 @@ function renderSegmentTrainsList(nameA, nameB, userPos, impactNameA, impactNameB
   if(vizToEl) vizToEl.textContent = vB.name;
   vizTextEl && (vizTextEl.textContent = 'بين '+vA.name+' '+(vA.dist!=null?formatDist(vA.dist):'')+' و'+vB.name+' '+(vB.dist!=null?formatDist(vB.dist):''));
   if(vizUserEl){
-    // كان الخطأ هنا: كانت تستعمل نسبة مسافتين مستقيمتين (خط مستقيم) بدل تعرّج السكة الحقيقي، فيظهر البنّوطة في مكان خاطئ
-    // على الخط الأزرق كلما انحنت السكة الفعلية. الإصلاح: نفس الحساب الهندسي على المسار الحقيقي (kz_getTrackSubPath) المستعمل
-    // أصلاً لحساب نقطة الالتقاء ووقتها — بحيث يتطابق موضع البنّوطة تماماً مع نفس الحساب المعروض في بقية البطاقة
-    const barCoordA = coordForStationName(vA.name), barCoordB = coordForStationName(vB.name);
+    // بطلب المستخدم: طريقة مبسّطة — نسبة موقعه بين المحطتين تُحسب فقط من مسافته الحقيقية إلى كل محطة (لا إسقاط هندسي على السكة)
     let ratioV = null;
-    if(barCoordA && barCoordB){
-      const barSub = (typeof kz_getTrackSubPath==='function') ? kz_getTrackSubPath(barCoordA, barCoordB, vA.name, vB.name) : null;
-      const barOnTrack = barSub ? kz_closestOnPolyline(userPos, barSub) : null;
-      const uBar = barOnTrack ? barOnTrack.u : projectT(userPos, barCoordA, barCoordB);
-      if(isFinite(uBar)) ratioV = uBar*100;
-    }
-    if(ratioV==null && vA.dist!=null && vB.dist!=null){
+    if(vA.dist!=null && vB.dist!=null){
       const totalV = vA.dist+vB.dist;
       ratioV = totalV>0 ? (vA.dist/totalV)*100 : 50;
     }
@@ -5240,13 +5231,15 @@ function renderSegmentTrainsList(nameA, nameB, userPos, impactNameA, impactNameB
         bracketMax = Math.max(bCurMs, bNextMs);
       }
       if(tCurTxt && tNextTxt){
-        let uSeg = 0.5; // افتراضي إن تعذّر الحساب الهندسي
+        let uSeg = 0.5; // افتراضي إن تعذّر الحساب
+        // بطلب المستخدم: طريقة مبسّطة — النسبة تُحسب من مسافة المستخدم الحقيقية إلى كل من المحطتين (لا إسقاط هندسي على السكة)
         const curCoord = coordForStationName(lt.curFr);
         const nextCoord = coordForStationName(lt.nextFr);
         if(curCoord && nextCoord && userPos){
-          const sub = (typeof kz_getTrackSubPath==='function') ? kz_getTrackSubPath(curCoord, nextCoord, lt.curFr, lt.nextFr) : null;
-          const onTrack = sub ? kz_closestOnPolyline(userPos, sub) : null;
-          uSeg = onTrack ? onTrack.u : projectT(userPos, curCoord, nextCoord);
+          const distCur = haversine(userPos, curCoord);
+          const distNext = haversine(userPos, nextCoord);
+          const totalD = distCur + distNext;
+          uSeg = totalD>0 ? (distCur/totalD) : 0.5;
         }
         let tCurMs = todayAt(tCurTxt).getTime();
         let tNextMs = todayAt(tNextTxt).getTime();
