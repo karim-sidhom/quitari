@@ -7511,8 +7511,21 @@ window.dismissSegAlarm=function(){
 // ================================================================================================
 let segStationAlarmActive=false, segStationAlarmSirenOsc=null;
 let segStationAlarmCulpritTxt=null; // نص وصف القطار المستهدف حالياً (رقم + محطتاه)، لعرضه في نص حالة السماح
+// بطلب صريح من المستخدم: هذا الإنذار يجب أن يتوقف فوراً بمجرد وصول القطار المستهدَف فعلياً (عبر SNCFT Live) إلى
+// المحطة التي تأتي بعد موقعك في اتجاه سيره — لا الانتظار لعدة دورات بلا مطابقة اسم. نتتبّع هوية القطار المستهدَف
+// (id أو رقمه) + اسم "المحطة التالية له بعد موقعك" وقت التثبيت، ونقارنها في كل دورة بمحطته الحالية (curFr) الفعلية.
+let segStationAlarmTrainKey = null;
+let segStationAlarmTargetStation = null;
+// "المحطة بعد موقعك": التي يتّجه إليها القطار ضمن محطتَي مقطعك (nextFr) إن كانت إحداهما، وإلا فعلاً محطته
+// التالية الحقيقية المُبلَّغة عبر SNCFT Live (culprit.nextFr) أياً كانت — أي "المحطة بعد موقعك" بالمعنى الحرفي
+function segStationAlarmComputeTarget(culprit, sA, sB){
+  if(stationNamesMatch(culprit.nextFr, sA.name)) return sA.name;
+  if(stationNamesMatch(culprit.nextFr, sB.name)) return sB.name;
+  return culprit.nextFr || null;
+}
 // بطلب المستخدم: بمجرد التثبيت (الاستهداف)، الإنذار يبقى ثابتاً — لا يُطفَأ لمجرد غياب المطابقة في دورة واحدة عابرة
-// (بيانات SNCFT Live قد تتأخر لحظياً بين كل جلب والذي يليه). لا يُطفأ فعلياً إلا بعد عدة دورات متتالية بلا أي مطابقة
+// (بيانات SNCFT Live قد تتأخر لحظياً بين كل جلب والذي يليه). لا يُطفأ فعلياً إلا بعد عدة دورات متتالية بلا أي مطابقة،
+// أو فوراً إن تأكَّد وصول نفس القطار المستهدَف إلى محطته التالية بعد موقعك (segStationAlarmTargetStation أعلاه)
 const SEG_STATION_ALARM_MISS_TOLERANCE = 3;
 let segStationAlarmMissCount = 0;
 function checkSegStationAlarm(){
@@ -7526,6 +7539,15 @@ function checkSegStationAlarm(){
   if(!isFinite(distTrack) || distTrack > RISK_THRESHOLD_M){
     if(segStationAlarmActive) forceStopSegStationAlarm();
     return;
+  }
+  // فحص فوري: إن كان الإنذار نشطاً وقطاره المستهدَف بالذات وصل الآن إلى محطته التالية بعد موقعك (curFr صار
+  // يطابق segStationAlarmTargetStation) نطفئه مباشرة بغض النظر عن أي مطابقة أخرى — هذا ما طلبه المستخدم بالضبط
+  if(segStationAlarmActive && segStationAlarmTrainKey && segStationAlarmTargetStation){
+    const tracked = liveTrains.find(lt => lt && ((lt.id && lt.id===segStationAlarmTrainKey) || lt.num===segStationAlarmTrainKey));
+    if(tracked && stationNamesMatch(tracked.curFr, segStationAlarmTargetStation)){
+      forceStopSegStationAlarm();
+      return;
+    }
   }
   const nearest2 = nearestAnyStationTo(lastPos, 2);
   if(nearest2.length<2){
@@ -7549,6 +7571,8 @@ function triggerSegStationAlarm(culprit, sA, sB){
   segStationAlarmCulpritTxt = 'قطار '+(culprit.num||'؟')+' ('+(culprit.curFr||'؟')+' → '+(culprit.nextFr||'؟')+')';
   if(!segStationAlarmActive){
     segStationAlarmActive = true;
+    segStationAlarmTrainKey = culprit.id || culprit.num || null;
+    segStationAlarmTargetStation = segStationAlarmComputeTarget(culprit, sA, sB);
     startSegStationSiren();
     if(navigator.vibrate) navigator.vibrate([200,100,200,100,600]);
   }
@@ -7583,6 +7607,8 @@ function forceStopSegStationAlarm(){
   segStationAlarmActive=false;
   segStationAlarmCulpritTxt=null;
   segStationAlarmMissCount=0;
+  segStationAlarmTrainKey=null;
+  segStationAlarmTargetStation=null;
   const el = document.getElementById('segStationAlarmBanner'); if(el) el.style.display='none';
   stopSegStationSiren();
   const gEl = document.getElementById('segStationAlarmGraceStatus'); if(gEl) gEl.textContent='';
