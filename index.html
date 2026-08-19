@@ -5187,14 +5187,12 @@ function renderSegmentTrainsList(nameA, nameB, userPos, impactNameA, impactNameB
   if(vizFromEl) vizFromEl.textContent = vA.name;
   if(vizToEl) vizToEl.textContent = vB.name;
   vizTextEl && (vizTextEl.textContent = 'بين '+vA.name+' '+(vA.dist!=null?formatDist(vA.dist):'')+' و'+vB.name+' '+(vB.dist!=null?formatDist(vB.dist):''));
-  if(vizUserEl){
-    // بطلب المستخدم: طريقة مبسّطة — نسبة موقعه بين المحطتين تُحسب فقط من مسافته الحقيقية إلى كل محطة (لا إسقاط هندسي على السكة)
-    let ratioV = null;
-    if(vA.dist!=null && vB.dist!=null){
-      const totalV = vA.dist+vB.dist;
-      ratioV = totalV>0 ? (vA.dist/totalV)*100 : 50;
-    }
-    vizUserEl.style.right = (ratioV!=null ? Math.min(94,Math.max(6,ratioV)) : 50)+'%';
+  // بطلب المستخدم: طريقة مبسّطة — نسبة موقعه بين المحطتين تُحسب فقط من مسافته الحقيقية إلى كل محطة (لا إسقاط هندسي على السكة)
+  // هذه تبقى fallback فقط — إن توفّر توقيت حقيقي (horaire) للمحطتين vA/vB لأي قطار عبر SNCFT Live، الأولوية له أدناه
+  let ratioV = null;
+  if(vA.dist!=null && vB.dist!=null){
+    const totalV = vA.dist+vB.dist;
+    ratioV = totalV>0 ? (vA.dist/totalV)*100 : 50;
   }
   // نقطة الالتقاء التقديرية داخل المقطع (u): تحسين دقة اختياري فقط إن عُرفت إحداثيات المحطتين — وإلا افتراضياً منتصف المقطع زمنياً (0.5)، بلا أي تعطيل
   const useImpactA = (impactNameA && coordForStationName(impactNameA)) ? impactNameA : (coordA ? nameA : null);
@@ -5369,6 +5367,34 @@ function renderSegmentTrainsList(nameA, nameB, userPos, impactNameA, impactNameB
   segTrCardNearestImpactMs = timedOnly.length ? timedOnly[0].impactTimeMs : null;
   segTrCardNearestImpactConfirmed = list.length>0; // كل ما في هذه القائمة مرصود فعلياً عبر SNCFT Live بالتعريف
   updateSegTrCardImpactBadge();
+  // طلب المستخدم بالحرف: موقع رمز المشي 🧍 على الخط الأزرق يُحسب حسب "الهوراير" — أي توقيت وصول القطار الحقيقي (curFr/nextFr
+  // عبر SNCFT Live) عند محطتَي المقطع الدقيقتين (vA/vB) — لا حسب مسافة GPS فقط. نأخذ توقيتَي أقرب قطار زمنياً (list[0])
+  // عند vA وvB بالذات، ونحسب أين "الآن" يقع بينهما زمنياً (0% = توقيت vA، 100% = توقيت vB) — بلا أي تعطيل: إن تعذّر
+  // إيجاد توقيت حقيقي للمحطتين معاً، نعود فوراً لـ ratioV (المسافة) كما كان سابقاً
+  let ratioHoraire = null;
+  const findStopTimeAt = (stopsArr, nm)=>{
+    if(!nm || !stopsArr) return null;
+    const s = stopsArr.find(x=>stationNamesMatch(x.name, nm));
+    return s ? (s.forecast || s.plan || null) : null;
+  };
+  const horaireSource = list.find(e=> (e.allStops || fullStops));
+  if(horaireSource){
+    const stopsForHoraire = horaireSource.allStops || fullStops;
+    const tAtxt = findStopTimeAt(stopsForHoraire, vA.name);
+    const tBtxt = findStopTimeAt(stopsForHoraire, vB.name);
+    if(tAtxt && tBtxt){
+      let tAms = todayAt(tAtxt).getTime();
+      let tBms = todayAt(tBtxt).getTime();
+      if(tBms < tAms) tBms += 24*3600000;
+      if(tBms !== tAms){
+        ratioHoraire = ((now - tAms)/(tBms - tAms))*100;
+      }
+    }
+  }
+  if(vizUserEl){
+    const ratioFinal = (ratioHoraire!=null && isFinite(ratioHoraire)) ? ratioHoraire : ratioV;
+    vizUserEl.style.right = (ratioFinal!=null ? Math.min(94,Math.max(6,ratioFinal)) : 50)+'%';
+  }
   // طلب المستخدم بالحرف: محطات القطار موضوعة مباشرة فوق الخط الأزرق نفسه (كنقاط بمواقع نسبية)، لا في قائمة منفصلة تحته إطلاقاً —
   // موقعك أنت يبقى منفصلاً تماماً (رمز المشي 🧍 فوق نفس الخط)، فلا التباس بين موقعك ومسار القطار
   if(vizLineStopsEl){
@@ -7619,15 +7645,37 @@ function segStationAlarmComputeTarget(culprit, sA, sB){
 // أو فوراً إن تأكَّد وصول نفس القطار المستهدَف إلى محطته التالية بعد موقعك (segStationAlarmTargetStation أعلاه)
 const SEG_STATION_ALARM_MISS_TOLERANCE = 3;
 let segStationAlarmMissCount = 0;
+const SEG_STATION_ALARM_WINDOW_MS = 3*60000; // 3 دقائق فقط قبل الهوراير — وليس بعده
+// المسافة من السكة: 150م بالضبط (نفس RISK_THRESHOLD_M) — طلب المستخدم بالحرف، بلا أي شرط آخر يُضاف هنا
+const SEG_STATION_ALARM_DIST_M = 150;
+// طلب المستخدم بالحرف: "الإنذار نفسه يحمل هوراير، استعمله" — هذه الدالة هي نفسها الحساب الذي كان يُستعمل فقط لعرض
+// horaireTxt في نص اللافتة (توقيت القطار الحقيقي المصحَّح إن توفّر، وإلا المبرمَج، عند أي من محطتَي مقطعك). لا حساب
+// منفصل جديد: نفس هذا التوقيت بالذات يُستعمل الآن أيضاً كشرط تشغيل الإنذار (نافذة 3 دقائق قبله)، ويُستدعى من مكان واحد فقط
+function segStationAlarmGetSchedule(culprit, sA, sB){
+  if(!culprit || !culprit.id) return null;
+  fetchTrainDetails(culprit.id); // غير معطِّل — تُستعمل النتيجة إن كانت جاهزة أصلاً في الذاكرة المؤقتة، أو الدورة القادمة
+  const cached = trainDetailsCache[culprit.id];
+  if(!cached || !cached.stops || !cached.stops.length) return null;
+  // التوقيت الحقيقي لأي من محطتَي مقطعك بالذات (أياً منهما ذُكرت في تفاصيل هذا القطار)، وليس تخميناً
+  const stopA = cached.stops.find(s=>stationNamesMatch(s.name, sA.name));
+  const stopB = cached.stops.find(s=>stationNamesMatch(s.name, sB.name));
+  const stop = stopA || stopB;
+  if(!stop) return null;
+  const t = stop.forecast || stop.plan;
+  if(!t) return null;
+  let tm = todayAt(t).getTime();
+  if(tm < Date.now() - 5*60000) tm += 24*3600000; // نفس منطق بقية التطبيق: توقيت "ماضٍ" بأكثر من 5 دقائق يُعتبر غداً
+  return {ms: tm, stop: stop, isReal: !!(stop.forecast && stop.forecast!==stop.plan)};
+}
 function checkSegStationAlarm(){
   if(!lastPos || !isLiveDataFresh()){
     if(segStationAlarmActive) forceStopSegStationAlarm();
     return;
   }
   // بطلب صريح من المستخدم: لا معنى فيزيائياً لهذا الإنذار إن كنت أصلاً بعيداً عن أي سكة حقيقية — لا قطار "يطير" ليصلك
-  // من بعيد. شرط القرب من السكة أساسي هنا (مثل بقية إنذارات القرب في التطبيق)، مطابقة اسم المحطة وحدها لا تكفي أبداً
+  // من بعيد. شرط القرب من السكة أساسي هنا (150م بالضبط، طلب المستخدم بالحرف)، مطابقة اسم المحطة وحدها لا تكفي أبداً
   const distTrack = (typeof distanceToNearestTrack==='function') ? distanceToNearestTrack(lastPos[0], lastPos[1]) : Infinity;
-  if(!isFinite(distTrack) || distTrack > RISK_THRESHOLD_M){
+  if(!isFinite(distTrack) || distTrack > SEG_STATION_ALARM_DIST_M){
     if(segStationAlarmActive) forceStopSegStationAlarm();
     return;
   }
@@ -7646,10 +7694,18 @@ function checkSegStationAlarm(){
     return;
   }
   const [sA, sB] = nearest2;
-  const culprit = liveTrains.find(lt => lt && (
-    stationNamesMatch(lt.curFr, sA.name) || stationNamesMatch(lt.nextFr, sA.name) ||
-    stationNamesMatch(lt.curFr, sB.name) || stationNamesMatch(lt.nextFr, sB.name)
-  ));
+  // طلب صريح جديد من المستخدم: مطابقة الاسم وحدها لم تعد كافية — يجب أيضاً أن يكون الآن ضمن نافذة 3 دقائق قبل
+  // الهوراير الذي "يحمله" هذا الإنذار نفسه (segStationAlarmGetSchedule، نفس التوقيت المعروض في نص اللافتة)، وإلا فلا اشتغال
+  const now0 = Date.now();
+  const culprit = liveTrains.find(lt => {
+    if(!lt) return false;
+    const matchA = stationNamesMatch(lt.curFr, sA.name) || stationNamesMatch(lt.nextFr, sA.name);
+    const matchB = stationNamesMatch(lt.curFr, sB.name) || stationNamesMatch(lt.nextFr, sB.name);
+    if(!matchA && !matchB) return false;
+    const sched = segStationAlarmGetSchedule(lt, sA, sB);
+    if(!sched) return false;
+    return now0 >= (sched.ms - SEG_STATION_ALARM_WINDOW_MS) && now0 <= sched.ms;
+  });
   if(culprit){
     segStationAlarmMissCount = 0;
     triggerSegStationAlarm(culprit, sA, sB);
@@ -7667,22 +7723,12 @@ function triggerSegStationAlarm(culprit, sA, sB){
     startSegStationSiren();
     if(navigator.vibrate) navigator.vibrate([200,100,200,100,600]);
   }
-  // بطلب صريح من المستخدم: SNCFT Live يُعطي فعلاً اسم كل محطة وتوقيت وصوله الحقيقي إليها (عبر details.php) — يجب طلبه
-  // لهذا القطار المستهدَف بالذات أيضاً، لا الاكتفاء بعرض "المحطة الحالية/التالية" فقط بلا أي توقيت حقيقي مرفق
+  // بطلب صريح من المستخدم: نفس الهوراير بالذات الذي شغَّل هذا الإنذار (segStationAlarmGetSchedule) — لا حساب مختلف هنا
   let horaireTxt = '';
-  if(culprit.id){
-    fetchTrainDetails(culprit.id); // غير معطِّل — تُستعمل النتيجة إن كانت جاهزة أصلاً في الذاكرة المؤقتة، أو الدورة القادمة
-    const cached = trainDetailsCache[culprit.id];
-    if(cached && cached.stops && cached.stops.length){
-      // التوقيت الحقيقي لأي من محطتَي مقطعك بالذات (أياً منهما ذُكرت في تفاصيل هذا القطار)، وليس تخميناً
-      const stopA = cached.stops.find(s=>stationNamesMatch(s.name, sA.name));
-      const stopB = cached.stops.find(s=>stationNamesMatch(s.name, sB.name));
-      const stop = stopA || stopB;
-      if(stop){
-        const t = stop.forecast || stop.plan;
-        if(t) horaireTxt = ' — ⏰ توقيته الحقيقي عند "'+stop.name+'": '+t+(stop.forecast && stop.forecast!==stop.plan ? ' (فعلي/محدَّث)' : ' (مبرمَج)');
-      }
-    }
+  const sched = segStationAlarmGetSchedule(culprit, sA, sB);
+  if(sched){
+    const t = sched.stop.forecast || sched.stop.plan;
+    horaireTxt = ' — ⏰ توقيته الحقيقي عند "'+sched.stop.name+'": '+t+(sched.isReal ? ' (فعلي/محدَّث)' : ' (مبرمَج)');
   }
   const el = document.getElementById('segStationAlarmBanner'); if(el) el.style.display='flex';
   const textEl = document.getElementById('segStationAlarmText');
