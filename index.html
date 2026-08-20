@@ -5104,43 +5104,98 @@ function updateSegTrCardImpactBadge(){
   cdEl.textContent = (past ? 'مضى منذ ' : 'خلال ') + cdTxt;
 }
 setInterval(updateSegTrCardImpactBadge, 1000);
-let segTrCardAlarmCtx=null, segTrCardAlarmOsc=null, segTrCardAlarmGain=null, segTrCardAlarmSirenTimer=null, segTrCardAlarmVibrateTimer=null;
+// ============ طلب المستخدم بالحرف: إعادة تصميم كاملة لهذه البطاقة تحديداً ============
+// المشكلة السابقة: صفارة مستمرة بلا توقف، وبلا أي زر فعلي متصل بها لإيقافها (الزر القديم في الواجهة لم يكن
+// له أي onclick إطلاقاً). الحل: دورة محدَّدة صريحة — صفارة، ثم جملة منطوقة تذكر اسم المحطة التي غادرها القطار
+// قبل موقعك والمسافة التقريبية بالكم، ثم صفارة ثانية، ثم نفس الجملة مرة ثانية، ثم صمت تام لمدة دقيقتين، ثم
+// تعاد الدورة من جديد طالما الخطر ما زال قائماً (المسافة ≤150م ضمن النافذة الزمنية). زر "🔇 إيقاف" حقيقي
+// ومتصل الآن: يقطع الصوت والاهتزاز فوراً (لا ينتظر نهاية الخطوة الجارية) ويُسكت البطاقة دقيقتين كاملتين،
+// وبعدها تُستأنف الدورة تلقائياً إن كان الخطر ما زال قائماً فعلاً (نفس مدة الصمت الطبيعية بين الدورات).
+let segTrCardCycleToken = 0;      // كل استدعاء start()/stop() يُبطل الدورة السابقة عبر تغيير هذا الرمز
+let segTrCardCycleTimer = null;   // مؤقت الخطوة القادمة في الدورة (صفارة أو فترة صمت)
+let segTrCardCurrentBeepFinish = null; // دالة إنهاء الصفارة الجارية حالياً، لإتاحة قطعها فوراً عند الإيقاف اليدوي
+let segTrCardManualMuteUntil = 0; // طلب المستخدم: عند الضغط على زر الإيقاف، إسكات لمدة دقيقتين قبل احتمال الاستئناف التلقائي
+let segTrCardAlarmDepartStation = null, segTrCardAlarmDistM = null; // تُحدَّثان في كل دورة عرض من renderSegmentTrainsList
+
 function segTrCardAlarm_start(){
   if(segTrCardAlarmActive) return;
+  if(Date.now() < segTrCardManualMuteUntil) return; // أُسكتت يدوياً منذ قليل — لا تُعاد فوراً
   segTrCardAlarmActive = true;
   const banner = document.getElementById('segTrCardAlarmBanner');
   const card = document.getElementById('segmentTrainsCard');
   if(banner) banner.style.display='block';
   if(card) card.classList.add('segTrCardAlarm');
-  try{
-    segTrCardAlarmCtx = new (window.AudioContext||window.webkitAudioContext)();
-    segTrCardAlarmGain = segTrCardAlarmCtx.createGain(); segTrCardAlarmGain.gain.value=.4; segTrCardAlarmGain.connect(segTrCardAlarmCtx.destination);
-    segTrCardAlarmOsc = segTrCardAlarmCtx.createOscillator(); segTrCardAlarmOsc.type='square'; segTrCardAlarmOsc.frequency.value=600;
-    segTrCardAlarmOsc.connect(segTrCardAlarmGain); segTrCardAlarmOsc.start();
-    segTrCardAlarmSirenTimer = setInterval(function(){
-      if(!segTrCardAlarmOsc) return;
-      segTrCardAlarmOsc.frequency.value = (segTrCardAlarmOsc.frequency.value<750) ? 900 : 600;
-    }, 350);
-  }catch(e){}
-  if(navigator.vibrate){
-    navigator.vibrate([400,150,400]);
-    segTrCardAlarmVibrateTimer = setInterval(function(){ navigator.vibrate([400,150,400]); }, 1200);
-  }
+  segTrCardCycleToken++;
+  segTrCardRunCycle(segTrCardCycleToken);
 }
 function segTrCardAlarm_stop(){
   if(!segTrCardAlarmActive) return;
   segTrCardAlarmActive = false;
+  segTrCardCycleToken++; // يُبطل أي خطوة معلَّقة (صفارة قادمة أو انتظار دقيقتين) من الدورة الحالية
+  if(segTrCardCycleTimer){ clearTimeout(segTrCardCycleTimer); segTrCardCycleTimer=null; }
+  if(segTrCardCurrentBeepFinish){ try{ segTrCardCurrentBeepFinish(); }catch(e){} segTrCardCurrentBeepFinish=null; }
   const banner = document.getElementById('segTrCardAlarmBanner');
   const card = document.getElementById('segmentTrainsCard');
   if(banner) banner.style.display='none';
   if(card) card.classList.remove('segTrCardAlarm');
-  if(segTrCardAlarmSirenTimer){ clearInterval(segTrCardAlarmSirenTimer); segTrCardAlarmSirenTimer=null; }
-  if(segTrCardAlarmVibrateTimer){ clearInterval(segTrCardAlarmVibrateTimer); segTrCardAlarmVibrateTimer=null; }
-  try{
-    if(segTrCardAlarmOsc){ segTrCardAlarmOsc.stop(); segTrCardAlarmOsc.disconnect(); segTrCardAlarmOsc=null; }
-    if(segTrCardAlarmGain){ segTrCardAlarmGain.disconnect(); segTrCardAlarmGain=null; }
-    if(segTrCardAlarmCtx){ segTrCardAlarmCtx.close(); segTrCardAlarmCtx=null; }
-  }catch(e){}
+}
+// طلب المستخدم بالحرف: زر إيقاف يدوي حقيقي — يقطع الصوت والاهتزاز فوراً بصرف النظر عن الخطوة الجارية،
+// ويُسكت هذه البطاقة تحديداً لمدة دقيقتين (نفس مدة فترة الصمت الطبيعية بين الدورات) قبل أن يُسمح لها بالعمل من جديد
+window.dismissSegTrCardAlarm = function(){
+  segTrCardManualMuteUntil = Date.now() + 2*60000;
+  segTrCardAlarm_stop();
+  try{ if('speechSynthesis' in window) window.speechSynthesis.cancel(); }catch(e){}
+};
+// صفارة واحدة قصيرة (نغمة متبدّلة + اهتزاز)، تُنهى تلقائياً بعد durationMs أو فوراً إن استُدعيت finish() يدوياً
+function segTrCardBeepP(durationMs){
+  return new Promise(function(resolve){
+    let ctx=null, osc=null, gain=null, flipTimer=null, done=false;
+    const finish = function(){
+      if(done) return; done=true;
+      if(flipTimer) clearInterval(flipTimer);
+      try{ if(osc){ osc.stop(); osc.disconnect(); } if(gain) gain.disconnect(); if(ctx) ctx.close(); }catch(e){}
+      if(segTrCardCurrentBeepFinish===finish) segTrCardCurrentBeepFinish=null;
+      resolve();
+    };
+    try{
+      ctx = new (window.AudioContext||window.webkitAudioContext)();
+      gain = ctx.createGain(); gain.gain.value=.4; gain.connect(ctx.destination);
+      osc = ctx.createOscillator(); osc.type='square'; osc.frequency.value=600;
+      osc.connect(gain); osc.start();
+      flipTimer = setInterval(function(){ osc.frequency.value = (osc.frequency.value<750) ? 900 : 600; }, 350);
+    }catch(e){}
+    if(navigator.vibrate) navigator.vibrate([400,150,400]);
+    segTrCardCurrentBeepFinish = finish;
+    segTrCardCycleTimer = setTimeout(finish, durationMs);
+  });
+}
+// جملة منطوقة واحدة، تنتظر انتهاء النطق فعلياً قبل المتابعة (لا تتراكم مع أصوات التطبيق الأخرى بفضل __qtSpeak المركزي)
+function segTrCardSpeakP(text){
+  return new Promise(function(resolve){
+    window.__qtSpeak(text, {priority:90, rate:0.92, onend:resolve, onerror:resolve});
+  });
+}
+// طلب المستخدم بالحرف: "القطار غادر المحطة قبل موقعك، وهو على بعد X كم منك" — المحطة والمسافة تُقرآن من
+// آخر قيمة محدَّثة فعلياً في renderSegmentTrainsList (segTrCardAlarmDepartStation/DistM)، فتبقى الجملة صحيحة
+// عند كل تكرار للدورة حتى لو تغيّرت المسافة بين مرة وأخرى
+function segTrCardPhraseText(){
+  const station = segTrCardAlarmDepartStation || 'المحطة السابقة';
+  const distTxt = (segTrCardAlarmDistM!=null && isFinite(segTrCardAlarmDistM)) ? kz_distanceSpokenText(segTrCardAlarmDistM) : 'مسافة غير معروفة';
+  return 'انتباه، القطار غادر محطة ' + station + ' قبل موقعك، وهو الآن على بعد تقريبي ' + distTxt + ' منك';
+}
+// الدورة الكاملة: صفارة، جملة، صفارة، جملة، صمت دقيقتين، ثم تكرار — تتوقف فوراً إن أُبطل الرمز (token) عبر stop()
+async function segTrCardRunCycle(token){
+  while(token===segTrCardCycleToken && segTrCardAlarmActive){
+    await segTrCardBeepP(2500);
+    if(token!==segTrCardCycleToken || !segTrCardAlarmActive) return;
+    await segTrCardSpeakP(segTrCardPhraseText());
+    if(token!==segTrCardCycleToken || !segTrCardAlarmActive) return;
+    await segTrCardBeepP(2500);
+    if(token!==segTrCardCycleToken || !segTrCardAlarmActive) return;
+    await segTrCardSpeakP(segTrCardPhraseText());
+    if(token!==segTrCardCycleToken || !segTrCardAlarmActive) return;
+    await new Promise(function(resolve){ segTrCardCycleTimer = setTimeout(resolve, 2*60000); });
+  }
 }
 const SEG_ALARM_WINDOW_MS = 3*60000; // ±3 دقائق حول توقيت الالتقاء
 const SEG_ALARM_DIST_M = 150;
@@ -5349,6 +5404,12 @@ function renderSegmentTrainsList(nameA, nameB, userPos, impactNameA, impactNameB
     if(segTrCardActiveEntry){
       segTrCardLockKey = segTrCardKeyOf(segTrCardActiveEntry);
       segTrCardLockConfirmedAt = null;
+      // طلب المستخدم: تُحدَّث المحطة/المسافة المستعملتان في الجملة المنطوقة في كل دورة عرض (وليس فقط لحظة بدء الإنذار)
+      // حتى تبقى الجملة صحيحة مهما طالت الدورة أو تكررت
+      const departName = (segTrCardActiveEntry.lt && segTrCardActiveEntry.lt.curFr) ? segTrCardActiveEntry.lt.curFr : (segTrCardActiveEntry.stationName || null);
+      const departCoord = departName ? coordForStationName(departName) : null;
+      segTrCardAlarmDepartStation = departName;
+      segTrCardAlarmDistM = (departCoord && userPos) ? haversine(userPos, departCoord) : null;
       segTrCardAlarm_start();
     } else if(segTrCardLockKey!==null){
       if(segTrCardLockConfirmedAt===null) segTrCardLockConfirmedAt = now;
@@ -8462,25 +8523,51 @@ function kz_renderTrainViz(next){
 // محرّك النطق كلياً في بعض المتصفحات فيتوقف عن الاستجابة حتى لصوت فرحوم. الحل: كل كلام في التطبيق
 // يعبر من هنا فقط، بأولوية (priority) — الأعلى أولوية يقطع الأدنى، وكلام من أولوية أعلى أو مساوية
 // لا يقطعه كلام أقل أهمية يصل في نفس اللحظة.
+//
+// طلب المستخدم بالحرف: "الصوت لا يُسمع أبداً، حتى والتطبيق مفتوح أمامي" على أندرويد Chrome. السبب الحقيقي:
+// getVoices() تُرجع مصفوفة فارغة تماماً في أول استدعاء لها على أندرويد (الأصوات تُحمَّل بشكل غير متزامن من
+// محرّك النطق في النظام)، فكان الكود القديم يضبط u.lang='ar-SA' فقط بلا صوت (voice) محدَّد — وإن لم يوجد
+// على الجهاز صوت مثبَّت بهذا الرمز اللغوي بالضبط (كثير من أجهزة أندرويد لا تملك حزمة "ar-SA" حرفياً، بل
+// "ar" فقط أو لا شيء إطلاقاً)، ينفّذ Chrome على أندرويد نداء speak() بصمت تام بلا أي صوت خارج وبلا خطأ
+// (onerror) — فيبدو للمستخدم أن التطبيق "لا يتكلم إطلاقاً" رغم أن الكود يعمل ظاهرياً بلا أي استثناء.
+// الحل: (1) ننتظر فعلياً تحميل قائمة الأصوات (حدث voiceschanged) قبل أول نطق بدل الافتراض أنها جاهزة،
+// (2) نختار صوتاً فعلياً موجوداً على الجهاز بترتيب أولوية بدل الاكتفاء بضبط u.lang فقط: مطابقة تامة للرمز
+// المطلوب (ar-SA) → أي صوت عربي مهما كانت لهجته (ar-*) → أي صوت متاح إطلاقاً على الجهاز (أفضل من صمت تام
+// كامل، خصوصاً في التنبيهات الأمنية) — (3) نُعيد استدعاء resume() دورياً كل بضع ثوانٍ كإجراء احترازي ضد
+// علة معروفة في Chrome حيث يتعطّل محرّك النطق كلياً بعد فترة توقّف ويتجاهل speak() القادمة بصمت.
 (function(){
   let qtCurrentPriority = 0;
-  window.__qtSpeak = function(text, opts){
+  let qtVoices = [];
+  function qtRefreshVoices(){
+    try{ qtVoices = window.speechSynthesis.getVoices() || []; }catch(e){}
+  }
+  if('speechSynthesis' in window){
+    qtRefreshVoices();
+    try{ window.speechSynthesis.onvoiceschanged = qtRefreshVoices; }catch(e){}
+    // إجراء احترازي: علة معروفة في Chrome/أندرويد تُعطّل محرّك النطق تماماً بعد فترة خمول فيتجاهل speak() بصمت
+    setInterval(function(){ try{ window.speechSynthesis.resume(); }catch(e){} }, 4000);
+  }
+  function qtPickVoice(preferredLang){
+    if(!qtVoices.length) qtRefreshVoices();
+    if(!qtVoices.length) return null;
+    let v = qtVoices.find(function(v){ return v.lang && v.lang.toLowerCase()===String(preferredLang).toLowerCase(); });
+    if(!v) v = qtVoices.find(function(v){ return /^ar/i.test(v.lang||''); });
+    if(!v) v = qtVoices[0]; // أفضل من صمت تام: أي صوت متاح فعلياً على الجهاز
+    return v || null;
+  }
+  function qtDoSpeak(text, opts, priority){
     try{
-      opts = opts || {};
-      if(!('speechSynthesis' in window)) return;
-      const priority = (typeof opts.priority === 'number') ? opts.priority : 50;
-      const busy = window.speechSynthesis.speaking || window.speechSynthesis.pending;
-      if(busy && priority < qtCurrentPriority) return; // كلام أهم جارٍ حالياً → لا نقطعه بكلام أقل أهمية
       window.speechSynthesis.cancel();
       qtCurrentPriority = priority;
       const repeat = opts.repeat || 1;
       for(let i=0;i<repeat;i++){
         const u = new SpeechSynthesisUtterance(text);
-        u.lang = opts.lang || 'ar-SA';
+        const chosenVoice = opts.voice || qtPickVoice(opts.lang || 'ar-SA');
+        if(chosenVoice){ u.voice = chosenVoice; u.lang = chosenVoice.lang; }
+        else { u.lang = opts.lang || 'ar-SA'; } // لا صوت مثبَّت إطلاقاً على الجهاز — نحاول باللغة فقط كملاذ أخير
         u.rate = (typeof opts.rate === 'number') ? opts.rate : 0.95;
         u.pitch = (typeof opts.pitch === 'number') ? opts.pitch : 1;
         if(typeof opts.volume === 'number') u.volume = opts.volume;
-        if(opts.voice) u.voice = opts.voice;
         if(i === repeat-1){
           u.onend = function(){ qtCurrentPriority = 0; if(typeof opts.onend === 'function') opts.onend(); };
           u.onerror = function(){ qtCurrentPriority = 0; if(typeof opts.onerror === 'function') opts.onerror(); };
@@ -8488,6 +8575,33 @@ function kz_renderTrainViz(next){
         window.__qtLastUtterance = u; // مرجع حيّ يمنع تجاهل بعض المتصفحات للنطق
         window.speechSynthesis.speak(u);
       }
+    }catch(e){}
+  }
+  window.__qtSpeak = function(text, opts){
+    try{
+      opts = opts || {};
+      if(!('speechSynthesis' in window)) return;
+      const priority = (typeof opts.priority === 'number') ? opts.priority : 50;
+      const busy = window.speechSynthesis.speaking || window.speechSynthesis.pending;
+      if(busy && priority < qtCurrentPriority) return; // كلام أهم جارٍ حالياً → لا نقطعه بكلام أقل أهمية
+      if(!qtVoices.length){
+        // الأصوات لم تُحمَّل بعد من النظام (شائع جداً في أول استعمال على أندرويد Chrome) — ننتظر تحميلها
+        // فعلياً (حتى 1.5 ثانية كحد أقصى) بدل النطق فوراً بلا صوت محدَّد فيفشل بصمت
+        qtRefreshVoices();
+        if(!qtVoices.length){
+          let tries = 0;
+          const waitTimer = setInterval(function(){
+            qtRefreshVoices();
+            tries++;
+            if(qtVoices.length || tries>10){
+              clearInterval(waitTimer);
+              qtDoSpeak(text, opts, priority);
+            }
+          }, 150);
+          return;
+        }
+      }
+      qtDoSpeak(text, opts, priority);
     }catch(e){}
   };
   // يقطع كل كلام جارٍ فوراً بصرف النظر عن الأولوية (إيقاف إنذار مثلاً)
@@ -8670,56 +8784,56 @@ function ann_announceUpcomingTrains(){
   const stationName = nearest.name;
   const nowMin = minsNow();
 
-  const events = [];
-  trains.forEach(t=>{
-    const stops = parseStops(t.stopsText).filter(s=>!s.unknown && s.time);
-    if(stops.length<2) return;
-    const idx = stops.findIndex(s=>s.name===stationName);
-    if(idx===-1) return;
-    let diff = minutesOf(stops[idx].time) - nowMin;
+  // يحسب عدد الدقائق المتبقية حتى وقت مجدول معيّن، مع معالجة تجاوز منتصف الليل، ويرجع null إن كان
+  // خارج نافذة الإعلان (ماضياً أو بعيداً جداً في المستقبل)
+  function upcomingDiff(scheduledMin){
+    let diff = scheduledMin - nowMin;
     if(diff < -5) diff += 1440; // القطار مجدول بعد منتصف الليل بالنسبة للساعة الحالية
-    if(diff < 0 || diff > ANN_LOOKAHEAD_MIN) return;
-    const trainNum = (t.name.split('—')[0]||t.name).trim();
-    if(idx===0){
-      events.push({type:'dep', mins:Math.round(diff), num:trainNum, dest:stops[stops.length-1].name});
-    } else if(idx===stops.length-1){
-      events.push({type:'arr', mins:Math.round(diff), num:trainNum, orig:stops[0].name});
-    } else {
-      events.push({type:'thru', mins:Math.round(diff), num:trainNum, orig:stops[0].name, dest:stops[stops.length-1].name});
-    }
-  });
-  // طلب المستخدم: "il annonce pas la gare" — كانت الدالة تلغي الإعلان بالكامل (ولا تقول حتى اسم المحطة)
-  // متى ما لم يوجد أي قطار خلال الـ90 دقيقة القادمة في هذه المحطة بالذات. بما أن القطارات متباعدة زمنياً،
-  // هذا يعني عملياً أن اسم المحطة لا يُعلَن أبداً في أغلب الأوقات. الآن: نُعلن اسم المحطة دائماً، ونضيف
-  // تفاصيل القطارات القادمة إن وُجدت، وإلا نقول ببساطة أنه لا قطار متوقَّع قريباً.
-  events.sort((a,b)=>a.mins-b.mins);
+    if(diff < 0 || diff > ANN_LOOKAHEAD_MIN) return null;
+    return Math.round(diff);
+  }
+
+  // إعادة استعمال نفس دالتي حساب "المغادرات" و"الوصول" المستعملتين في بطاقتي البحث اليدوي بالمحطة،
+  // حتى يبقى تعريف "مغادرة"/"وصول" موحّداً في كل التطبيق (كل محطة إلا الأخيرة = مغادرة، كل محطة إلا الأولى = وصول)
+  const nextDep = computeDeparturesFromStation(stationName)
+    .map(e=>{ const diff = upcomingDiff(e.depMin); return diff===null ? null : Object.assign({diff:diff}, e); })
+    .filter(e=>e)
+    .sort((a,b)=>a.diff-b.diff)[0] || null;
+  const nextArr = computeArrivalsToStation(stationName)
+    .map(e=>{ const diff = upcomingDiff(e.arrMin); return diff===null ? null : Object.assign({diff:diff}, e); })
+    .filter(e=>e)
+    .sort((a,b)=>a.diff-b.diff)[0] || null;
 
   let phrase = 'أقرب محطة إليك هي محطة '+stationName+'. ';
   let phraseFr = 'La gare la plus proche de vous est la gare de '+stationName+'. ';
   let phraseEn = 'The nearest station to you is '+stationName+' station. ';
-  if(events.length===0){
-    phrase += 'لا يوجد قطار متوقَّع في هذه المحطة خلال الساعة والنصف القادمة.';
-    phraseFr += 'Aucun train n\'est prévu à cette gare dans les 90 prochaines minutes.';
-    phraseEn += 'No train is expected at this station in the next 90 minutes.';
+
+  if(nextArr){
+    const trainNum = (nextArr.train.name.split('—')[0]||nextArr.train.name).trim();
+    const whenTxt = nextArr.diff<=1 ? 'الآن' : 'خلال '+nextArr.diff+' دقيقة';
+    const whenTxtFr = nextArr.diff<=1 ? 'maintenant' : 'dans '+nextArr.diff+' minute'+(nextArr.diff===1?'':'s');
+    const whenTxtEn = nextArr.diff<=1 ? 'now' : 'in '+nextArr.diff+' minute'+(nextArr.diff===1?'':'s');
+    phrase += 'أول قطار سيصل إلى هذه المحطة '+whenTxt+'، قطار رقم '+trainNum+' قادماً من '+nextArr.originName+'. ';
+    phraseFr += 'Le premier train à arriver à cette gare le fera '+whenTxtFr+', train numéro '+trainNum+' en provenance de '+nextArr.originName+'. ';
+    phraseEn += 'The first train to arrive at this station will do so '+whenTxtEn+', train number '+trainNum+' coming from '+nextArr.originName+'. ';
   } else {
-    events.slice(0,3).forEach(e=>{
-      const whenTxt = e.mins<=1 ? 'الآن' : 'خلال '+e.mins+' دقيقة';
-      const whenTxtFr = e.mins<=1 ? 'maintenant' : 'dans '+e.mins+' minute'+(e.mins===1?'':'s');
-      const whenTxtEn = e.mins<=1 ? 'now' : 'in '+e.mins+' minute'+(e.mins===1?'':'s');
-      if(e.type==='dep'){
-        phrase += whenTxt+'، سينطلق قطار رقم '+e.num+' متجهاً إلى '+e.dest+'. ';
-        phraseFr += whenTxtFr+', le train numéro '+e.num+' partira en direction de '+e.dest+'. ';
-        phraseEn += whenTxtEn+', train number '+e.num+' will depart heading to '+e.dest+'. ';
-      } else if(e.type==='arr'){
-        phrase += whenTxt+'، سيصل قطار رقم '+e.num+' قادماً من '+e.orig+'. ';
-        phraseFr += whenTxtFr+', le train numéro '+e.num+' arrivera en provenance de '+e.orig+'. ';
-        phraseEn += whenTxtEn+', train number '+e.num+' will arrive coming from '+e.orig+'. ';
-      } else {
-        phrase += whenTxt+'، سيمر قطار رقم '+e.num+' قادماً من '+e.orig+' متجهاً إلى '+e.dest+'. ';
-        phraseFr += whenTxtFr+', le train numéro '+e.num+' passera, en provenance de '+e.orig+' en direction de '+e.dest+'. ';
-        phraseEn += whenTxtEn+', train number '+e.num+' will pass through, coming from '+e.orig+' heading to '+e.dest+'. ';
-      }
-    });
+    phrase += 'لا يوجد قطار سيصل إلى هذه المحطة خلال الساعة والنصف القادمة. ';
+    phraseFr += 'Aucun train n\'arrivera à cette gare dans les 90 prochaines minutes. ';
+    phraseEn += 'No train will arrive at this station in the next 90 minutes. ';
+  }
+
+  if(nextDep){
+    const trainNum = (nextDep.train.name.split('—')[0]||nextDep.train.name).trim();
+    const whenTxt = nextDep.diff<=1 ? 'الآن' : 'خلال '+nextDep.diff+' دقيقة';
+    const whenTxtFr = nextDep.diff<=1 ? 'maintenant' : 'dans '+nextDep.diff+' minute'+(nextDep.diff===1?'':'s');
+    const whenTxtEn = nextDep.diff<=1 ? 'now' : 'in '+nextDep.diff+' minute'+(nextDep.diff===1?'':'s');
+    phrase += 'وأول قطار سينطلق من هذه المحطة '+whenTxt+'، قطار رقم '+trainNum+' متجهاً إلى '+nextDep.finalName+'.';
+    phraseFr += 'Et le premier train à partir de cette gare le fera '+whenTxtFr+', train numéro '+trainNum+' en direction de '+nextDep.finalName+'.';
+    phraseEn += 'And the first train to depart from this station will do so '+whenTxtEn+', train number '+trainNum+' heading to '+nextDep.finalName+'.';
+  } else {
+    phrase += 'ولا يوجد قطار سينطلق من هذه المحطة خلال الساعة والنصف القادمة.';
+    phraseFr += 'Et aucun train ne partira de cette gare dans les 90 prochaines minutes.';
+    phraseEn += 'And no train will depart from this station in the next 90 minutes.';
   }
 
   annLastSpokenAt = now;
@@ -9641,10 +9755,30 @@ function unlockAudio(){
     o.connect(g).connect(audioCtx.destination);
     o.start(); o.stop(audioCtx.currentTime+0.05);
   }catch(e){}
+  // طلب المستخدم بالحرف: "الصوت المنطوق لا يُسمع أبداً" رغم اختيار صوت صحيح — السبب الحقيقي: Chrome على أندرويد
+  // يشترط تنفيذ نطق واحد فعلي ضمن لفتة مستخدم حقيقية (نقرة زر مباشرة) قبل أن يسمح لاحقاً بأي نطق برمجي صادر
+  // من مؤقّتات خلفية (وهو بالضبط أسلوب كل تنبيهات هذا التطبيق). بلا هذه "اللفتة"، تُنفَّذ speak() لاحقاً بصمت
+  // تام بلا أي خطأ يظهر في الكود. هذا الاستدعاء يقع دوماً هنا داخل معالِج نقرة حقيقي من المستخدم (نفس شرط
+  // فتح قناة WebAudio أعلاه بالضبط)، فيفتح قناة النطق بالمثل مرة واحدة لبقية الجلسة.
+  try{
+    if('speechSynthesis' in window){
+      const u = new SpeechSynthesisUtterance(' ');
+      u.volume = 0.01; u.rate = 10;
+      window.speechSynthesis.speak(u);
+    }
+  }catch(e){}
 }
 function stopSiren(){
   if(sirenOsc){ clearInterval(sirenOsc._sweep); sirenOsc.stop(); sirenOsc.disconnect(); sirenOsc=null; }
 }
+// طلب المستخدم: زر اختبار صوت مباشر — نقرة حقيقية، فتقع ضمن لفتة مستخدم حقيقية فتفتح قناة النطق (unlockAudio)
+// ثم تنطق فوراً عبارة اختبار واضحة، ليتحقق المستخدم بنفسه أن الصوت يعمل فعلياً بلا انتظار حدوث إنذار حقيقي
+window.testVoiceOutput = function(){
+  try{
+    unlockAudio();
+    window.__qtSpeak('هذا اختبار للصوت. إن كنت تسمع هذه الجملة، فالصوت يعمل بنجاح.', {priority:999, rate:0.95});
+  }catch(e){}
+};
 
 // ---------- wake lock / notif permission ----------
 async function requestWakeLock(){
@@ -12446,6 +12580,9 @@ document.getElementById('toggleStationsBtn').click(); // نعرض كل المح�
 <!-- طلب المستخدم: بطاقة مستقلة تماماً، في آخر الصفحة، ظاهرة دوماً بلا شرط ولا زر إظهار — قائمة كل القطارات المارة بمقطعك الحالي (محطتَي موقعك) -->
 <div class="card" id="segmentTrainsCard" style="border-color:rgba(30,144,255,.35);">
   <h3>🚦 القطارات المارة بمقطعك الحالي</h3>
+  <!-- طلب المستخدم: زر اختبار صوت مباشر — نقرة حقيقية تفتح قناة النطق (نفس شرط unlockAudio) وتنطق فوراً،
+       ليتأكد المستخدم أن الصوت يعمل فعلياً بلا انتظار حدوث إنذار حقيقي -->
+  <button type="button" class="btn secondary" style="margin-bottom:10px;" onclick="testVoiceOutput()">🔊 اختبار الصوت (اضغط للتأكد أن الصوت يعمل)</button>
   <!-- طلب المستخدم بالحرف: نفس شكل "segPositionCard" (محطتان + رمز المشي بينهما) لعرض موقعه بدقة المحطات الصغيرة/الوسيطة -->
   <div id="segTrCardVizBox" style="margin-top:6px;margin-bottom:10px;border-radius:14px;overflow:hidden;background:#03101f;padding:3vh 3vw;">
     <div style="display:flex;flex-direction:row;align-items:center;gap:8px;width:100%;">
@@ -12466,7 +12603,10 @@ document.getElementById('toggleStationsBtn').click(); // نعرض كل المح�
     </div>
     <div id="segTrCardPositionText" style="font-size:13px;color:#bfe3ff;text-align:center;margin-top:12px;">بانتظار تحديد الموقع...</div>
   </div>
-  <div id="segTrCardAlarmBanner" style="display:none;text-align:center;font-weight:900;font-size:16px;color:#fff;margin-bottom:6px;">🚨 قطار على بعد أقل من 150م — خلال ±3 دقائق من الآن!</div>
+  <div id="segTrCardAlarmBanner" style="display:none;text-align:center;font-weight:900;font-size:16px;color:#fff;margin-bottom:6px;">
+    🚨 قطار على بعد أقل من 150م — خلال ±3 دقائق من الآن!
+    <button type="button" class="btn danger" style="max-width:220px;margin:8px auto 0;" onclick="dismissSegTrCardAlarm()">🔇 إيقاف الإنذار (دقيقتان)</button>
+  </div>
   <div id="segmentTrainsList" style="margin-top:4px;"></div>
 </div>
 
