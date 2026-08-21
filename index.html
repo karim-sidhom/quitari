@@ -8326,7 +8326,8 @@ function kz_setGhostAlarm(prefix, active){
   } else if(!active && st.active){
     st.active = false;
     if(box) box.classList.remove('kzGhostAlarm');
-    window.__qtStop();
+    // إصلاح: هذا الإيقاف تلقائي (انتهاء شرط الخطر أثناء دورة إعادة الحساب)، وليس زراً يدوياً — لم يعد يقطع
+    // أي كلام جارٍ في التطبيق (كان __qtStop() هنا يقطع أي جملة أخرى غير متعلقة بهذا الإنذار بالذات)
   }
 }
 function kz_dismissGhostAlarm(prefix){
@@ -8547,7 +8548,15 @@ function kz_renderTrainViz(next){
     qtRefreshVoices();
     try{ window.speechSynthesis.onvoiceschanged = qtRefreshVoices; }catch(e){}
     // إجراء احترازي: علة معروفة في Chrome/أندرويد تُعطّل محرّك النطق تماماً بعد فترة خمول فيتجاهل speak() بصمت
-    setInterval(function(){ try{ window.speechSynthesis.resume(); }catch(e){} }, 4000);
+    // إصلاح: resume() الدوري كان يُقطع الجملة الجارية في منتصفها على متصفح ST10 لأنه يُستدعى دون التحقق
+    // إن كان هناك كلام قيد النطق فعلاً في تلك اللحظة بالذات — الآن لا يُستدعى إلا حين لا شيء يتكلم إطلاقاً
+    setInterval(function(){
+      try{
+        if(!qtSpeaking && !window.speechSynthesis.speaking && !window.speechSynthesis.pending){
+          window.speechSynthesis.resume();
+        }
+      }catch(e){}
+    }, 4000);
   }
   function qtPickVoice(preferredLang){
     if(!qtVoices.length) qtRefreshVoices();
@@ -9238,8 +9247,9 @@ function startCountdownVoice(){
   countdownVoiceIntervalId = setInterval(speakCountdownWarning, 4500);
 }
 function stopCountdownVoice(){
+  // إصلاح: يوقف فقط تكرار "خطر الموت الفوري" (لا نداء جديد بعد الآن) — لا يقطع أي كلام جارٍ حالياً
+  // ولا يُفرغ قائمة الانتظار، لأن هذا الإيقاف يحدث تلقائياً عند انتهاء الخطر وليس بضغطة زر يدوية
   if(countdownVoiceIntervalId){ clearInterval(countdownVoiceIntervalId); countdownVoiceIntervalId=null; }
-  window.__qtStop();
 }
 // ---------- عدّاد تنازلي على كامل الشاشة (آخر 60 ثانية ضمن 150م) ----------
 // يبدأ العدّاد فقط عند حدوث حدث جديد (eventKey مختلف) أو إن لم يكن يعمل أصلاً، حتى لا يهتزّ التوقيت مع كل تحديث GPS —
