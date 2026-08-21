@@ -5105,12 +5105,11 @@ function updateSegTrCardImpactBadge(){
 }
 setInterval(updateSegTrCardImpactBadge, 1000);
 // ============ طلب المستخدم بالحرف: إعادة تصميم كاملة لهذه البطاقة تحديداً ============
-// المشكلة السابقة: صفارة مستمرة بلا توقف، وبلا أي زر فعلي متصل بها لإيقافها (الزر القديم في الواجهة لم يكن
-// له أي onclick إطلاقاً). الحل: دورة محدَّدة صريحة — صفارة، ثم جملة منطوقة تذكر اسم المحطة التي غادرها القطار
-// قبل موقعك والمسافة التقريبية بالكم، ثم صفارة ثانية، ثم نفس الجملة مرة ثانية، ثم صمت تام لمدة دقيقتين، ثم
-// تعاد الدورة من جديد طالما الخطر ما زال قائماً (المسافة ≤150م ضمن النافذة الزمنية). زر "🔇 إيقاف" حقيقي
-// ومتصل الآن: يقطع الصوت والاهتزاز فوراً (لا ينتظر نهاية الخطوة الجارية) ويُسكت البطاقة دقيقتين كاملتين،
-// وبعدها تُستأنف الدورة تلقائياً إن كان الخطر ما زال قائماً فعلاً (نفس مدة الصمت الطبيعية بين الدورات).
+// طلب المستخدم: الإنذار يرن بشكل متواصل بلا أي توقف تلقائي — صفارة، جملة منطوقة تذكر اسم المحطة التي غادرها
+// القطار قبل موقعك والمسافة التقريبية بالكم، صفارة ثانية، نفس الجملة مرة ثانية، ثم تُعاد الدورة فوراً من جديد
+// بلا صمت بينهما، طالما الخطر ما زال قائماً (المسافة ≤150م ضمن النافذة الزمنية). لا يتوقف إلا يدوياً عبر زر
+// "🔇 إيقاف": يقطع الصوت والاهتزاز فوراً (لا ينتظر نهاية الخطوة الجارية) ويُسكت البطاقة 20 ثانية فقط، وبعدها
+// تُستأنف الدورة تلقائياً إن كان الخطر ما زال قائماً فعلاً — إلا إذا تجاوز القطار فعلياً نطاق الـ150م، فتتوقف نهائياً.
 let segTrCardCycleToken = 0;      // كل استدعاء start()/stop() يُبطل الدورة السابقة عبر تغيير هذا الرمز
 let segTrCardCycleTimer = null;   // مؤقت الخطوة القادمة في الدورة (صفارة أو فترة صمت)
 let segTrCardCurrentBeepFinish = null; // دالة إنهاء الصفارة الجارية حالياً، لإتاحة قطعها فوراً عند الإيقاف اليدوي
@@ -5140,9 +5139,9 @@ function segTrCardAlarm_stop(){
   if(card) card.classList.remove('segTrCardAlarm');
 }
 // طلب المستخدم بالحرف: زر إيقاف يدوي حقيقي — يقطع الصوت والاهتزاز فوراً بصرف النظر عن الخطوة الجارية،
-// ويُسكت هذه البطاقة تحديداً لمدة دقيقتين (نفس مدة فترة الصمت الطبيعية بين الدورات) قبل أن يُسمح لها بالعمل من جديد
+// ويُسكت هذه البطاقة تحديداً لمدة 20 ثانية فقط، ثم تُستأنف تلقائياً إن كان الخطر (المسافة ≤150م) ما زال قائماً فعلاً
 window.dismissSegTrCardAlarm = function(){
-  segTrCardManualMuteUntil = Date.now() + 2*60000;
+  segTrCardManualMuteUntil = Date.now() + 20000;
   segTrCardAlarm_stop();
   try{ if('speechSynthesis' in window) window.speechSynthesis.cancel(); }catch(e){}
 };
@@ -5170,9 +5169,11 @@ function segTrCardBeepP(durationMs){
   });
 }
 // جملة منطوقة واحدة، تنتظر انتهاء النطق فعلياً قبل المتابعة (لا تتراكم مع أصوات التطبيق الأخرى بفضل __qtSpeak المركزي)
+// الأولوية 96: كانت 90 فتُقطع بلا سبب من إعلان "القطارات القادمة" الروتيني (أولويته 95) رغم أن هذه جملة خطر حقيقي
+// (قطار على بعد ≤150م) أهم من إعلان روتيني — الآن فوق الإعلانات الروتينية (95) ودون إنذارات خطر الموت الفوري (100)
 function segTrCardSpeakP(text){
   return new Promise(function(resolve){
-    window.__qtSpeak(text, {priority:90, rate:0.92, onend:resolve, onerror:resolve});
+    window.__qtSpeak(text, {priority:96, rate:0.92, onend:resolve, onerror:resolve});
   });
 }
 // طلب المستخدم بالحرف: "القطار غادر المحطة قبل موقعك، وهو على بعد X كم منك" — المحطة والمسافة تُقرآن من
@@ -5183,7 +5184,8 @@ function segTrCardPhraseText(){
   const distTxt = (segTrCardAlarmDistM!=null && isFinite(segTrCardAlarmDistM)) ? kz_distanceSpokenText(segTrCardAlarmDistM) : 'مسافة غير معروفة';
   return 'انتباه، القطار غادر محطة ' + station + ' قبل موقعك، وهو الآن على بعد تقريبي ' + distTxt + ' منك';
 }
-// الدورة الكاملة: صفارة، جملة، صفارة، جملة، صمت دقيقتين، ثم تكرار — تتوقف فوراً إن أُبطل الرمز (token) عبر stop()
+// الدورة الكاملة: صفارة، جملة، صفارة، جملة، ثم تكرار فوري بلا أي صمت بينهما — تستمر بلا توقف طالما الخطر قائماً،
+// ولا تتوقف إلا يدوياً عبر زر الإيقاف (dismissSegTrCardAlarm) أو خروج القطار عن نطاق الخطر
 async function segTrCardRunCycle(token){
   while(token===segTrCardCycleToken && segTrCardAlarmActive){
     await segTrCardBeepP(2500);
@@ -5193,8 +5195,6 @@ async function segTrCardRunCycle(token){
     await segTrCardBeepP(2500);
     if(token!==segTrCardCycleToken || !segTrCardAlarmActive) return;
     await segTrCardSpeakP(segTrCardPhraseText());
-    if(token!==segTrCardCycleToken || !segTrCardAlarmActive) return;
-    await new Promise(function(resolve){ segTrCardCycleTimer = setTimeout(resolve, 2*60000); });
   }
 }
 const SEG_ALARM_WINDOW_MS = 3*60000; // ±3 دقائق حول توقيت الالتقاء
@@ -6962,7 +6962,7 @@ function recalcAndDisplay(){
   if(dist150Min<=RISK_THRESHOLD_M){
     if(!dist150VoiceAnnounced && !alertActive){
       dist150VoiceAnnounced=true;
-      kz_speakArabic('تنبيه، أنت على مسافة '+kz_distanceSpokenText(dist150Min)+' من السكة الحديدية.');
+      kz_speakArabic('تنبيه، أنت على مسافة '+kz_distanceSpokenText(dist150Min)+' من السكة الحديدية.', 98);
     }
   } else {
     dist150VoiceAnnounced=false;
@@ -8537,6 +8537,8 @@ function kz_renderTrainViz(next){
 // علة معروفة في Chrome حيث يتعطّل محرّك النطق كلياً بعد فترة توقّف ويتجاهل speak() القادمة بصمت.
 (function(){
   let qtCurrentPriority = 0;
+  let qtSpeaking = false; // نتتبّعها يدوياً (بمعزل عن حالة speechSynthesis نفسها) لضمان دقة قرار "مشغول أم لا"
+  let qtQueue = []; // طلبات الانتظار — كل عنصر {text, opts, priority}
   let qtVoices = [];
   function qtRefreshVoices(){
     try{ qtVoices = window.speechSynthesis.getVoices() || []; }catch(e){}
@@ -8555,9 +8557,16 @@ function kz_renderTrainViz(next){
     if(!v) v = qtVoices[0]; // أفضل من صمت تام: أي صوت متاح فعلياً على الجهاز
     return v || null;
   }
+  // طلب المستخدم بالحرف: "شخص لا يمر أولاً" — لا فرق بين الأولويات إطلاقاً في قائمة الانتظار، الترتيب الوحيد
+  // المعتمد هو ترتيب الوصول (FIFO): أول من طلب الكلام يُقال أولاً بعد انتهاء الجملة الجارية، دون أي تجاوز
+  function qtPlayNext(){
+    if(!qtQueue.length){ qtSpeaking=false; qtCurrentPriority=0; return; }
+    const next = qtQueue.shift();
+    qtDoSpeak(next.text, next.opts, next.priority);
+  }
   function qtDoSpeak(text, opts, priority){
     try{
-      window.speechSynthesis.cancel();
+      qtSpeaking = true;
       qtCurrentPriority = priority;
       const repeat = opts.repeat || 1;
       for(let i=0;i<repeat;i++){
@@ -8569,21 +8578,21 @@ function kz_renderTrainViz(next){
         u.pitch = (typeof opts.pitch === 'number') ? opts.pitch : 1;
         if(typeof opts.volume === 'number') u.volume = opts.volume;
         if(i === repeat-1){
-          u.onend = function(){ qtCurrentPriority = 0; if(typeof opts.onend === 'function') opts.onend(); };
-          u.onerror = function(){ qtCurrentPriority = 0; if(typeof opts.onerror === 'function') opts.onerror(); };
+          u.onend = function(){ qtSpeaking=false; qtCurrentPriority=0; if(typeof opts.onend === 'function') opts.onend(); qtPlayNext(); };
+          u.onerror = function(){ qtSpeaking=false; qtCurrentPriority=0; if(typeof opts.onerror === 'function') opts.onerror(); qtPlayNext(); };
         }
         window.__qtLastUtterance = u; // مرجع حيّ يمنع تجاهل بعض المتصفحات للنطق
         window.speechSynthesis.speak(u);
       }
-    }catch(e){}
+    }catch(e){ qtSpeaking=false; qtPlayNext(); }
   }
   window.__qtSpeak = function(text, opts){
     try{
       opts = opts || {};
       if(!('speechSynthesis' in window)) return;
       const priority = (typeof opts.priority === 'number') ? opts.priority : 50;
-      const busy = window.speechSynthesis.speaking || window.speechSynthesis.pending;
-      if(busy && priority < qtCurrentPriority) return; // كلام أهم جارٍ حالياً → لا نقطعه بكلام أقل أهمية
+      const busy = qtSpeaking || window.speechSynthesis.speaking || window.speechSynthesis.pending;
+      if(busy){ qtQueue.push({text:text, opts:opts, priority:priority}); return; } // ننتظر الدور، لا نقطع شيئاً
       if(!qtVoices.length){
         // الأصوات لم تُحمَّل بعد من النظام (شائع جداً في أول استعمال على أندرويد Chrome) — ننتظر تحميلها
         // فعلياً (حتى 1.5 ثانية كحد أقصى) بدل النطق فوراً بلا صوت محدَّد فيفشل بصمت
@@ -8604,18 +8613,27 @@ function kz_renderTrainViz(next){
       qtDoSpeak(text, opts, priority);
     }catch(e){}
   };
-  // يقطع كل كلام جارٍ فوراً بصرف النظر عن الأولوية (إيقاف إنذار مثلاً)
+  // يُستعمل فقط عند إيقاف يدوي حقيقي لإنذار (أزرار "🔇 إيقاف") — يقطع الكلام الجاري فوراً ويُفرغ قائمة
+  // الانتظار بالكامل أيضاً، لأن المستخدم طلب إسكات هذا الإنذار تحديداً وليس فقط تأجيل كلامه لما بعد الجاري
   window.__qtStop = function(){
     try{ if('speechSynthesis' in window) window.speechSynthesis.cancel(); }catch(e){}
+    qtQueue.length = 0;
+    qtSpeaking = false;
     qtCurrentPriority = 0;
   };
 })();
-function kz_speakArabic(text){
-  window.__qtSpeak(text, {priority:70});
+// طلب المستخدم: أُصلح خلل مماثل لخلل جملة segTrCard — رسالة القرب من السكة (150م) كانت أولويتها 70، فيقطعها
+// إعلان "أقرب محطة/القطارات القادمة" الروتيني (أولويته 95) رغم أنها رسالة خطر حقيقي أهم من إعلان روتيني.
+// الآن priority قابل للتمرير اختيارياً (70 افتراضياً لرسائل الطمأنة غير الحرجة)؛ نداء تنبيه القرب من السكة
+// يمرّر 98 صراحة ليبقى فوق الإعلان الروتيني (95) ودون إنذارات خطر الموت الفوري (100)
+function kz_speakArabic(text, priority){
+  window.__qtSpeak(text, {priority: (typeof priority==='number') ? priority : 70});
 }
 // طلب المستخدم: عند 5 دقائق ثم 3 دقائق من أي قطار يرصده أي وحدة من وحدات التطبيق (لا فرق أيها)، صوت واحد موحَّد
 // ينطق التنبيه — مفتاح فريد لكل قطار/وحدة يمنع التكرار، وينتهي صلاحيته بعد 10 دقائق بلا تحديث (القطار غادر الرصد)
 // فيُعاد احتساب التنبيه من جديد إن ظهر قطار آخر أو نفس القطار لاحقاً
+// الأولويتان (كانتا 80 و85) رُفعتا إلى 96 و97: كان يقطعهما إعلان "أقرب محطة/القطارات القادمة" الروتيني (95)
+// رغم أنهما تنبيها خطر حقيقي (قطار قادم خلال دقائق) أهم من إعلان روتيني
 const GLOBAL_ETA_VOICE = {};
 const GLOBAL_ETA_VOICE_STALE_MS = 10*60000;
 function globalEtaVoiceMark(key, etaMin){
@@ -8624,8 +8642,8 @@ function globalEtaVoiceMark(key, etaMin){
   Object.keys(GLOBAL_ETA_VOICE).forEach(k=>{ if(now-GLOBAL_ETA_VOICE[k].lastSeenAt > GLOBAL_ETA_VOICE_STALE_MS) delete GLOBAL_ETA_VOICE[k]; });
   const st = GLOBAL_ETA_VOICE[key] || (GLOBAL_ETA_VOICE[key] = {f5:false, f3:false, lastSeenAt:now});
   st.lastSeenAt = now;
-  if(!st.f5 && etaMin<=5 && etaMin>-1){ st.f5=true; window.__qtSpeak('انتباه، القطار على بعد خمس دقائق منك', {priority:80}); }
-  if(!st.f3 && etaMin<=3 && etaMin>-1){ st.f3=true; window.__qtSpeak('انتباه، القطار على بعد ثلاث دقائق منك', {priority:85}); }
+  if(!st.f5 && etaMin<=5 && etaMin>-1){ st.f5=true; window.__qtSpeak('انتباه، القطار على بعد خمس دقائق منك', {priority:96}); }
+  if(!st.f3 && etaMin<=3 && etaMin>-1){ st.f3=true; window.__qtSpeak('انتباه، القطار على بعد ثلاث دقائق منك', {priority:97}); }
 }
 // طلب المستخدم: عند 150م، رسالة موحّدة وجادّة بنبرة صوت خفيضة "غليظة"، تُقال بالعربية بصرف النظر عن
 // أي إنذار من إنذارات 150م أطلقها (الرئيسي، الأزرق، الأخضر، الشبح، غير المؤكَّد، 150م المطلق، الصوتي التكميلي) —
@@ -8743,9 +8761,10 @@ function ann_fadeRadioVolume(target, durationMs){
     if(i>=steps){ clearInterval(annDuckTimer); annDuckTimer=null; el.volume = target; }
   }, stepMs);
 }
-// الإنذار يقطع كل إعلان صوتي فوراً ويعيد صوت الإذاعة لمستواه الطبيعي (بدون أي تعتيم متبقٍّ)
+// طلب المستخدم: لا يُقطع الإعلان الصوتي الجاري فعلياً بعد الآن — الصفارة والاهتزاز يبدآن فوراً بمعزل تام عن
+// الكلام (هما الإنذار الحقيقي)، وجملة الخطر المنطوقة (أولوية 100) تنضم ببساطة لقائمة الانتظار فتُقال فور
+// انتهاء الإعلان الجاري، دون قطعه في منتصفه. يبقى فقط إرجاع صوت الإذاعة لمستواه الطبيعي هنا
 function ann_stopForAlarm(){
-  window.__qtStop();
   if(annDuckTimer){ clearInterval(annDuckTimer); annDuckTimer=null; }
   const el = document.getElementById('qitariRadioAudio');
   if(el) el.volume = ANN_RADIO_NORMAL_VOL;
