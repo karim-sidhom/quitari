@@ -1593,6 +1593,22 @@ const GHOST_VIDEO_SRC = 'data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yY
     <div id="arrivalStationList" style="margin-top:8px;display:flex;flex-direction:column;gap:6px;"></div>
   </div>
 
+  <div class="card" id="speakerStationCard">
+    <h3>🔊 الناطق — مغادرات ووصولات محطة خلال 90 دقيقة</h3>
+    <div class="small-note">
+      اكتب اسم <b style="color:var(--gold)">محطة واحدة فقط</b>، ويقرأ لك التطبيق صوتياً كل القطارات
+      التي ستغادر منها وكل القطارات التي ستصل إليها خلال الساعة والنصف (90 دقيقة) القادمة فقط —
+      وحدة مستقلة تماماً عن بطاقتَي المغادرات/الوصول أعلاه، ولا تُستدعى إلا عند الضغط على الزر.
+    </div>
+    <div class="row" style="border:none;padding:4px 0 8px">
+      <span>اسم المحطة</span>
+      <input type="text" id="speakerStationInput" list="stationsDatalist" placeholder="مثال: Nabeul"
+        style="width:170px;background:rgba(0,0,0,.3);border:1px solid var(--glass-b);color:#fff;border-radius:6px;padding:6px;text-align:center;font-family:'Tajawal',sans-serif;">
+    </div>
+    <button class="btn" id="speakStationBtn">🔊 انطق المغادرات والوصولات</button>
+    <div class="small-note" id="speakerStationNote" style="margin-top:6px;"></div>
+  </div>
+
 
   <div class="card" id="linesCard">
     <h3>🚆 خطوط وجداول القطارات <span class="badge" id="lineCount">0</span></h3>
@@ -5393,11 +5409,10 @@ function renderSegmentTrainsList(nameA, nameB, userPos, impactNameA, impactNameB
     segTrCardLockKey = null; segTrCardLockConfirmedAt = null;
   } else {
     const segTrCardIsActiveNow = (e)=>{
-      if(e.impactTimeMs==null){
-        const key = segTrCardKeyOf(e);
-        const seenAt = key ? segTrCardUnresolvedSeenAt[key] : null;
-        return seenAt!=null && (now-seenAt)<=SEG_UNRESOLVED_GRACE_MS;
-      }
+      // طلب المستخدم بالحرف: لا يُشغَّل الإنذار أبداً لقطار بلا توقيت التقاء حقيقي مؤكَّد — كان سابقاً
+      // يُعتبر "قريباً الآن" فوراً من أول رصد له (seenAt=now فيسمح بالمرور)، ما كان يُشغِّل الإنذار
+      // كذباً عند فتح التطبيق قبل اكتمال جلب تفاصيل/توقيت القطار من الذاكرة المؤقتة
+      if(e.impactTimeMs==null) return false;
       return now>=(e.impactTimeMs-SEG_ALARM_WINDOW_MS) && now<=(e.impactTimeMs+SEG_ALARM_WINDOW_MS);
     };
     const segTrCardActiveEntry = list.find(segTrCardIsActiveNow);
@@ -6408,6 +6423,94 @@ function computeAndRenderArrivalStation(){
   listEl.innerHTML = events.map((e,i)=>renderArrivalRow(e,i)).join('');
 }
 document.getElementById('computeArrivalStationBtn').onclick = computeAndRenderArrivalStation;
+
+// ---------- الناطق: عند طلب المستخدم اسم محطة، يعلن صوتياً كل مغادرة وكل وصول لهذه المحطة خلال 90 دقيقة القادمة ----------
+// وحدة مستقلة تماماً عن ann_ (الإعلان التلقائي لأقرب محطة فقط، وقطار واحد فقط لكل اتجاه) وعن بطاقتَي
+// المغادرات/الوصول أعلاه (تعرضان اليوم كاملاً كتابةً بلا صوت) — هنا: محطة يختارها المستخدم بنفسه (وليس
+// بالضرورة الأقرب له)، وكل القطارات (لا قطار واحد فقط) ضمن نافذة 90 دقيقة فقط، صوتاً لا كتابة، عند الطلب فقط
+function speakStationSchedule90(){
+  const input = document.getElementById('speakerStationInput');
+  const note = document.getElementById('speakerStationNote');
+  const stationQuery = input ? input.value.trim() : '';
+  if(!stationQuery){
+    if(note) note.textContent = '⚠️ اكتب اسم محطة أولاً (مثال: Nabeul).';
+    return;
+  }
+  const nowMin = minsNow();
+  // نفس منطق upcomingDiff المستعمل في ann_announceUpcomingTrains بالحرف: يحسب الدقائق المتبقية حتى موعد
+  // مجدول، مع معالجة تجاوز منتصف الليل، ويستبعد أي شيء ماضٍ أو أبعد من 90 دقيقة
+  function upcomingDiff(scheduledMin){
+    let diff = scheduledMin - nowMin;
+    if(diff < -5) diff += 1440;
+    if(diff < 0 || diff > 90) return null;
+    return Math.round(diff);
+  }
+  const departures = computeDeparturesFromStation(stationQuery)
+    .map(e=>{ const diff = upcomingDiff(e.depMin); return diff===null ? null : Object.assign({diff:diff}, e); })
+    .filter(e=>e)
+    .sort((a,b)=>a.diff-b.diff);
+  const arrivals = computeArrivalsToStation(stationQuery)
+    .map(e=>{ const diff = upcomingDiff(e.arrMin); return diff===null ? null : Object.assign({diff:diff}, e); })
+    .filter(e=>e)
+    .sort((a,b)=>a.diff-b.diff);
+
+  if(departures.length===0 && arrivals.length===0){
+    if(note) note.textContent = '❌ لا توجد أي مغادرة ولا أي وصول من/إلى محطة تُطابق "'+stationQuery+'" خلال الساعة والنصف القادمة. تأكد من الإملاء (بالفرنسية كما في الجدول الرسمي).';
+    // طلب المستخدم: نفس القاعدة المعتمدة في بقية التطبيق (ann_speak) — عربية ثم فرنسية ثم إنجليزية تباعاً
+    ann_speak(
+      'لا يوجد أي قطار سيغادر أو يصل محطة '+stationQuery+' خلال الساعة والنصف القادمة.',
+      'Aucun train ne partira ou n\'arrivera à la gare de '+stationQuery+' dans les 90 prochaines minutes.',
+      'No train will depart from or arrive at '+stationQuery+' station in the next 90 minutes.'
+    );
+    return;
+  }
+
+  const realStationName = (departures[0] || arrivals[0]).stationName;
+  if(note) note.textContent = 'عدد المغادرات خلال 90 دقيقة من محطة "'+realStationName+'": '+departures.length+' | عدد حالات الوصول: '+arrivals.length+'.';
+
+  const trainNumOf = t => (t.name.split('—')[0] || t.name).trim();
+
+  // طلب المستخدم بالحرف: ترتيب واضح لا التباس فيه — اسم المحطة، ثم قسم "المغادرات" كاملاً (كل قطار
+  // برقمه، بتوقيته الحقيقي "الساعة كذا" وليس بعبارة نسبية غامضة، ووجهته)، ثم قسم "الوصولات" كاملاً
+  // (نفس الأسلوب)، تماماً بنفس صيغة الناطق الآخر الموجود أصلاً في التطبيق (فرحوم) — وبثلاث لغات تباعاً
+  // (عربية ثم فرنسية ثم إنجليزية) عبر ann_speak، بنفس القاعدة المعتمدة في كل إعلانات التطبيق الأخرى
+  let phraseAr = 'محطة '+realStationName+'. ';
+  let phraseFr = 'Gare de '+realStationName+'. ';
+  let phraseEn = realStationName+' station. ';
+  if(departures.length){
+    phraseAr += 'المغادرات: ';
+    phraseAr += departures.map(e=>'قطار رقم '+trainNumOf(e.train)+'، الساعة '+minsToHHMM(e.depMin)+'، متجهاً إلى '+e.finalName).join('. ثم ');
+    phraseAr += '. ';
+    phraseFr += 'Départs : ';
+    phraseFr += departures.map(e=>'train numéro '+trainNumOf(e.train)+', à '+minsToHHMM(e.depMin)+', en direction de '+e.finalName).join('. Puis ');
+    phraseFr += '. ';
+    phraseEn += 'Departures: ';
+    phraseEn += departures.map(e=>'train number '+trainNumOf(e.train)+', at '+minsToHHMM(e.depMin)+', heading to '+e.finalName).join('. Then ');
+    phraseEn += '. ';
+  } else {
+    phraseAr += 'لا توجد أي مغادرة خلال الساعة والنصف القادمة. ';
+    phraseFr += 'Aucun départ dans les 90 prochaines minutes. ';
+    phraseEn += 'No departure in the next 90 minutes. ';
+  }
+  if(arrivals.length){
+    phraseAr += 'الوصولات: ';
+    phraseAr += arrivals.map(e=>'قطار رقم '+trainNumOf(e.train)+'، الساعة '+minsToHHMM(e.arrMin)+'، قادماً من '+e.originName).join('. ثم ');
+    phraseAr += '.';
+    phraseFr += 'Arrivées : ';
+    phraseFr += arrivals.map(e=>'train numéro '+trainNumOf(e.train)+', à '+minsToHHMM(e.arrMin)+', en provenance de '+e.originName).join('. Puis ');
+    phraseFr += '.';
+    phraseEn += 'Arrivals: ';
+    phraseEn += arrivals.map(e=>'train number '+trainNumOf(e.train)+', at '+minsToHHMM(e.arrMin)+', coming from '+e.originName).join('. Then ');
+    phraseEn += '.';
+  } else {
+    phraseAr += 'ولا يوجد أي وصول خلال الساعة والنصف القادمة.';
+    phraseFr += 'Et aucune arrivée dans les 90 prochaines minutes.';
+    phraseEn += 'And no arrival in the next 90 minutes.';
+  }
+
+  ann_speak(phraseAr, phraseFr, phraseEn);
+}
+document.getElementById('speakStationBtn').onclick = speakStationSchedule90;
 
 // ---------- نظام تنبيه فردي لكل قطار مُعرَض (مغادرة أو وصول) — اهتزاز+صوت / اهتزاز فقط / صوت فقط، قبل الموعد بعدد دقائق يختاره المستخدم ----------
 // مصحَّح تلقائياً بتأخير SNCFT Live المباشر إن كان هذا القطار بالذات مؤكداً الآن (نفس دالتي isTrainLiveConfirmed/getLiveDelayForTrain المستعملتين في بقية التطبيق)
