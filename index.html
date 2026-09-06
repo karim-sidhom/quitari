@@ -718,6 +718,79 @@ body{
 .theoHero-num{font-size:28px;font-weight:800;color:var(--gold);direction:ltr;}
 .theoHero-title{font-size:15px;font-weight:700;color:#fff;margin-bottom:4px;}
 .theoHero-detail{font-size:12.5px;color:#c9d0ff;line-height:1.6;}
+
+/* طلب المستخدم: تامبونين أخضرين متتاليين أعلى الصفحة عند فتح التطبيق — يظهر كل واحد ثم يختفي تلقائياً */
+#updateStampsWrap{
+  position:relative; display:flex; justify-content:center; align-items:flex-start;
+  height:182px; margin:8px 0 10px; overflow:visible; pointer-events:none;
+}
+.update-stamp{
+  position:absolute; top:0; left:calc(50% - 88px); width:176px; height:176px; border-radius:50%;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
+  background:
+    radial-gradient(circle at 40% 32%, rgba(255,248,220,.14), rgba(255,248,220,0) 55%),
+    radial-gradient(circle, #14243f 0%, #070f1c 100%);
+  border:3px solid #d4af37;
+  box-shadow:
+    0 0 0 4px rgba(212,175,55,.16) inset,
+    0 0 0 7px rgba(212,175,55,.65),
+    0 0 0 9px rgba(212,175,55,.2),
+    0 10px 26px rgba(0,0,0,.55);
+  color:#e9c96a; text-shadow:0 0 8px rgba(212,175,55,.75), 0 1px 1px rgba(0,0,0,.7);
+  font-family:'Amiri',serif; text-align:center; letter-spacing:.4px;
+  opacity:0; transform-origin:center;
+  animation:stampDrop 4s cubic-bezier(.2,.9,.3,1.15) forwards;
+}
+.update-stamp::before{
+  content:''; position:absolute; inset:15px; border-radius:50%;
+  border:1.5px dashed rgba(233,201,106,.6);
+}
+.update-stamp::after{
+  content:''; position:absolute; inset:5px; border-radius:50%;
+  background:repeating-conic-gradient(#d4af37 0deg 2.4deg, transparent 2.4deg 9deg);
+  -webkit-mask:radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 7px) calc(100% - 4px), transparent calc(100% - 4px));
+  mask:radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 7px) calc(100% - 4px), transparent calc(100% - 4px));
+}
+.stamp-star{ font-size:15px; color:#f3d98a; text-shadow:0 0 6px rgba(212,175,55,.9); line-height:1; }
+.stamp-line1{ font-size:13.5px; font-weight:700; }
+.stamp-line-big{ font-size:19px; font-weight:900; direction:ltr; margin:1px 0; }
+.stamp-impact{
+  position:absolute; top:0; left:calc(50% - 88px); width:176px; height:176px; border-radius:50%;
+  border:3px solid rgba(212,175,55,0); opacity:0;
+  animation:stampImpact 4s ease forwards;
+}
+.stamp-tool{
+  position:absolute; top:8px; left:calc(50% - 48px); width:96px; height:160px;
+  opacity:0; transform-origin:50% 50%;
+  animation:toolEmerge 4s ease forwards;
+  filter:drop-shadow(0 8px 10px rgba(0,0,0,.55));
+}
+.update-stamp.stamp2, .stamp-impact.impact2, .stamp-tool.tool2{ animation-delay:4s; }
+@keyframes stampDrop{
+  0%,34%{opacity:0; transform:rotate(-8deg) scale(.9);}
+  36%{opacity:1; transform:rotate(-8deg) scale(1.1);}
+  40%{transform:rotate(-8deg) scale(.96);}
+  46%{transform:rotate(-8deg) scale(1);}
+  88%{opacity:1; transform:rotate(-8deg) scale(1);}
+  100%{opacity:0; transform:rotate(-8deg) scale(.94);}
+}
+@keyframes toolEmerge{
+  0%{opacity:0; transform:scale(.14) rotate(-3deg); filter:blur(5px) drop-shadow(0 4px 6px rgba(0,0,0,.3));}
+  26%{opacity:1; transform:scale(.55) rotate(-6deg); filter:blur(1.5px) drop-shadow(0 6px 8px rgba(0,0,0,.4));}
+  34%{opacity:1; transform:scale(1.08) rotate(-7deg); filter:blur(0) drop-shadow(0 8px 10px rgba(0,0,0,.55));}
+  38%{transform:scale(.94) rotate(-7deg);}
+  44%{transform:scale(1) rotate(-7deg);}
+  58%{opacity:1; transform:scale(1) rotate(-7deg);}
+  66%{opacity:1; transform:scale(.5) rotate(-6deg); filter:blur(1.5px);}
+  74%{opacity:0; transform:scale(.14) rotate(-3deg); filter:blur(5px);}
+  100%{opacity:0; transform:scale(.14) rotate(-3deg);}
+}
+@keyframes stampImpact{
+  0%,32%{opacity:0; transform:scale(.6); border-color:rgba(212,175,55,0);}
+  36%{opacity:.9; transform:scale(1); border-color:rgba(212,175,55,.9);}
+  54%{opacity:0; transform:scale(1.35); border-color:rgba(212,175,55,0);}
+  100%{opacity:0;}
+}
 </style>
 </head>
 <body>
@@ -807,6 +880,64 @@ body{
     <div class="bismillah">بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ</div>
     <div class="title">قِطَاري</div>
     <div class="subtitle">كاشف خطر تقاطع السكة الحديدية · تونس</div>
+    <div id="updateStampsWrap">
+      <div class="stamp-tool tool1">
+        <svg viewBox="0 0 96 150" xmlns="http://www.w3.org/2000/svg">
+          <!-- manchette en cuir -->
+          <rect x="30" y="0" width="36" height="20" rx="9" fill="#3d0f18"/>
+          <rect x="34" y="12" width="28" height="2.5" fill="#d4af37" opacity=".55"/>
+          <!-- paume du gant -->
+          <rect x="26" y="16" width="44" height="32" rx="15" fill="#5a1626"/>
+          <!-- doigts -->
+          <ellipse cx="33" cy="21" rx="7" ry="10" fill="#6f1f30"/>
+          <ellipse cx="43" cy="18" rx="7" ry="11" fill="#6f1f30"/>
+          <ellipse cx="53" cy="18" rx="7" ry="11" fill="#6f1f30"/>
+          <ellipse cx="63" cy="21" rx="7" ry="10" fill="#6f1f30"/>
+          <!-- pouce -->
+          <ellipse cx="24" cy="32" rx="6.5" ry="9" fill="#5a1626" transform="rotate(-35 24 32)"/>
+          <!-- coutures -->
+          <path d="M30 38 Q48 45 66 38" stroke="#d4af37" stroke-width="1" fill="none" opacity=".45"/>
+          <!-- manche en bois du tampon -->
+          <rect x="40" y="46" width="16" height="42" rx="6" fill="#2c1810"/>
+          <!-- monture noire -->
+          <rect x="10" y="88" width="76" height="20" rx="5" fill="#232323"/>
+          <!-- base dorée du tampon -->
+          <rect x="4" y="108" width="88" height="16" rx="4" fill="#d4af37" stroke="#8a6d1f" stroke-width="1.5"/>
+        </svg>
+      </div>
+      <div class="stamp-impact impact1"></div>
+      <div class="update-stamp stamp1">
+        <div class="stamp-star">✦</div>
+        <div class="stamp-line1">توقيت الشتاء</div>
+        <div class="stamp-line-big">2026-2027</div>
+        <div class="stamp-line1">محدَّث</div>
+        <div class="stamp-star">✦</div>
+      </div>
+      <div class="stamp-tool tool2">
+        <svg viewBox="0 0 96 150" xmlns="http://www.w3.org/2000/svg">
+          <rect x="30" y="0" width="36" height="20" rx="9" fill="#3d0f18"/>
+          <rect x="34" y="12" width="28" height="2.5" fill="#d4af37" opacity=".55"/>
+          <rect x="26" y="16" width="44" height="32" rx="15" fill="#5a1626"/>
+          <ellipse cx="33" cy="21" rx="7" ry="10" fill="#6f1f30"/>
+          <ellipse cx="43" cy="18" rx="7" ry="11" fill="#6f1f30"/>
+          <ellipse cx="53" cy="18" rx="7" ry="11" fill="#6f1f30"/>
+          <ellipse cx="63" cy="21" rx="7" ry="10" fill="#6f1f30"/>
+          <ellipse cx="24" cy="32" rx="6.5" ry="9" fill="#5a1626" transform="rotate(-35 24 32)"/>
+          <path d="M30 38 Q48 45 66 38" stroke="#d4af37" stroke-width="1" fill="none" opacity=".45"/>
+          <rect x="40" y="46" width="16" height="42" rx="6" fill="#2c1810"/>
+          <rect x="10" y="88" width="76" height="20" rx="5" fill="#232323"/>
+          <rect x="4" y="108" width="88" height="16" rx="4" fill="#d4af37" stroke="#8a6d1f" stroke-width="1.5"/>
+        </svg>
+      </div>
+      <div class="stamp-impact impact2"></div>
+      <div class="update-stamp stamp2">
+        <div class="stamp-star">✦</div>
+        <div class="stamp-line1">خط قطار</div>
+        <div class="stamp-line-big">الساحل</div>
+        <div class="stamp-line1">مُدرَج</div>
+        <div class="stamp-star">✦</div>
+      </div>
+    </div>
     <div class="station-clock-wrap">
       <div class="traffic-light" id="trafficLightL">
         <div class="lamp lamp-red" data-lamp="red"></div>
@@ -12693,6 +12824,16 @@ document.getElementById('toggleStationsBtn').click(); // نعرض كل المح�
   <div id="segmentTrainsList" style="margin-top:4px;"></div>
 </div>
 
+<script>
+// إخفاء تامبونات التحديث فوراً عند انتهاء الرسوم المتحركة — المساحة موجودة أثناء الظهور فقط، ثم تختفي كلياً بلا أي فراغ متبقٍّ
+window.addEventListener('DOMContentLoaded', function(){
+  var w = document.getElementById('updateStampsWrap');
+  var s2 = document.querySelector('.update-stamp.stamp2');
+  if (w && s2){
+    s2.addEventListener('animationend', function(){ w.style.display = 'none'; });
+  }
+});
+</script>
 </body>
 </html>
 
