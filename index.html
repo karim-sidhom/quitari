@@ -6341,12 +6341,19 @@ function computeRisk(userPos){
     computeRiskModule(userPos, trainPositionLiveDirect, 'SNCFT Live مباشر'),
     computeRiskModuleLiveAny(userPos)
   ];
-  // info visuelle: distance à la voie ferrée la plus proche (OSM), indépendant du risque train
+  // info visuelle: distance à la voie ferrée la plus proche, indépendant du risque train
+  // بطلب صريح من المستخدم: تعتمد أولاً على نظام RAIL_LINES (نفس منهجية calcul_de_distance.html/خط الزمن)، والقديمة (OSM) تبقى احتياطاً فقط
   let trackInfo=null;
-  osmTracks.forEach(track=>{
-    const near = nearestOnTrack(userPos, track.coords);
-    if(!trackInfo || near.dist<trackInfo.dist) trackInfo={dist:near.dist,name:track.name};
-  });
+  if(typeof kz_nearestOnTrackRL==='function' && typeof RAIL_LINES!=='undefined' && RAIL_LINES.length){
+    const rl = kz_nearestOnTrackRL(userPos);
+    if(rl && isFinite(rl.dist)) trackInfo={dist:rl.dist, name:rl.name};
+  }
+  if(!trackInfo){
+    osmTracks.forEach(track=>{
+      const near = nearestOnTrack(userPos, track.coords);
+      if(!trackInfo || near.dist<trackInfo.dist) trackInfo={dist:near.dist,name:track.name};
+    });
+  }
   // "الأقرب فعلياً" = أقل مسافة حقيقية بين الوحدات الثلاث الأولى المستقلة (وليس أعلى نسبة خطر) — لكي لا يتغيّر القطار المعروض
   // إلى قطار آخر أبعد فقط لأن وحدة حسابه أعطته نسبة خطر أعلى في هذه اللحظة. يُستعمل فقط لتغذية العرض الرئيسي القديم (البطاقة/الجدول الزمني)
   // أما التنبيه نفسه فيعتمد على كل وحدة على حِدة (أنظر recalcAndDisplay) وليس فقط على هذه القيمة المجمّعة
@@ -7610,9 +7617,15 @@ function nearestAnyStationTo(pos, n){
   merged.sort((a,b)=>a.dist-b.dist);
   return merged.slice(0, n);
 }
-// أقصر مسافة حقيقية بين المستخدم وأي خط سكة فعلي (SNCFT الرسمي أو OSM) — هندسية بحتة، بلا أي علاقة بأسماء المحطات
+// أقصر مسافة حقيقية بين المستخدم وأي خط سكة فعلي — هندسية بحتة، بلا أي علاقة بأسماء المحطات
+// بطلب صريح من المستخدم: تعتمد الآن أولاً على نظام RAIL_LINES (نفس منهجية calcul_de_distance.html/خط الزمن — kz_nearestOnTrackRL)،
+// وهو ثابت ومدمج بالكامل بلا حاجة لتحميل Overpass. الطريقة القديمة (SNCFT_OFFICIAL_TRACKS + osmTracks) تبقى فقط كاحتياط إن تعذّر ذلك
 function distanceToNearestTrack(lat,lon){
   const pt=[lat,lon];
+  if(typeof kz_nearestOnTrackRL==='function' && typeof RAIL_LINES!=='undefined' && RAIL_LINES.length){
+    const r = kz_nearestOnTrackRL(pt);
+    if(r && isFinite(r.dist)) return r.dist;
+  }
   let best=Infinity;
   allTrackLists().forEach(track=>{
     const r = nearestPointOnTrackCoords(pt, track.coords);
@@ -9158,7 +9171,13 @@ function kz_computeAndRender(result){
       elBadge.textContent = liveConfirmed ? '🔴 متابعة مباشرة SNCFT — 🕒 '+liveRefreshTimeText() : '';
     }
   }
-  if(elDist) elDist.textContent = '📍 المسافة إلى السكة: '+kz_distanceSpokenText(next.dist);
+  // بطلب صريح من المستخدم: المسافة المعروضة هنا تعتمد الآن على نفس نموذج RAIL_LINES العام (kz_nearestOnTrackRL) بدل next.dist
+  // (اللي كان يمكن يلجأ لخط مستقيم تقريبي إن فشلت مطابقة مقطع محطتَي القطار مع RAIL_LINES، فيعطي رقماً أصغر من الحقيقي)
+  if(elDist){
+    const railGeom = (typeof kz_nearestOnTrackRL==='function' && typeof RAIL_LINES!=='undefined' && RAIL_LINES.length && lastPos) ? kz_nearestOnTrackRL(lastPos) : null;
+    const dispDist = (railGeom && isFinite(railGeom.dist)) ? railGeom.dist : next.dist;
+    elDist.textContent = '📍 المسافة إلى السكة: '+kz_distanceSpokenText(dispDist);
+  }
   kz_renderStops(next.train, {fromStation:next.fromStation, toStation:next.toStation, timeMin:next.effectiveTimeMin});
   kz_renderTrainViz(next);
   let minutesUntilArrival = next.effectiveTimeMin - now;
@@ -9412,7 +9431,12 @@ function kzL_computeAndRender(){
       elBadge.textContent = '🔴 مؤكد الآن عبر SNCFT Live — 🕒 '+liveRefreshTimeText();
     }
   }
-  if(elDist) elDist.textContent = '📍 المسافة إلى السكة: '+kz_distanceSpokenText(next.dist);
+  // بطلب صريح من المستخدم: نفس التصحيح — المسافة المعروضة تعتمد على RAIL_LINES العام (kz_nearestOnTrackRL) بدل next.dist
+  if(elDist){
+    const railGeom = (typeof kz_nearestOnTrackRL==='function' && typeof RAIL_LINES!=='undefined' && RAIL_LINES.length && lastPos) ? kz_nearestOnTrackRL(lastPos) : null;
+    const dispDist = (railGeom && isFinite(railGeom.dist)) ? railGeom.dist : next.dist;
+    elDist.textContent = '📍 المسافة إلى السكة: '+kz_distanceSpokenText(dispDist);
+  }
   kzL_renderStops(next.train, {fromStation:next.fromStation, toStation:next.toStation, timeMin:next.effectiveTimeMin});
   kzL_renderTrainViz(next);
   kz_updateGhostBox('kzL', next.fromStation, next.toStation, next.train);
