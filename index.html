@@ -1352,6 +1352,8 @@ var RADIO_TRACKS = [
     <h3>🎯 وين نحب نمشي؟</h3>
     <div class="small-note">اختر محطة الانطلاق ومحطة الوصول من القائمة، أو استعمل الخريطة/GPS — عندها يبحث التطبيق في عدة محطات قريبة من نقطتك تلقائياً ليجد أفضل حل بالقطار. <b style="color:var(--gold)">اترك أحد الحقلين فارغاً</b> لعرض كل الرحلات الممكنة من/إلى المحطة الأخرى، أو اتركهما فارغين معاً لعرض جميع القطارات.</div>
     <div class="row" style="border:none;padding:2px 0"><span>بيانات SNCFT المباشرة <span class="status-dot off" id="liveDot"></span></span><b id="liveStatusTxt" style="font-size:11px">--</b></div>
+    <!-- بطلب صريح من المستخدم: تحذير إن بدت بيانات SNCFT Live مطابقة لنفس اللحظة قبل 24 ساعة بالضبط (مؤشر قوي على بيانات معاد بثها وليست حية فعلاً) — مخفي افتراضياً، لا يوقف أي إنذار حالياً، مجرد مؤشر بصري -->
+    <div class="row" id="liveReplayWarnRow" style="border:none;padding:2px 0;display:none;"><span style="color:#ff8888;font-size:11px">⚠️ بيانات SNCFT Live تشبه بيانات نفس التوقيت أمس — قد تكون بيانات معاد بثها</span></div>
     <label style="font-size:11px;color:var(--gold3)">محطة الانطلاق</label>
 
     <select id="fromSelect" style="width:100%;background:rgba(0,0,0,.3);border:1px solid var(--glass-b);color:#fff;border-radius:6px;padding:8px;margin-top:4px;font-family:'Tajawal',sans-serif;font-size:13px;">
@@ -1869,6 +1871,7 @@ const GHOST_VIDEO_SRC = 'data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yY
 <div id="liveAlarmBanner">
   <h2>📡🚨 إنذار SNCFT Live المستقل</h2>
   <p id="liveAlarmText">بيانات SNCFT Live المباشرة (وحدها، بلا اعتماد على الجدول النظري) ترصد قطاراً قريباً جداً منك الآن!</p>
+  <p id="liveAlarmCountdown"></p>
   <button class="btn" onclick="dismissLiveAlarm()">فهمت، أوقف صوت هذا الإنذار</button>
   <p id="liveAlarmGraceStatus"></p>
 </div>
@@ -1984,6 +1987,10 @@ let liveAlarmMinDistSeen = Infinity;
 let liveAlarmPassageTimeMs=null;
 // طلب المستخدم: بمجرد بلوغ liveAlarmPassageTimeMs، نبدأ عدّاد 30 دقيقة إضافية (grâce) قبل فكّ القفل فعلياً
 let liveAlarmPassageGraceStartAt=null;
+// بطلب صريح من المستخدم: عدّاد/تصعيد آخر دقيقة لهذا الإنذار بالذات، بنفس منطق mainAlarmTick لكن بمتغيّرات مستقلة تماماً
+let liveAlarmTickId=null, liveAlarmPipTick=0, liveAlarmCritical=false;
+// آخر نتيجة معروفة لمؤشر "تشبه بيانات الأمس" (kzJournalCheckYesterdayReplay) — تُحدَّث عند كل جلب ناجح، تُقرأ فوراً عند إطلاق هذا الإنذار بالذات
+let kzJournalLastReplaySuspect=false;
 // ---------- طلب صريح من المستخدم: خط الزمن الأزرق (الرئيسي) وخط الزمن الأخضر (SNCFT Live حصرياً) يجب أن يبقيا
 // معلَّقين على القطار بعد مروره المؤكَّد لمدة 30 دقيقة إضافية، مع استمرار عرض "الوقت الحقيقي" (المصحَّح بالتأخير الآن أو آخر قيمة مؤكَّدة)
 // بدل الانتقال الفوري لقطار آخر أو عرض جدول قديم غير منطقي ----------
@@ -2557,6 +2564,94 @@ function liveRefreshTimeText(){
   const pad = n=>String(n).padStart(2,'0');
   return pad(d.getDate())+'/'+pad(d.getMonth()+1)+'/'+d.getFullYear()+' '+pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
 }
+// ================================================================================================
+// بطلب صريح من المستخدم: طبقة كشف "بيانات معاد بثها من الأمس" — بيانات SNCFT Live لا تحتوي أي حقل تاريخ/وقت
+// (تحقّقنا من هذا سابقاً)، فلا يمكن الوثوق بأن البيانات "حية فعلاً الآن" فقط لأن طلب الشبكة نجح خلال آخر 90 ثانية.
+// نبني هنا سجلاً مستقلاً (IndexedDB، بمعزل تام عن localStorage الحالي حتى لا نستهلك حصته المشتركة) يحتفظ بلمحة
+// مضغوطة (رقم القطار + محطتيه + تأخيره) كل 30 ثانية لمدة 25 ساعة، ثم نقارن كل لقطة جديدة بلقطة نفس اللحظة تقريباً
+// قبل 24 ساعة بالضبط. تطابق مرتفع جداً بين الاثنتين = مؤشر قوي (وليس يقيناً) على أن الخادم يعيد بث بيانات الأمس.
+// هذا مجرد مؤشر بصري حالياً (لا يوقف أي إنذار من الـ9 — طلب صريح بعدم لمس أي منطق إنذار موجود بهذا التغيير)
+// ================================================================================================
+const KZ_JOURNAL_DB_NAME = 'qitariLiveJournal';
+const KZ_JOURNAL_STORE = 'snapshots';
+const KZ_JOURNAL_RETENTION_MS = 25*3600*1000; // 25 ساعة احتفاظ (هامش ساعة كاملة) لضمان توفر نقطة مقارنة عند +24 ساعة بالضبط
+const KZ_JOURNAL_COMPARE_TOLERANCE_MS = 3*60*1000; // نافذة ±3 دقائق حول نفس اللحظة قبل 24 ساعة بالضبط، بما أن الجلب كل 30 ثانية
+const KZ_JOURNAL_SUSPECT_RATIO = 0.8; // 80% تطابق أو أكثر بين لقطة الآن ولقطة الأمس = مؤشر قوي على إعادة بث
+let kzJournalDbPromise = null;
+function kzJournalOpenDb(){
+  if(kzJournalDbPromise) return kzJournalDbPromise;
+  kzJournalDbPromise = new Promise((resolve,reject)=>{
+    try{
+      if(!window.indexedDB){ reject(new Error('no indexedDB')); return; }
+      const req = indexedDB.open(KZ_JOURNAL_DB_NAME, 1);
+      req.onupgradeneeded = function(e){
+        const db = e.target.result;
+        if(!db.objectStoreNames.contains(KZ_JOURNAL_STORE)){
+          const store = db.createObjectStore(KZ_JOURNAL_STORE, {keyPath:'t'});
+          store.createIndex('t','t',{unique:true});
+        }
+      };
+      req.onsuccess = function(e){ resolve(e.target.result); };
+      req.onerror = function(){ reject(req.error); };
+    }catch(e){ reject(e); }
+  });
+  return kzJournalDbPromise;
+}
+// يكتب لقطة مضغوطة للحظة الحالية، ثم يحذف بصمت أي تسجيلة أقدم من مدة الاحتفاظ (بلا حظر الكتابة الحالية)
+async function kzJournalWriteSnapshot(){
+  try{
+    const db = await kzJournalOpenDb();
+    const now = Date.now();
+    const compact = liveTrains.filter(lt=>lt && lt.num).map(lt=>({n:String(lt.num), a:lt.curFr||'', b:lt.nextFr||'', d:Number(lt.delay)||0}));
+    const tx = db.transaction(KZ_JOURNAL_STORE,'readwrite');
+    tx.objectStore(KZ_JOURNAL_STORE).put({t:now, trains:compact});
+    const idx = tx.objectStore(KZ_JOURNAL_STORE).index('t');
+    const cursorReq = idx.openCursor(IDBKeyRange.upperBound(now - KZ_JOURNAL_RETENTION_MS));
+    cursorReq.onsuccess = function(e){
+      const cursor = e.target.result;
+      if(cursor){ cursor.delete(); cursor.continue(); }
+    };
+  }catch(e){} // IndexedDB غير متوفر أو خطأ عابر: لا يؤثر على أي وظيفة أخرى في التطبيق
+}
+// يقارن اللقطة الحالية بأقرب لقطة مسجَّلة لنفس اللحظة تقريباً قبل 24 ساعة بالضبط — يُرجع نسبة التطابق
+async function kzJournalCheckYesterdayReplay(){
+  try{
+    const db = await kzJournalOpenDb();
+    const now = Date.now();
+    const target = now - 24*3600*1000;
+    return await new Promise((resolve)=>{
+      const tx = db.transaction(KZ_JOURNAL_STORE,'readonly');
+      const idx = tx.objectStore(KZ_JOURNAL_STORE).index('t');
+      const range = IDBKeyRange.bound(target-KZ_JOURNAL_COMPARE_TOLERANCE_MS, target+KZ_JOURNAL_COMPARE_TOLERANCE_MS);
+      const req = idx.openCursor(range);
+      let best = null;
+      req.onsuccess = function(e){
+        const cursor = e.target.result;
+        if(cursor){
+          if(!best || Math.abs(cursor.value.t-target) < Math.abs(best.t-target)) best = cursor.value;
+          cursor.continue();
+        } else {
+          if(!best || !liveTrains.length){ resolve({suspect:false}); return; }
+          const currentSet = new Set(liveTrains.filter(lt=>lt&&lt.num).map(lt=>String(lt.num)+'|'+(lt.curFr||'')+'|'+(lt.nextFr||'')));
+          const pastSet = new Set(best.trains.map(x=>x.n+'|'+x.a+'|'+x.b));
+          if(currentSet.size===0 || pastSet.size===0){ resolve({suspect:false}); return; }
+          let matches=0;
+          currentSet.forEach(sig=>{ if(pastSet.has(sig)) matches++; });
+          const ratio = matches/currentSet.size;
+          resolve({suspect: ratio>=KZ_JOURNAL_SUSPECT_RATIO, ratio, matches, total:currentSet.size});
+        }
+      };
+      req.onerror = function(){ resolve({suspect:false}); };
+    });
+  }catch(e){ return {suspect:false}; }
+}
+// يحدّث المؤشر البصري فقط — لا يوقف ولا يُشغّل أي إنذار من الـ9
+async function kzJournalUpdateReplayIndicator(){
+  const row = document.getElementById('liveReplayWarnRow');
+  const result = await kzJournalCheckYesterdayReplay();
+  kzJournalLastReplaySuspect = !!result.suspect; // بطلب المستخدم: يُقرأ فوراً (بلا انتظار) عند إطلاق إنذار SNCFT Live لتحديد وضعه (كامل أو محدود 3 بيبات)
+  if(row) row.style.display = result.suspect ? 'flex' : 'none';
+}
 async function fetchLiveTrains(){
   try{
     const res = await fetch(SNCFT_LIVE_URL, {cache:'no-store'});
@@ -2566,6 +2661,8 @@ async function fetchLiveTrains(){
     liveFetchOk = true;
     liveFetchAt = Date.now();
     saveOfflineSnapshot(); // حفظ محلي فوري: يتيح استئناف العمل من نفس النقطة لو انقطع الإنترنت لاحقاً أو أُغلق التطبيق
+    kzJournalWriteSnapshot(); // تسجيل لقطة في سجل IndexedDB المستقل (24 ساعة) — بلا انتظار، لا يؤخر أي شيء آخر
+    kzJournalUpdateReplayIndicator(); // تحديث مؤشر "بيانات تشبه الأمس" البصري فقط
     updateLiveOnlyHistory(); // يحدّث سجل مراقبة القطارات الزرقاء (غير المجدولة) عند كل جلب ناجح، لكشف أي بيانات عالقة لاحقاً
     queueMissingStationGeocodes(); // "تنبيه المقطع": يطلب إحداثيات أي محطة جديدة تظهر في البيانات المباشرة ولا وجود لها في STATIONS بعد
     if(typeof renderComparatif === 'function' && !comparatifHidden) renderComparatif(); // تحديث تلقائي لجداول "مقارن" عند كل جلب ناجح
@@ -7350,7 +7447,20 @@ function computeLiveAlarmPassageTimeMs(train, fromStation, toStation, userPos){
 function checkLiveOnlyAlarm(result){
   const liveOnlyModules = [];
   const modDirect = result.modules && result.modules[2]; // 3️⃣ SNCFT Live مباشر
-  if(modDirect && modDirect.dist<=150) liveOnlyModules.push({...modDirect, customLabel:'📡 SNCFT Live مباشر'});
+  if(modDirect && modDirect.dist<=150){
+    // بطلب صريح من المستخدم: نفس شرط 3 دقائق المستعمل في لوحتَي خط الزمن — لا ينطلق إلا ضمن هذه النافذة الزمنية قبل المرور الفعلي
+    let minutesUntil = null;
+    if(modDirect.trainId){
+      const culpritTrain = trains.find(t=>t.name===modDirect.trainId);
+      const pos = culpritTrain ? (trainPositionLiveDirect(culpritTrain) || trainPositionNow(culpritTrain)) : null;
+      const etaMs = (culpritTrain && pos && lastPos) ? computeLiveAlarmPassageTimeMs(culpritTrain, pos.fromStation, pos.toStation, lastPos) : null;
+      if(etaMs!==null) minutesUntil = (etaMs - Date.now())/60000;
+    }
+    // إن تعذّر حساب الوقت المتبقي (بلا بيانات كافية)، لا نمنع الإنذار — المسافة ≤150م تكفي وحدها كما كان سابقاً
+    if(minutesUntil===null || minutesUntil<=3){
+      liveOnlyModules.push({...modDirect, customLabel:'📡 SNCFT Live مباشر'});
+    }
+  }
   // ملاحظة: حالة القطار "غير المبرمَج" (غير الموجود إطلاقاً في الجدول النظري) لها الآن إنذارها المستقل الخاص بها
   // (انظر وحدة nonProg_ أسفل الملف) بنفس منطق بقية الوحدات المستقلة — شرط مزدوج مسافة+زمن، فلا داعي لتكرارها هنا
   if(liveOnlyModules.length>0 && !liveAlarmActive){
@@ -7381,10 +7491,67 @@ function triggerLiveOnlyAlarm(liveOnlyModules){
     return '<div style="margin:2px 0;">'+m.customLabel+': '+txt+'</div>';
   }).join('');
   const textEl = document.getElementById('liveAlarmText');
+  // بطلب صريح من المستخدم: إن كانت بيانات SNCFT Live تشبه بيانات نفس اللحظة قبل 24 ساعة (مؤشر kzJournalLastReplaySuspect)،
+  // هذا الإنذار يُصدر 3 بيبات فقط (بلا صفارة مستمرة) — لكنه يبقى مقفولاً ومعروضاً بنفس قاعدة الـ30 دقيقة بعد التأكيد
+  // (أو ابتعاد القطار فعلياً) تماماً كالإنذار الرئيسي، ولا يُفكّ فوراً بعد البيبات الثلاث
+  if(kzJournalLastReplaySuspect){
+    if(textEl) textEl.innerHTML = '⚠️ بيانات SNCFT Live المباشرة تشبه بيانات أمس بنفس التوقيت — تنبيه محدود (3 بيبات فقط) تحسباً لبيانات غير موثوقة:'+linesHtml;
+    playAlarmPip(true);
+    if(navigator.vibrate) navigator.vibrate([200,100,200]);
+    let pipsLeft = 2;
+    const limitedTimer = setInterval(()=>{
+      if(pipsLeft<=0 || !liveAlarmActive){ clearInterval(limitedTimer); return; } // بلا forceStopLiveAlarm هنا — البقاء مقفولاً يتبع نفس قاعدة الـ30 دقيقة كالإنذار الرئيسي
+      playAlarmPip(true);
+      if(navigator.vibrate) navigator.vibrate([200,100,200]);
+      pipsLeft--;
+    }, 1000);
+    return; // لا صفارة مستمرة ولا عدّاد تنازلي في هذا الوضع المحدود، لكن القفل نفسه يبقى فعّالاً كالمعتاد
+  }
   if(textEl) textEl.innerHTML = 'بيانات SNCFT Live المباشرة (وحدها) ترصد قطاراً قريباً جداً منك الآن — إنذار مستقل تماماً عن الجدول النظري:'+linesHtml;
   startLiveSiren();
   speakDanger150();
   if(navigator.vibrate) navigator.vibrate([200,100,200,100,600]);
+  startLiveAlarmTicker(); // بطلب صريح من المستخدم: نفس عدّاد/تصعيد آخر دقيقة الموجود في الإنذار الرئيسي، بمتغيّرات مستقلة هنا
+}
+// ---------- عدّاد/بيب/تصعيد آخر دقيقة لهذا الإنذار بالذات — نفس منطق mainAlarmTick تماماً، بمتغيّرات مستقلة ----------
+function startLiveAlarmTicker(){
+  stopLiveAlarmTicker();
+  liveAlarmPipTick = 0;
+  liveAlarmTick();
+  liveAlarmTickId = setInterval(liveAlarmTick, 1000);
+}
+function stopLiveAlarmTicker(){
+  if(liveAlarmTickId){ clearInterval(liveAlarmTickId); liveAlarmTickId=null; }
+  liveAlarmCritical=false;
+  const bEl = document.getElementById('liveAlarmBanner'); if(bEl) bEl.classList.remove('criticalMinute');
+  const cEl = document.getElementById('liveAlarmCountdown'); if(cEl) cEl.innerHTML='';
+}
+function liveAlarmTick(){
+  if(!liveAlarmActive) return;
+  const bEl = document.getElementById('liveAlarmBanner');
+  const cEl = document.getElementById('liveAlarmCountdown');
+  let remainSec = null;
+  if(liveAlarmPassageTimeMs!==null && isFinite(liveAlarmPassageTimeMs)){
+    remainSec = Math.round((liveAlarmPassageTimeMs - Date.now())/1000);
+  }
+  if(cEl){
+    if(remainSec!==null && remainSec>=0){
+      const mm = Math.floor(remainSec/60), ss = remainSec%60;
+      cEl.innerHTML = '⏱ الوصول المتوقع خلال <span class="cdNum">'+mm+':'+String(ss).padStart(2,'0')+'</span>';
+    } else {
+      cEl.innerHTML='';
+    }
+  }
+  const isCritical = (remainSec!==null && remainSec>=0 && remainSec<=60); // طلب صريح: نفس تصعيد آخر دقيقة الموجود في الإنذار الرئيسي
+  if(isCritical && !liveAlarmCritical){ liveAlarmCritical=true; if(bEl) bEl.classList.add('criticalMinute'); }
+  if(!isCritical && liveAlarmCritical){ liveAlarmCritical=false; if(bEl) bEl.classList.remove('criticalMinute'); }
+  if(isCritical){
+    playAlarmPip(true);
+    if(navigator.vibrate) navigator.vibrate([300,100,300]);
+  } else if(liveAlarmPipTick % 3 === 0){
+    playAlarmPip(false);
+  }
+  liveAlarmPipTick++;
 }
 // اهتزاز/صوت الإنذار المستقل — نغمة مختلفة تماماً عن صفارة الإنذار الرئيسي (مربّعة الشكل، ترددات مختلفة) حتى يمكن تمييز الصوتين لو عملا معاً
 function startLiveSiren(){
@@ -7479,6 +7646,7 @@ function forceStopLiveAlarm(){
   liveAlarmActive=false;
   const el = document.getElementById('liveAlarmBanner'); if(el) el.style.display='none';
   stopLiveSiren();
+  stopLiveAlarmTicker(); // بطلب صريح من المستخدم: يوقف عدّاد/تصعيد آخر دقيقة الخاص بهذا الإنذار
   liveAlarmLockTrain=null; liveAlarmLockToStation=null; liveAlarmLockConfirmedAt=null;
   liveAlarmPassageTimeMs=null;
   liveAlarmPassageGraceStartAt=null;
