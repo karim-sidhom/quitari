@@ -330,6 +330,24 @@ body{
 #terminatorAlarmBanner .btn{max-width:280px;background:#8a0000;}
 #terminatorAlarmGraceStatus{font-size:12px;margin-top:8px;opacity:.85;color:#ffb0b0;}
 
+/* ---------- إنذار مستقل سابع بطلب صريح من المستخدم: "المُبيد الفائق" (Super Terminator) — نفس مبدأ المُبيد
+   الأصلي، لكن بسرعة استكمال مقاسة فعلياً لكل قطار بدل الثابت العام. لافتة معدنية ذهبية/كهرمانية مميّزة عن الأحمر
+   الأصلي للمُبيد، ونغمة sine مختلفة عن كل الإنذارات الأخرى ---------- */
+#superTerminatorAlarmBanner{
+  position:fixed;left:0;right:0;bottom:0;z-index:10001;
+  background:linear-gradient(180deg,rgba(60,40,0,.97),rgba(15,10,0,.97));
+  display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+  padding:16px 14px calc(16px + env(safe-area-inset-bottom,0px));
+  animation:superTerminatorAlarmPulse 0.6s steps(1) infinite;
+  box-shadow:0 -4px 24px rgba(255,180,0,.5);
+  border-top:2px solid #ffb300;
+}
+@keyframes superTerminatorAlarmPulse{0%,49%{background:linear-gradient(180deg,rgba(90,60,0,.97),rgba(15,10,0,.97))}50%,100%{background:linear-gradient(180deg,rgba(30,20,0,.97),rgba(0,0,0,.97))}}
+#superTerminatorAlarmBanner h2{font-size:19px;margin:0 0 8px;color:#ffd166;}
+#superTerminatorAlarmBanner p{font-size:14px;margin:0 0 12px;line-height:1.7;color:#fff;max-width:520px;}
+#superTerminatorAlarmBanner .btn{max-width:280px;background:#8a5a00;}
+#superTerminatorAlarmGraceStatus{font-size:12px;margin-top:8px;opacity:.85;color:#ffe0a0;}
+
 .station-clock-wrap{display:flex;justify-content:center;align-items:center;gap:34px;margin:10px 0 4px;}
 .traffic-light{
   display:flex;flex-direction:column;gap:7px;padding:8px 6px;border-radius:14px;
@@ -1900,6 +1918,15 @@ const GHOST_VIDEO_SRC = 'data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yY
   <p id="terminatorAlarmText">قطار منقطع الإرسال يُقدَّر اقترابه منك — لا يتوقف الحساب رغم صمت SNCFT Live!</p>
   <button class="btn" onclick="dismissTerminatorAlarm()">فهمت، أوقف صوت هذا الإنذار</button>
   <p id="terminatorAlarmGraceStatus"></p>
+</div>
+
+<!-- إنذار "المُبيد الفائق" (Super Terminator): مستقل تماماً عن المُبيد الأصلي أعلاه — نفس المبدأ (استكمال افتراضي
+     لمسيرة قطار انقطع إرسال مُرسِله)، لكن بسرعة مقاسة فعلياً لهذا القطار على هذا الخط بدل سرعة ثابتة عامة -->
+<div id="superTerminatorAlarmBanner">
+  <h2>🦾🚨 المُبيد الفائق (Super Terminator)</h2>
+  <p id="superTerminatorAlarmText">قطار منقطع الإرسال يُقدَّر اقترابه منك — بسرعة مقاسة فعلياً على هذا الخط، لا تقديراً عاماً!</p>
+  <button class="btn" onclick="dismissSuperTerminatorAlarm()">فهمت، أوقف صوت هذا الإنذار</button>
+  <p id="superTerminatorAlarmGraceStatus"></p>
 </div>
 
 <div id="trainReminderOverlay">
@@ -6814,7 +6841,7 @@ window.dismissTrainReminder=function(){
 function fireTrainReminder(entry){
   showTrainReminderOverlay(entry); // شاشة كاملة إلزامية دوماً، يجب على المستخدم إغلاقها يدوياً
   if(entry.mode==='both' || entry.mode==='sound') playReminderBeep();
-  if(entry.mode==='both' || entry.mode==='vibrate'){ if(navigator.vibrate) navigator.vibrate([300,150,300,150,300,150,300]); }
+  if(navigator.vibrate) navigator.vibrate([300,150,300,150,300,150,300]); // يهتز الآن دوماً بصرف النظر عن الوضع المختار (صوت فقط/اهتزاز فقط/كلاهما)
   try{
     if(Notification && Notification.permission==='granted'){
       new Notification('🔔 تذكير قِطاري', { body: entry.label+' — بعد نحو '+entry.minutesBefore+' دقيقة', tag:'qitari-reminder-'+entry.key });
@@ -7394,6 +7421,7 @@ function mainAlarmTick(){
     if(navigator.vibrate) navigator.vibrate([300,100,300]);
   } else if(mainAlarmPipTick % 3 === 0){
     playAlarmPip(false); // بيب عادي كل 3 ثوانٍ خارج آخر دقيقة (أو حين لا يوجد تقدير وقت متاح)
+    if(navigator.vibrate) navigator.vibrate([100,50,100]);
   }
   mainAlarmPipTick++;
 }
@@ -7550,6 +7578,7 @@ function liveAlarmTick(){
     if(navigator.vibrate) navigator.vibrate([300,100,300]);
   } else if(liveAlarmPipTick % 3 === 0){
     playAlarmPip(false);
+    if(navigator.vibrate) navigator.vibrate([100,50,100]);
   }
   liveAlarmPipTick++;
 }
@@ -12114,6 +12143,220 @@ function checkPeacockHour(){
   setInterval(nonProg_cycle, NONPROG_CYCLE_MS);
 })();
 // ========== FIN إنذار "قطار غير مبرمَج" ==========
+
+// ================================================================
+// ========== إنذار مستقل سابع — "المُبيد الفائق" (Super Terminator) ==========
+// طلب صريح من المستخدم: نفس مبدأ المُبيد الأصلي بالضبط (استكمال افتراضي لمسيرة قطار انقطع إرسال مُرسِله) —
+// لكن بدل اعتماد سرعة متوسطة تقديرية عامة وثابتة (AVG_TRAIN_SPEED_KMH=60) لكل القطارات، تُحسب هنا سرعة حقيقية
+// خاصة بهذا القطار بعينه: متوسط سرعته الفعلية على هذا الخط خلال آخر 3 دقائق (SUPERTERM_SPEED_WINDOW_MS) قبل
+// انقطاع إرساله، مبنية على المسافات الحقيقية للمقاطع التي عبرها فعلاً (تعرّج السكة الحقيقي عبر kz_getTrackSubPath،
+// وليس خطاً مستقيماً)، مقسومة على الزمن الحقيقي المُستغرَق في كل مقطع. إن لم تتوفر بيانات كافية (أقل من مقطع واحد
+// مكتمل خلال النافذة)، يُستعمل نفس الاحتياطي الافتراضي (AVG_TRAIN_SPEED_KMH) تماماً كالمُبيد الأصلي.
+// Module 100% indépendant : préfixe superTerm_, propre bannière, propre son — ne remplace ni ne modifie en
+// rien le Terminator original (checkTerminatorAlarm/triggerTerminatorAlarm/terminatorExtrapolatedPosition/...)
+// qui continue de tourner exactement comme avant, en parallèle, avec ses propres variables.
+// ================================================================
+(function(){
+  'use strict';
+
+  const SUPERTERM_CYCLE_MS = 2000;
+  const SUPERTERM_SPEED_WINDOW_MS = 3*60*1000; // 3 دقائق، بطلب المستخدم بالحرف
+
+  // سجل تغيّرات المقطع (curFr/nextFr) لكل قطار — لا علاقة له بـ liveOnlyHistory الأصلي (الذي يراقب أيضاً تغيّر
+  // التأخير وحده، فلا يصلح لعزل زمن عبور كل مقطع بدقة). يُسجَّل سطر جديد فقط عند تغيّر فعلي في المقطع نفسه.
+  const superTerm_segLog = new Map(); // numKey -> [{t, curFr, nextFr}, ...] مرتّبة زمنياً
+
+  function superTerm_segmentRealLengthM(nameA, nameB){
+    const cA = resolveStationCoord(nameA), cB = resolveStationCoord(nameB);
+    if(!cA || !cB) return null;
+    const sub = (typeof kz_getTrackSubPath==='function') ? kz_getTrackSubPath(cA, cB, nameA, nameB) : null;
+    if(sub && sub.length>=2){
+      let total=0;
+      for(let i=0;i<sub.length-1;i++) total += haversineTN(sub[i], sub[i+1]);
+      return total;
+    }
+    return haversineTN(cA, cB); // احتياط: خط مستقيم إن تعذّر إيجاد تعرّج السكة الحقيقي بين هاتين المحطتين
+  }
+
+  function superTerm_enregistrerMouvement(){
+    const now = Date.now();
+    const seenNums = new Set();
+    liveTrains.forEach(lt=>{
+      if(!lt || !lt.num) return;
+      const numKey = String(lt.num);
+      seenNums.add(numKey);
+      if(!lt.curFr || !lt.nextFr) return; // بلا اتجاه معروف، لا فائدة من تسجيله
+      let log = superTerm_segLog.get(numKey);
+      if(!log){ log=[]; superTerm_segLog.set(numKey, log); }
+      const last = log[log.length-1];
+      if(!last || last.curFr!==lt.curFr || last.nextFr!==lt.nextFr){
+        log.push({t:now, curFr:lt.curFr, nextFr:lt.nextFr});
+      }
+      // تنظيف: نُبقي فقط ما يلزم لتغطية نافذة 3 دقائق (+ سطر واحد قبلها لحساب مدة أول مقطع مكتمل بدقة)
+      const cutoff = now - SUPERTERM_SPEED_WINDOW_MS;
+      let keepFrom = 0;
+      for(let i=log.length-1;i>=0;i--){ if(log[i].t<cutoff){ keepFrom=i; break; } }
+      if(keepFrom>0) superTerm_segLog.set(numKey, log.slice(keepFrom));
+    });
+    Array.from(superTerm_segLog.keys()).forEach(k=>{ if(!seenNums.has(k)) superTerm_segLog.delete(k); });
+  }
+
+  // متوسط السرعة الحقيقية (كم/سا) لقطار بعينه خلال آخر 3 دقائق، مبني فقط على مقاطع "مكتملة" فعلياً (بين تغيّرين
+  // متتاليين مسجَّلين) — null إن لم يتوفّر مقطع مكتمل واحد على الأقل بزمن كافٍ خلال النافذة
+  function superTerm_vitesseMoyenneKmh(numKey){
+    const log = superTerm_segLog.get(numKey);
+    if(!log || log.length<2) return null;
+    const cutoff = Date.now() - SUPERTERM_SPEED_WINDOW_MS;
+    let distTotal = 0, dureeTotal = 0;
+    for(let i=0;i<log.length-1;i++){
+      if(log[i].t < cutoff) continue; // بداية هذا المقطع قبل النافذة بكثير — نتجاهله لتفادي سرعة قديمة جداً
+      const segLen = superTerm_segmentRealLengthM(log[i].curFr, log[i].nextFr);
+      if(segLen===null) continue;
+      const dureeSec = (log[i+1].t - log[i].t)/1000;
+      if(dureeSec<=0) continue;
+      distTotal += segLen;
+      dureeTotal += dureeSec;
+    }
+    if(dureeTotal<30) return null; // أقل من نصف دقيقة إجمالاً: بيانات غير كافية لثقة معقولة، نُفضِّل الاحتياطي
+    return (distTotal/dureeTotal)*3.6; // م/ثا → كم/سا
+  }
+
+  // نفس منطق terminatorExtrapolatedPosition الأصلي بالضبط، فقط السرعة المستعملة هنا مقاسة فعلياً لهذا القطار
+  // (أو الاحتياطي AVG_TRAIN_SPEED_KMH إن تعذّر قياسها) بدل الثابت العام دوماً
+  function superTerm_extrapolatedPosition(lt){
+    const silentMs = liveOnlySilentMs(lt);
+    if(silentMs < GONE_DARK_MS) return null;
+    const curC = resolveStationCoord(lt.curFr), nextC = resolveStationCoord(lt.nextFr);
+    if(!curC || !nextC) return null;
+    const vitesseMesureeKmh = superTerm_vitesseMoyenneKmh(String(lt.num));
+    const speedKmh = (vitesseMesureeKmh!==null && vitesseMesureeKmh>0) ? vitesseMesureeKmh : AVG_TRAIN_SPEED_KMH;
+    const hours = silentMs/3600000;
+    const distM = hours*speedKmh*1000;
+    const sub = (typeof kz_getTrackSubPath==='function') ? kz_getTrackSubPath(curC, nextC, lt.curFr, lt.nextFr) : null;
+    let lat, lon;
+    if(sub && sub.length>=2){
+      let total=0; for(let i=0;i<sub.length-1;i++) total += haversineTN(sub[i], sub[i+1]);
+      const baseDist = total/2;
+      const targetDist = Math.min(total, baseDist+distM);
+      let acc=0, pt=sub[sub.length-1];
+      for(let i=0;i<sub.length-1;i++){
+        const segLen = haversineTN(sub[i], sub[i+1]);
+        if(acc+segLen >= targetDist){
+          const t = segLen>0 ? (targetDist-acc)/segLen : 0;
+          pt = [sub[i][0]+(sub[i+1][0]-sub[i][0])*t, sub[i][1]+(sub[i+1][1]-sub[i][1])*t];
+          break;
+        }
+        acc += segLen;
+      }
+      lat = pt[0]; lon = pt[1];
+      if(baseDist+distM > total){
+        const extra = (baseDist+distM) - total;
+        const brg = bearingBetween(sub[Math.max(0,sub.length-2)], sub[sub.length-1]);
+        const dest = destinationPoint(lat, lon, brg, extra);
+        lat = dest[0]; lon = dest[1];
+      }
+    } else {
+      const base = liveOnlyTrainPositionRaw(lt);
+      if(!base) return null;
+      const brg = bearingBetween(curC, nextC);
+      const dest = destinationPoint(base.lat, base.lon, brg, distM);
+      lat = dest[0]; lon = dest[1];
+    }
+    const snapped = snapToNearestTrack(lat, lon, 3000);
+    return {lat:snapped.lat, lon:snapped.lon, fromStation:lt.curFr||'?', toStation:lt.nextFr||'?',
+      delayMin:Number(lt.delay)||0, silentMinutes:Math.round(silentMs/60000),
+      speedUsedKmh:speedKmh, speedMesuree:(vitesseMesureeKmh!==null && vitesseMesureeKmh>0), extrapolated:true};
+  }
+
+  let superTermAlarmActive=false, superTermAlarmSirenOsc=null;
+  let superTermAlarmCulpritTxt=null;
+
+  function checkSuperTerminatorAlarm(){
+    superTerm_enregistrerMouvement(); // يُحدَّث في كل دورة، حتى لو لم يكن هناك أي خطر حالياً — نحتاج السجل جاهزاً دوماً
+    if(!lastPos || !isLiveDataFresh()){
+      if(superTermAlarmActive) forceStopSuperTerminatorAlarm();
+      return;
+    }
+    let best=null;
+    liveTrains.forEach(lt=>{
+      if(!lt || !lt.num) return;
+      const pos = superTerm_extrapolatedPosition(lt);
+      if(!pos) return;
+      const dist = haversine(lastPos, [pos.lat, pos.lon]);
+      if(!best || dist<best.dist) best = {lt, pos, dist};
+    });
+    if(best && best.dist<=RISK_THRESHOLD_M){
+      triggerSuperTerminatorAlarm(best.lt, best.pos, best.dist);
+    } else if(superTermAlarmActive){
+      forceStopSuperTerminatorAlarm();
+    }
+  }
+  function triggerSuperTerminatorAlarm(lt, pos, dist){
+    const speedTxt = pos.speedMesuree
+      ? (Math.round(pos.speedUsedKmh)+' كم/سا — مقاسة فعلياً على هذا الخط خلال آخر 3 د')
+      : (Math.round(pos.speedUsedKmh)+' كم/سا — احتياطية تقديرية، لا سجل سرعة كافٍ بعد لهذا القطار');
+    const etaMin = Math.max(0, Math.round((dist/1000)/pos.speedUsedKmh*60));
+    superTermAlarmCulpritTxt = 'قطار '+(lt.num||'؟')+' (منقطع الإرسال منذ '+pos.silentMinutes+' د)';
+    if(!superTermAlarmActive){
+      superTermAlarmActive = true;
+      startSuperTerminatorSiren();
+      if(navigator.vibrate) navigator.vibrate([100,50,100,50,100,50,100,50,100,50,900]);
+    }
+    const el = document.getElementById('superTerminatorAlarmBanner'); if(el) el.style.display='flex';
+    const textEl = document.getElementById('superTerminatorAlarmText');
+    if(textEl) textEl.innerHTML = superTermAlarmCulpritTxt+' — يُقدَّر أنه على بعد '+formatDist(dist)+' منك الآن (نحو '+etaMin+' د تقريباً)، بسرعة '+speedTxt+'.';
+    updateSuperTerminatorAlarmGraceStatusText();
+  }
+  function updateSuperTerminatorAlarmGraceStatusText(){
+    const el = document.getElementById('superTerminatorAlarmGraceStatus');
+    if(!el || !superTermAlarmActive) return;
+    el.textContent = '🦾 '+(superTermAlarmCulpritTxt||'')+' لا يزال مقدَّراً ضمن '+RISK_THRESHOLD_M+'م منك — سيتوقف هذا الإنذار تلقائياً بمجرد ابتعاده تقديرياً أو استئناف إرساله الحقيقي.';
+  }
+  function forceStopSuperTerminatorAlarm(){
+    superTermAlarmActive=false;
+    superTermAlarmCulpritTxt=null;
+    const el = document.getElementById('superTerminatorAlarmBanner'); if(el) el.style.display='none';
+    stopSuperTerminatorSiren();
+    const gEl = document.getElementById('superTerminatorAlarmGraceStatus'); if(gEl) gEl.textContent='';
+  }
+  // نغمة sine بنبضة مزدوجة (غير مستعملة في أي إنذار آخر — الأخرى كلها sawtooth/square/triangle) لتمييزه صوتياً
+  function startSuperTerminatorSiren(){
+    if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    if(audioCtx.state==='suspended'){ audioCtx.resume(); }
+    if(superTermAlarmSirenOsc) return;
+    superTermAlarmSirenOsc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    superTermAlarmSirenOsc.type='sine';
+    gain.gain.value=0.45;
+    superTermAlarmSirenOsc.connect(gain).connect(audioCtx.destination);
+    superTermAlarmSirenOsc.start();
+    superTermAlarmSirenOsc._sweep = setInterval(()=>{
+      if(audioCtx.state==='suspended'){ audioCtx.resume(); }
+      const t=audioCtx.currentTime;
+      superTermAlarmSirenOsc.frequency.setValueAtTime(300,t);
+      superTermAlarmSirenOsc.frequency.setValueAtTime(500,t+0.2);
+    },400);
+  }
+  function stopSuperTerminatorSiren(){
+    if(superTermAlarmSirenOsc){
+      if(superTermAlarmSirenOsc._sweep) clearInterval(superTermAlarmSirenOsc._sweep);
+      try{ superTermAlarmSirenOsc.stop(); }catch(e){}
+      superTermAlarmSirenOsc.disconnect();
+      superTermAlarmSirenOsc=null;
+    }
+  }
+  window.dismissSuperTerminatorAlarm=function(){
+    checkSuperTerminatorAlarm(); // إعادة تحقق فورية: قد يكون ابتعد تقديرياً أو استأنف إرساله الحقيقي منذ آخر دورة
+    if(superTermAlarmActive){
+      if(navigator.vibrate) navigator.vibrate([80,40,80]);
+      updateSuperTerminatorAlarmGraceStatusText();
+      return;
+    }
+  };
+
+  setInterval(checkSuperTerminatorAlarm, SUPERTERM_CYCLE_MS);
+})();
+// ========== FIN إنذار "المُبيد الفائق" (Super Terminator) ==========
 
 // ================================================================
 // ========== شاشة إعداد موحّدة — تطلب كل الأذونات (GPS + صوت + إشعارات) دفعة واحدة عند أول فتح فقط ==========
