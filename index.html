@@ -326,8 +326,24 @@ body{
 #segStationAlarmBanner .btn{max-width:280px;background:#00a8b8;}
 #segStationAlarmGraceStatus{font-size:12px;margin-top:8px;opacity:.85;color:#c8f7fb;}
 
-/* ---------- إنذار خامس مستقل تماماً بطلب صريح من المستخدم: "المُبيد" (The Terminator) — لا يتوقف عن الحساب لمجرد
-   انقطاع إرسال مُرسِل القطار (Transpondeur): يواصل تقدير مسيرته افتراضياً (انظر terminatorExtrapolatedPosition) ويُنذر
+/* ---------- إنذار تاسع مستقل تماماً بطلب صريح من المستخدم: "1 كم" — معياره الوحيد هو المسافة الفعلية بينك وبين
+   القطار نفسه (وليس السكة) — بمجرد أن يصبح أقرب قطار مؤكَّد على بعد ≤1000م منك، يُشغَّل. مستقل تماماً عن كل الإنذارات
+   الثمانية أعلاه (لا يقرأ ولا يعدّل متغيّراتها)، بلافتة سفلية خاصة به بلون وردي/أرجواني مميّز ونغمة sawtooth بترددات مختلفة ---------- */
+#trainDist1kmAlarmBanner{
+  position:fixed;left:0;right:0;bottom:0;z-index:10001;
+  background:linear-gradient(180deg,rgba(160,0,110,.97),rgba(50,0,40,.97));
+  display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+  padding:16px 14px calc(16px + env(safe-area-inset-bottom,0px));
+  animation:trainDist1kmAlarmPulse 1s infinite;
+  box-shadow:0 -4px 24px rgba(255,0,170,.6);
+  border-top:2px solid #ff4dcf;
+}
+@keyframes trainDist1kmAlarmPulse{0%,100%{background:linear-gradient(180deg,rgba(160,0,110,.97),rgba(50,0,40,.97))}50%{background:linear-gradient(180deg,rgba(215,0,150,.97),rgba(80,0,65,.97))}}
+#trainDist1kmAlarmBanner h2{font-size:19px;margin:0 0 8px;color:#ffd6f4;}
+#trainDist1kmAlarmBanner p{font-size:14px;margin:0 0 12px;line-height:1.7;color:#fff;max-width:520px;}
+#trainDist1kmAlarmBanner .btn{max-width:280px;background:#ff2db3;}
+
+
    إن اقترب تقديرياً منك. لافتة سفلية بلون أحمر/أسود معدني مميّز، ونغمة نبضية مختلفة عن كل الإنذارات الأخرى ---------- */
 #terminatorAlarmBanner{
   position:fixed;left:0;right:0;bottom:0;z-index:10001;
@@ -1951,6 +1967,14 @@ const GHOST_VIDEO_SRC = 'data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yY
   <p id="superTerminatorAlarmGraceStatus"></p>
 </div>
 
+<!-- إنذار تاسع مستقل تماماً بطلب صريح من المستخدم: "1 كم" — معياره الوحيد المسافة الفعلية بينك وبين القطار نفسه (150 -->
+<div id="trainDist1kmAlarmBanner">
+  <h2>🚂📍 قطار على بعد 1 كم</h2>
+  <p id="trainDist1kmAlarmText">قطار على بعد كيلومتر واحد تقريباً منك.</p>
+  <button class="btn" onclick="dismissTrainDist1kmAlarm()">فهمت، أوقف صوت هذا الإنذار</button>
+</div>
+
+
 <div id="trainReminderOverlay">
   <h1>🔔 تذكير قِطاري</h1>
   <p id="trainReminderText"></p>
@@ -2827,6 +2851,9 @@ function resolveStationCoord(name){
 // لذلك نراقب بأنفسنا: هل محطته/تأخيره تغيّر فعلاً عبر عدة دورات جلب متتالية؟ إن بقيت نفس القيم دون أي تغيّر لفترة طويلة، فهذا مؤشر قوي على انقطاع مُرسِله (Transpondeur) — وليس بالضرورة أن رحلته انتهت
 const liveOnlyHistory = new Map(); // num(string) -> {signature, lastChangedAt}
 const GONE_DARK_MS = 3*60*1000; // 3 دقائق بلا أي تغيّر = مؤشر كافٍ على انقطاع الإرسال، يبدأ بعدها الاستكمال الافتراضي عبر المُبيد
+// طلب صريح من المستخدم: القطار الشبح (المُبيد والمُبيد الفائق) يجب أن يكون ضمن هذه المسافة منك ليُعتبر فعلاً —
+// بلا هذا السقف، قطار صامت منذ ساعات يمكن أن يُستكمل افتراضياً لمئات الكيلومترات ويُشغِّل الإنذار رغم بُعده الحقيقي الهائل
+const TERMINATOR_MAX_DIST_M = 500;
 function updateLiveOnlyHistory(){
   const now = Date.now();
   const seenNums = new Set();
@@ -7288,13 +7315,15 @@ function recalcAndDisplay(){
   lastRisk = result.risk;
   // كل وحدة تُنبِّه بمفردها: يكفي أن تتجاوز وحدة واحدة فقط من الأربع نسبة 80% لتنطلق صفارة الخطر — أفضل تنبيه خاطئ من قطار يدهسك
   // إلا إذا أوقف المستخدم تنبيه الاقتراب مؤقتاً بنفسه (بعد تأكيد صريح للمخاطرة) — عندها لا تنطلق الصفارة إطلاقاً حتى تنتهي المدة المختارة تلقائياً
-  const dangerousModules = (result.modules||[]).filter(m=>m.dist<=150);
+  const dangerousModules = (result.modules||[]).filter(m=>!!m.trainId);
   // بطلب صريح من المستخدم: الأقرب "نظرياً" (الجدول+التأخير) يُشغِّل الإنذار أيضاً بمفرده حتى بلا أي تأكيد SNCFT Live — لا يُخفى بعد الآن خلف اشتراط التأكيد
-  if(result.theoBest && result.theoBest.dist<=150){
+  if(result.theoBest && result.theoBest.trainId){
     dangerousModules.push(result.theoBest);
   }
+  // بطلب صريح من المستخدم: لا تنطلق صفارة الخطر الرئيسية إلا إذا كان المستخدم نفسه أيضاً على بُعد ≤150م من أقرب سكة حديدية فعلية
+  const nearRailForMainAlarm = !!(result.trackInfo && isFinite(result.trackInfo.dist) && result.trackInfo.dist<=150);
   // حتى مع إيقاف تنبيه الاقتراب مؤقتاً، اهتزاز طويل ثلاثي إجباري لا يمكن تعطيله — حداً أدنى من الحماية للمستخدم ولمن حوله
-  if(dangerousModules.length>0 && !alertActive){
+  if(dangerousModules.length>0 && nearRailForMainAlarm && !alertActive){
     if(!isProximityAlertMuted()) triggerAlert(result, dangerousModules);
     else fallbackMutedVibration();
   }
@@ -7312,6 +7341,8 @@ function recalcAndDisplay(){
   try{ checkSegStationAlarm(); }catch(e){ console.error('checkSegStationAlarm a échoué:', e); }
   // إنذار خامس مستقل تماماً: "المُبيد" (The Terminator، فكرة المستخدم) — يواصل تقدير مسيرة القطار افتراضياً حتى لو انقطع إرساله، انظر checkTerminatorAlarm أعلاه
   try{ checkTerminatorAlarm(); }catch(e){ console.error('checkTerminatorAlarm a échoué:', e); }
+  // إنذار تاسع مستقل تماماً: "1 كم" (فكرة المستخدم) — معياره الوحيد بُعد القطار نفسه عنك، انظر checkTrainDist1kmAlarm أعلاه
+  try{ checkTrainDist1kmAlarm(result); }catch(e){ console.error('checkTrainDist1kmAlarm a échoué:', e); }
   // المُعلن الصوتي للمسافة: يتكلم فوراً بمجرد أن تصل المسافة إلى 150م أو أقل، حسب أي وحدة من الوحدات الأربع (وليس بالضرورة كلها معاً) —
   // نفس منطق "لا قطارات شبح تُخفي خطراً حقيقياً" المعمول به في triggerAlert. يُعاد تصفير الإعلان فقط بعد خروج كل الوحدات من نطاق 150م
   const dist150Candidates = [result.dist, result.theoBest && result.theoBest.dist, result.liveAnyBest && result.liveAnyBest.dist]
@@ -7383,7 +7414,10 @@ function mainAlarmUpdateEta(distNow){
 function alarmUnlockConditionMet(){
   if(!alarmLockTrain) return true;
   if(alarmGraceElapsed()) return true;
-  if(alarmLockedTrainDistance() > RISK_THRESHOLD_M) return true;
+  alarmLockedTrainDistance(); // تُبقي حساب المسافة/ETA محدَّثاً للعرض فقط، بلا تأثير على قرار الفكّ
+  // طلب صريح من المستخدم: قرار الفكّ يعتمد فقط على القرب من السكة، وليس على بُعد القطار عنك
+  const distTrackUnlock = lastPos ? distanceToNearestTrack(lastPos[0], lastPos[1]) : Infinity;
+  if(isFinite(distTrackUnlock) && distTrackUnlock > RISK_THRESHOLD_M) return true;
   return false;
 }
 // نص الحالة المعروض داخل نافذة الإنذار نفسها، حتى يفهم المستخدم لماذا لا يزال الصوت مستمراً رغم ضغط الزر
@@ -7508,7 +7542,9 @@ function computeLiveAlarmPassageTimeMs(train, fromStation, toStation, userPos){
 function checkLiveOnlyAlarm(result){
   const liveOnlyModules = [];
   const modDirect = result.modules && result.modules[2]; // 3️⃣ SNCFT Live مباشر
-  if(modDirect && modDirect.dist<=150){
+  // طلب صريح من المستخدم: المعيار الوحيد للمسافة هو القرب من السكة (trackInfo.dist)، وليس بُعد القطار عنك
+  const nearRailForLiveAlarm = !!(result.trackInfo && isFinite(result.trackInfo.dist) && result.trackInfo.dist<=150);
+  if(modDirect && modDirect.trainId && nearRailForLiveAlarm){
     // بطلب صريح من المستخدم: نفس شرط 3 دقائق المستعمل في لوحتَي خط الزمن — لا ينطلق إلا ضمن هذه النافذة الزمنية قبل المرور الفعلي
     let minutesUntil = null;
     if(modDirect.trainId){
@@ -7674,7 +7710,9 @@ function liveAlarmUnlockConditionMet(){
   }
   // احتياط فقط إن تعذّر حساب وقت المرور نهائياً (لا عند القفل ولا لاحقاً): نعود للشرط القديم
   if(liveAlarmGraceElapsed()) return true;
-  if(distNow > RISK_THRESHOLD_M) return true;
+  // طلب صريح من المستخدم: القرب من السكة هو المعيار الوحيد، وليس بُعد القطار عنك (distNow يبقى محسوباً أعلاه للعرض فقط)
+  const distTrackLiveUnlock = lastPos ? distanceToNearestTrack(lastPos[0], lastPos[1]) : Infinity;
+  if(isFinite(distTrackLiveUnlock) && distTrackLiveUnlock > RISK_THRESHOLD_M) return true;
   return false;
 }
 function liveAlarmGraceElapsed(){
@@ -8387,7 +8425,11 @@ function checkTerminatorAlarm(){
     const dist = haversine(lastPos, [pos.lat, pos.lon]);
     if(!best || dist<best.dist) best = {lt, pos, dist};
   });
-  if(best && best.dist<=RISK_THRESHOLD_M){
+  // طلب صريح من المستخدم: القطار الشبح يجب أن يكون ضمن TERMINATOR_MAX_DIST_M (500م) منك ليُعتبر، بالإضافة لشرط القرب من السكة
+  const distTrackTerm = distanceToNearestTrack(lastPos[0], lastPos[1]);
+  const nearRailForTerminator = isFinite(distTrackTerm) && distTrackTerm<=RISK_THRESHOLD_M;
+  const ghostWithinRange = !!(best && best.dist<=TERMINATOR_MAX_DIST_M);
+  if(ghostWithinRange && nearRailForTerminator){
     triggerTerminatorAlarm(best.lt, best.pos, best.dist);
   } else if(terminatorAlarmActive){
     forceStopTerminatorAlarm();
@@ -12398,7 +12440,11 @@ function checkPeacockHour(){
       const dist = haversine(lastPos, [pos.lat, pos.lon]);
       if(!best || dist<best.dist) best = {lt, pos, dist};
     });
-    if(best && best.dist<=RISK_THRESHOLD_M){
+    // طلب صريح من المستخدم: القطار الشبح يجب أن يكون ضمن TERMINATOR_MAX_DIST_M (500م) منك، بالإضافة لشرط القرب من السكة
+    const distTrackSuperTerm = distanceToNearestTrack(lastPos[0], lastPos[1]);
+    const nearRailForSuperTerminator = isFinite(distTrackSuperTerm) && distTrackSuperTerm<=RISK_THRESHOLD_M;
+    const ghostWithinRangeSuperTerm = !!(best && best.dist<=TERMINATOR_MAX_DIST_M);
+    if(ghostWithinRangeSuperTerm && nearRailForSuperTerminator){
       triggerSuperTerminatorAlarm(best.lt, best.pos, best.dist);
     } else if(superTermAlarmActive){
       forceStopSuperTerminatorAlarm();
@@ -12470,6 +12516,85 @@ function checkPeacockHour(){
   setInterval(checkSuperTerminatorAlarm, SUPERTERM_CYCLE_MS);
 })();
 // ========== FIN إنذار "المُبيد الفائق" (Super Terminator) ==========
+
+// ================================================================
+// ---------- إنذار تاسع مستقل تماماً بطلب صريح من المستخدم: "1 كم" ----------
+// المبدأ: معياره الوحيد هو المسافة الفعلية (GPS، haversine) بينك وبين القطار نفسه — وليس بُعدك عن السكة.
+// يستعمل result.dist (أقرب قطار مؤكَّد من الوحدات الثلاث الأولى، محسوب أصلاً في computeRisk) بلا أي حساب مكرَّر.
+// مستقل تماماً عن الإنذارات الثمانية الأخرى: لا يقرأ ولا يعدّل متغيّراتها، بلافتة سفلية خاصة به ونغمة صوتية خاصة.
+// ================================================================
+let trainDist1kmAlarmActive=false, trainDist1kmSirenOsc=null;
+let trainDist1kmDismissedUntilClear=false; // بطلب المستخدم: زر "فهمت" يُسكت الصوت حتى يبتعد القطار فعلياً عن 1كم ثم يعود دونه من جديد
+const TRAIN_DIST_1KM_THRESHOLD_M = 1000;
+function checkTrainDist1kmAlarm(result){
+  if(!result || !result.trainId || !isFinite(result.dist)){
+    trainDist1kmDismissedUntilClear=false;
+    if(trainDist1kmAlarmActive) forceStopTrainDist1kmAlarm();
+    return;
+  }
+  // بطلب صريح من المستخدم: يجب التحقق أيضاً من القرب من السكة (نفس عتبة RISK_THRESHOLD_M المستعملة في كل التطبيق)
+  const nearRailFor1km = !!(result.trackInfo && isFinite(result.trackInfo.dist) && result.trackInfo.dist<=RISK_THRESHOLD_M);
+  if(result.dist<=TRAIN_DIST_1KM_THRESHOLD_M && nearRailFor1km){
+    if(trainDist1kmDismissedUntilClear) return; // أُسكت يدوياً ولا يزال القطار ضمن 1كم — لا نعيد التشغيل
+    if(!trainDist1kmAlarmActive) triggerTrainDist1kmAlarm(result);
+    else updateTrainDist1kmAlarmText(result);
+  } else {
+    trainDist1kmDismissedUntilClear=false;
+    if(trainDist1kmAlarmActive) forceStopTrainDist1kmAlarm();
+  }
+}
+function triggerTrainDist1kmAlarm(result){
+  trainDist1kmAlarmActive=true;
+  const el = document.getElementById('trainDist1kmAlarmBanner'); if(el) el.style.display='flex';
+  updateTrainDist1kmAlarmText(result);
+  startTrainDist1kmSiren();
+  window.__qtSpeak('تنبيه، القطار على بعد كيلومتر واحد تقريباً منك', {rate:0.85, pitch:0.65, priority:90});
+  if(navigator.vibrate) navigator.vibrate([150,150,150,150,150,150,900]);
+}
+function updateTrainDist1kmAlarmText(result){
+  const textEl = document.getElementById('trainDist1kmAlarmText');
+  if(textEl) textEl.innerHTML = '🚂 قطار "'+(result.trainId||'؟')+'" على بعد '+formatDist(result.dist)+' منك تقريباً (أقل من 1 كم).';
+}
+function forceStopTrainDist1kmAlarm(){
+  trainDist1kmAlarmActive=false;
+  const el = document.getElementById('trainDist1kmAlarmBanner'); if(el) el.style.display='none';
+  stopTrainDist1kmSiren();
+}
+// نغمة sawtooth بترددات مختلفة عن إنذار "المسافة الرئيسي" (880/440) و"إنذار المقطع" (سواتوث آخر) لتمييزها صوتياً
+function startTrainDist1kmSiren(){
+  if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+  if(audioCtx.state==='suspended'){ audioCtx.resume(); }
+  if(trainDist1kmSirenOsc) return;
+  trainDist1kmSirenOsc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  trainDist1kmSirenOsc.type='sawtooth';
+  gain.gain.value=0.35;
+  trainDist1kmSirenOsc.connect(gain).connect(audioCtx.destination);
+  trainDist1kmSirenOsc.start();
+  trainDist1kmSirenOsc._sweep = setInterval(()=>{
+    if(audioCtx.state==='suspended'){ audioCtx.resume(); }
+    const t=audioCtx.currentTime;
+    trainDist1kmSirenOsc.frequency.setValueAtTime(390,t);
+    trainDist1kmSirenOsc.frequency.linearRampToValueAtTime(585,t+0.5);
+    trainDist1kmSirenOsc.frequency.linearRampToValueAtTime(390,t+1.0);
+  },1000);
+}
+function stopTrainDist1kmSiren(){
+  if(trainDist1kmSirenOsc){
+    if(trainDist1kmSirenOsc._sweep) clearInterval(trainDist1kmSirenOsc._sweep);
+    try{ trainDist1kmSirenOsc.stop(); }catch(e){}
+    trainDist1kmSirenOsc.disconnect();
+    trainDist1kmSirenOsc=null;
+  }
+}
+window.dismissTrainDist1kmAlarm=function(){
+  stopTrainDist1kmSiren();
+  const el = document.getElementById('trainDist1kmAlarmBanner'); if(el) el.style.display='none';
+  trainDist1kmAlarmActive=false;
+  trainDist1kmDismissedUntilClear=true;
+  if(navigator.vibrate) navigator.vibrate([80,40,80]);
+};
+// ========== FIN إنذار "1 كم" ==========
 
 // ================================================================
 // ========== شاشة إعداد موحّدة — تطلب كل الأذونات (GPS + صوت + إشعارات) دفعة واحدة عند أول فتح فقط ==========
