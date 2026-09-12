@@ -2853,7 +2853,7 @@ const liveOnlyHistory = new Map(); // num(string) -> {signature, lastChangedAt}
 const GONE_DARK_MS = 3*60*1000; // 3 دقائق بلا أي تغيّر = مؤشر كافٍ على انقطاع الإرسال، يبدأ بعدها الاستكمال الافتراضي عبر المُبيد
 // طلب صريح من المستخدم: القطار الشبح (المُبيد والمُبيد الفائق) يجب أن يكون ضمن هذه المسافة منك ليُعتبر فعلاً —
 // بلا هذا السقف، قطار صامت منذ ساعات يمكن أن يُستكمل افتراضياً لمئات الكيلومترات ويُشغِّل الإنذار رغم بُعده الحقيقي الهائل
-const TERMINATOR_MAX_DIST_M = 500;
+const TERMINATOR_MAX_DIST_M = 150;
 function updateLiveOnlyHistory(){
   const now = Date.now();
   const seenNums = new Set();
