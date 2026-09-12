@@ -292,6 +292,20 @@ body{
 #segAlarmBanner p{font-size:14px;margin:0 0 12px;line-height:1.7;color:#fff;max-width:520px;}
 #segAlarmBanner .btn{max-width:280px;background:#ff8c00;}
 #segAlarmGraceStatus{font-size:12px;margin-top:8px;opacity:.85;color:#ffd6d6;}
+#railTheoAlarmBanner{
+  position:fixed;left:0;right:0;bottom:0;z-index:10003;
+  background:#7a1fb0;
+  display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+  padding:16px 14px calc(16px + env(safe-area-inset-bottom,0px));
+  animation:railTheoAlarmPulse 0.5s steps(1) infinite;
+  box-shadow:0 -4px 30px rgba(180,0,255,.85);
+  border-top:3px solid #d24dff;
+}
+@keyframes railTheoAlarmPulse{0%,49%{background:#9b30d9;box-shadow:0 -4px 34px rgba(180,0,255,.95)}50%,100%{background:#2a0a3a;box-shadow:0 -4px 10px rgba(180,0,255,.3)}}
+#railTheoAlarmBanner h2{font-size:19px;margin:0 0 8px;color:#fff;}
+#railTheoAlarmBanner p{font-size:14px;margin:0 0 12px;line-height:1.7;color:#fff;max-width:520px;}
+#railTheoAlarmBanner .btn{max-width:280px;background:#ff8c00;}
+#railTheoAlarmGraceStatus{font-size:12px;margin-top:8px;opacity:.85;color:#ecd6ff;}
 
 /* ---------- إنذار رابع مستقل تماماً بطلب صريح من المستخدم: "استهداف بالاسم" — بلا أي شرط آخر (لا رقم قطار، لا مسافة، لا تأكيد
    جدول نظري): أي مُدخل في بيانات SNCFT Live المباشرة تحمل محطته الحالية أو التالية اسم إحدى محطتَي مقطعك الحالي (أقرب محطتين
@@ -1900,6 +1914,14 @@ const GHOST_VIDEO_SRC = 'data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yY
   <p id="segAlarmText">أنت قريب فعلياً من السكة، وقطار مؤكَّد الآن يعبر بين أقرب محطتين لموقعك!</p>
   <button class="btn" onclick="dismissSegAlarm()">فهمت، أوقف صوت هذا الإنذار</button>
   <p id="segAlarmGraceStatus"></p>
+</div>
+
+<!-- إنذار جديد مستقل تماماً بطلب صريح من المستخدم: قرب السكة (≤150م) + قرب الموعد النظري (≤3 دقائق) — بلا أي علاقة بموقع القطار نفسه أو بالإنذار الرئيسي -->
+<div id="railTheoAlarmBanner">
+  <h2>🛤️⏱️🚨 قرب السكة + الموعد النظري</h2>
+  <p id="railTheoAlarmText">أنت قريب من السكة، وقطار متوقع نظرياً خلال دقائق قليلة!</p>
+  <button class="btn" onclick="dismissRailTheoAlarm()">فهمت، أوقف صوت هذا الإنذار</button>
+  <p id="railTheoAlarmGraceStatus"></p>
 </div>
 
 <!-- إنذار "استهداف بالاسم": مستقل تماماً بطلب صريح من المستخدم — بلا أي شرط سوى مطابقة الاسم: أي قطار SNCFT Live مباشر
@@ -5346,11 +5368,16 @@ let segTrCardCycleTimer = null;   // مؤقت الخطوة القادمة في �
 let segTrCardCurrentBeepFinish = null; // دالة إنهاء الصفارة الجارية حالياً، لإتاحة قطعها فوراً عند الإيقاف اليدوي
 let segTrCardManualMuteUntil = 0; // طلب المستخدم: عند الضغط على زر الإيقاف، إسكات لمدة دقيقتين قبل احتمال الاستئناف التلقائي
 let segTrCardAlarmDepartStation = null, segTrCardAlarmDistM = null; // تُحدَّثان في كل دورة عرض من renderSegmentTrainsList
+let segTrCardFrozenPhrase = null; // طلب المستخدم بالحرف: الجملة المنطوقة تُبنى مرة واحدة فقط عند انطلاق الإنذار وتبقى ثابتة (en dur) طوال حلقة الرنين — حتى لو تغيّرت المحطة/المسافة لاحقاً — لتفادي أي انقطاع في الكلام بسبب تغيّرها في المنتصف
 
 function segTrCardAlarm_start(){
   if(segTrCardAlarmActive) return;
   if(Date.now() < segTrCardManualMuteUntil) return; // أُسكتت يدوياً منذ قليل — لا تُعاد فوراً
   segTrCardAlarmActive = true;
+  // تُجمَّد الجملة هنا فقط، لحظة انطلاق هذا الإنذار بالذات (segTrCardAlarmDepartStation/DistM محدَّثتان بالفعل من renderSegmentTrainsList قبل هذا الاستدعاء مباشرة)
+  const station = segTrCardAlarmDepartStation || 'المحطة السابقة';
+  const distTxt = (segTrCardAlarmDistM!=null && isFinite(segTrCardAlarmDistM)) ? kz_distanceSpokenText(segTrCardAlarmDistM) : 'مسافة غير معروفة';
+  segTrCardFrozenPhrase = 'يا صاحب السعادة، انتباه، القطار غادر محطة ' + station + ' قبل موقعك، وهو الآن على بعد تقريبي ' + distTxt + ' منك';
   const banner = document.getElementById('segTrCardAlarmBanner');
   const card = document.getElementById('segmentTrainsCard');
   if(banner) banner.style.display='block';
@@ -5361,6 +5388,7 @@ function segTrCardAlarm_start(){
 function segTrCardAlarm_stop(){
   if(!segTrCardAlarmActive) return;
   segTrCardAlarmActive = false;
+  segTrCardFrozenPhrase = null; // يُعاد تجميدها من جديد عند الحلقة التالية فقط
   segTrCardCycleToken++; // يُبطل أي خطوة معلَّقة (صفارة قادمة أو انتظار دقيقتين) من الدورة الحالية
   if(segTrCardCycleTimer){ clearTimeout(segTrCardCycleTimer); segTrCardCycleTimer=null; }
   if(segTrCardCurrentBeepFinish){ try{ segTrCardCurrentBeepFinish(); }catch(e){} segTrCardCurrentBeepFinish=null; }
@@ -5404,16 +5432,15 @@ function segTrCardBeepP(durationMs){
 // (قطار على بعد ≤150م) أهم من إعلان روتيني — الآن فوق الإعلانات الروتينية (95) ودون إنذارات خطر الموت الفوري (100)
 function segTrCardSpeakP(text){
   return new Promise(function(resolve){
-    window.__qtSpeak(text, {priority:96, rate:0.92, onend:resolve, onerror:resolve});
+    // طلب المستخدم بالحرف: بلا أي بحث عن صوت عبر speechSynthesis.getVoices() (يختلف توفّره من جهاز لآخر ويُعطي نتيجة
+    // غير ثابتة) — فقط نغمة/سرعة ثابتتان (رقمان مكتوبان مباشرة هنا) تعملان بنفس الشكل على أي هاتف كان
+    window.__qtSpeak(text, {priority:96, rate:0.92, pitch:0.9, onend:resolve, onerror:resolve});
   });
 }
-// طلب المستخدم بالحرف: "القطار غادر المحطة قبل موقعك، وهو على بعد X كم منك" — المحطة والمسافة تُقرآن من
-// آخر قيمة محدَّثة فعلياً في renderSegmentTrainsList (segTrCardAlarmDepartStation/DistM)، فتبقى الجملة صحيحة
-// عند كل تكرار للدورة حتى لو تغيّرت المسافة بين مرة وأخرى
+// طلب المستخدم بالحرف: الجملة الآن ثابتة (en dur) طوال حلقة الرنين الواحدة — تُقرأ من segTrCardFrozenPhrase المجمَّدة
+// عند segTrCardAlarm_start فقط، ولا تتغيّر بعدها إطلاقاً مهما تحدّثت المحطة/المسافة، لتفادي أي انقطاع في منتصف الكلام
 function segTrCardPhraseText(){
-  const station = segTrCardAlarmDepartStation || 'المحطة السابقة';
-  const distTxt = (segTrCardAlarmDistM!=null && isFinite(segTrCardAlarmDistM)) ? kz_distanceSpokenText(segTrCardAlarmDistM) : 'مسافة غير معروفة';
-  return 'انتباه، القطار غادر محطة ' + station + ' قبل موقعك، وهو الآن على بعد تقريبي ' + distTxt + ' منك';
+  return segTrCardFrozenPhrase || 'يا صاحب السعادة، انتباه، القطار غادر المحطة السابقة قبل موقعك';
 }
 // الدورة الكاملة: صفارة، جملة، صفارة، جملة، ثم تكرار فوري بلا أي صمت بينهما — تستمر بلا توقف طالما الخطر قائماً،
 // ولا تتوقف إلا يدوياً عبر زر الإيقاف (dismissSegTrCardAlarm) أو خروج القطار عن نطاق الخطر
@@ -5654,8 +5681,13 @@ function renderSegmentTrainsList(nameA, nameB, userPos, impactNameA, impactNameB
     }
   }
   // توقيت الالتقاء الأقرب الآن للشارة الكبيرة
+  // إصلاح: timedOnly[0] وحده كان يختار أصغر impactTimeMs رقمياً بصرف النظر إن كان ماضياً أو مستقبلاً، فتبقى
+  // الشارة عالقة على قطار مرّ من زمان بدل الانتقال فوراً للقطار القادم التالي الظاهر أسفل القائمة. الآن: نُفضّل
+  // دوماً أقرب توقيت لم يمرّ بعد (مستقبلي)، ولا نعود لأحدث توقيت ماضٍ إلا إن لم يوجد أي قطار مستقبلي إطلاقاً
   const timedOnly = list.filter(e=>e.impactTimeMs!=null);
-  segTrCardNearestImpactMs = timedOnly.length ? timedOnly[0].impactTimeMs : null;
+  const futureTimed = timedOnly.filter(e=>e.impactTimeMs>=now);
+  const chosenImpact = futureTimed.length ? futureTimed[0] : (timedOnly.length ? timedOnly[timedOnly.length-1] : null);
+  segTrCardNearestImpactMs = chosenImpact ? chosenImpact.impactTimeMs : null;
   segTrCardNearestImpactConfirmed = list.length>0; // كل ما في هذه القائمة مرصود فعلياً عبر SNCFT Live بالتعريف
   updateSegTrCardImpactBadge();
   // طلب المستخدم بالحرف: موقع رمز المشي 🧍 على الخط الأزرق يُحسب حسب "الهوراير" — أي توقيت وصول القطار الحقيقي (curFr/nextFr
@@ -7239,7 +7271,8 @@ function recalcAndDisplay(){
     const dayTxt = isTomorrow ? ' — غداً' : ' — اليوم';
     if(minsLeft <= 15){ safeEl.textContent = '⚠️ قطار خلال '+formatHoursMinutes(minsLeft)+' عند '+nearSt.name+' (الساعة '+nextT.stationTime+dayTxt+')'; safeEl.style.color='#ff8888'; }
     else { safeEl.textContent = formatHoursMinutes(minsLeft)+' (قطار '+nextT.train.name.split('—')[0].trim()+' عند '+nearSt.name+' الساعة '+nextT.stationTime+dayTxt+')'; safeEl.style.color='#7ee787'; }
-  } else { safeEl.textContent = '--'; safeEl.style.color=''; }
+    checkRailTheoAlarm(result.trackInfo, nextT, minsLeft, nearSt && nearSt.name);
+  } else { safeEl.textContent = '--'; safeEl.style.color=''; checkRailTheoAlarm(null, null, null, null); }
   updateGauge(result.risk);
   updateTrainMarker(result.trainPos, result.trainId);
   // القطار الأقرب حسب كامل بيانات SNCFT Live (حتى لو لم يكن له وجود في الجدول النظري) — يُعرض بالتوازي بلون أزرق، لا يُخفي القطار الأحمر الأصلي أبداً
@@ -7712,6 +7745,14 @@ window.dismissLiveAlarm=function(){
 // الموجودتين أصلاً — بلا أي علاقة بالإنذارين الآخرين (لا يقرأ ولا يعدّل متغيّراتهما).
 // ================================================================================================
 let segAlarmActive=false, segSirenOsc=null;
+// ================================================================================================
+// ---------- إنذار جديد مستقل تماماً بطلب صريح من المستخدم: "قرب السكة + دقيقتان قبل الموعد النظري" ----------
+// المبدأ: لا علاقة له بمسافة القطار من المستخدم (خلافاً للإنذار الرئيسي) — يعتمد فقط على: (1) مسافة المستخدم
+// نفسه من أقرب سكة حديدية (قياس هندسي، نفس trackInfo.dist المستعمل أصلاً في اللوحة) ≤150م، (2) الوقت المتبقي
+// حتى أقرب قطار في الجدول النظري عند أقرب محطة مستعملة لموقعه (نفس nextT/minsLeft المستعملين أصلاً في "منطقة آمنة
+// لمدة") ≤3 دقائق. الإنذار الرئيسي القديم (triggerAlert) يبقى بلا أي تعديل كما طلب المستخدم صراحة.
+// ================================================================================================
+let railTheoAlarmActive=false, railTheoSirenOsc=null;
 // تتبّع "منذ متى نراقب هذا القطار بالمنظار" — محلياً فقط (SNCFT Live لا يوفر أي توقيت رصد داخل بياناته نفسها)
 // المفتاح رقم القطار؛ القيمة: آخر محطة مؤكدة رأيناها له + وقت أول رصد لهذه المحطة بالذات (يُعاد الاحتساب إن انتقل القطار لمحطة تالية)
 let binocularSeenSince = {};
@@ -8081,6 +8122,78 @@ window.dismissSegAlarm=function(){
   if(segAlarmActive){
     if(navigator.vibrate) navigator.vibrate([80,40,80]);
     updateSegAlarmGraceStatusText();
+    return;
+  }
+};
+// نغمة مختلفة عن الثلاث الأخرى (مربّعة الشكل square، ترددات مختلفة) لتمييزها صوتياً لو رنّت مع غيرها معاً
+function startRailTheoSiren(){
+  if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+  if(audioCtx.state==='suspended'){ audioCtx.resume(); }
+  if(railTheoSirenOsc) return;
+  railTheoSirenOsc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  railTheoSirenOsc.type='square';
+  gain.gain.value=0.5;
+  railTheoSirenOsc.connect(gain).connect(audioCtx.destination);
+  railTheoSirenOsc.start();
+  railTheoSirenOsc._sweep = setInterval(()=>{
+    if(audioCtx.state==='suspended'){ audioCtx.resume(); }
+    const t=audioCtx.currentTime;
+    railTheoSirenOsc.frequency.setValueAtTime(500,t);
+    railTheoSirenOsc.frequency.linearRampToValueAtTime(950,t+0.3);
+    railTheoSirenOsc.frequency.linearRampToValueAtTime(500,t+0.6);
+  },700);
+}
+function stopRailTheoSiren(){
+  if(railTheoSirenOsc){
+    if(railTheoSirenOsc._sweep) clearInterval(railTheoSirenOsc._sweep);
+    try{ railTheoSirenOsc.stop(); }catch(e){}
+    railTheoSirenOsc.disconnect();
+    railTheoSirenOsc=null;
+  }
+}
+function triggerRailTheoAlarm(distTrack, minsLeft, stationName){
+  railTheoAlarmActive = true;
+  const el = document.getElementById('railTheoAlarmBanner'); if(el) el.style.display='flex';
+  const textEl = document.getElementById('railTheoAlarmText');
+  const distTxt = isFinite(distTrack) ? Math.round(distTrack) : '--';
+  const minsTxt = isFinite(minsLeft) ? Math.max(0,Math.round(minsLeft)) : '--';
+  if(textEl) textEl.innerHTML = 'أنت على بعد '+distTxt+' متر فقط من السكة، وحسب الجدول النظري قطار عند محطة "'+(stationName||'--')+'" خلال '+minsTxt+' دقيقة تقريباً!';
+  startRailTheoSiren();
+  window.__qtSpeak('انتباه، أنت قريب جداً من السكة الحديدية، والجدول النظري يشير إلى قطار خلال دقائق قليلة. ابتعد عن المسار الآن', {rate:0.85, pitch:0.7, priority:99});
+  if(navigator.vibrate) navigator.vibrate([250,100,250,100,250,100,600]);
+}
+function updateRailTheoStatusText(distTrack, minsLeft){
+  const el = document.getElementById('railTheoAlarmGraceStatus');
+  if(!el || !railTheoAlarmActive) return;
+  const distTxt = isFinite(distTrack) ? Math.round(distTrack) : '--';
+  const minsTxt = isFinite(minsLeft) ? Math.max(0,Math.round(minsLeft)) : '--';
+  el.textContent = '🔒 لا تزال ضمن 150م من السكة (حالياً '+distTxt+'م) وضمن 3 دقائق من الموعد النظري (تبقّى '+minsTxt+' د) — سيتوقف الإنذار تلقائياً بزوال أحد الشرطين.';
+}
+function forceStopRailTheoAlarm(){
+  railTheoAlarmActive=false;
+  const el = document.getElementById('railTheoAlarmBanner'); if(el) el.style.display='none';
+  stopRailTheoSiren();
+  const gEl = document.getElementById('railTheoAlarmGraceStatus'); if(gEl) gEl.textContent='';
+}
+// يُستدعى من recalcAndDisplay في كل دورة مع نفس trackInfo/nextT/minsLeft المحسوبتين هناك أصلاً — بلا أي حساب مكرر
+function checkRailTheoAlarm(trackInfo, nextT, minsLeft, stationName){
+  const nearRail = !!(trackInfo && isFinite(trackInfo.dist) && trackInfo.dist<=150);
+  const withinTheo = !!(nextT && minsLeft!=null && isFinite(minsLeft) && minsLeft<=3 && minsLeft>=-1);
+  if(nearRail && withinTheo){
+    if(!railTheoAlarmActive){
+      if(!isProximityAlertMuted()) triggerRailTheoAlarm(trackInfo.dist, minsLeft, stationName);
+      else if(typeof fallbackMutedVibration==='function') fallbackMutedVibration();
+    } else {
+      updateRailTheoStatusText(trackInfo.dist, minsLeft);
+    }
+  } else if(railTheoAlarmActive){
+    forceStopRailTheoAlarm();
+  }
+}
+window.dismissRailTheoAlarm=function(){
+  if(railTheoAlarmActive){
+    if(navigator.vibrate) navigator.vibrate([80,40,80]);
     return;
   }
 };
@@ -12421,7 +12534,9 @@ window.__frhOuterAlarmsActive = function(){
     (typeof alertActive !== 'undefined' && alertActive) ||
     (typeof liveAlarmActive !== 'undefined' && liveAlarmActive) ||
     (typeof kzAlarmActive !== 'undefined' && kzAlarmActive) ||
-    (typeof kzLAlarmActive !== 'undefined' && kzLAlarmActive)
+    (typeof kzLAlarmActive !== 'undefined' && kzLAlarmActive) ||
+    (typeof segTrCardAlarmActive !== 'undefined' && segTrCardAlarmActive) || // إنذار بطاقة "القطارات المارة بمقطعك الحالي" — كان ناقصاً هنا فلا يُحمرّ فرحوم عند رنينها
+    (typeof railTheoAlarmActive !== 'undefined' && railTheoAlarmActive) // إنذار "قرب السكة + الموعد النظري" الجديد
   );
 };
 
@@ -12711,6 +12826,7 @@ document.getElementById('toggleStationsBtn').click(); // نعرض كل المح�
       return v || null;
     }catch(e){ return null; }
   }
+  window.frhPickArabicVoice = frhPickArabicVoice; // بطلب المستخدم: إتاحتها خارج هذا الـ IIFE لكي تستعملها بطاقة "القطارات المارة بمقطعك الحالي" فتتكلم بصوت فرحوم نفسه دون تكرار الكود
 
   // طلب المستخدم: صوت فرحوم كان يتوقف عن الكلام كلياً أحياناً — السبب أن هذه الدالة كانت تنادي
   // window.speechSynthesis.cancel() مباشرةً بمعزل عن كل الوحدات الأخرى في التطبيق (الإعلان، الإنذارات...)،
