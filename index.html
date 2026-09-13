@@ -7315,9 +7315,11 @@ function recalcAndDisplay(){
   lastRisk = result.risk;
   // كل وحدة تُنبِّه بمفردها: يكفي أن تتجاوز وحدة واحدة فقط من الأربع نسبة 80% لتنطلق صفارة الخطر — أفضل تنبيه خاطئ من قطار يدهسك
   // إلا إذا أوقف المستخدم تنبيه الاقتراب مؤقتاً بنفسه (بعد تأكيد صريح للمخاطرة) — عندها لا تنطلق الصفارة إطلاقاً حتى تنتهي المدة المختارة تلقائياً
-  const dangerousModules = (result.modules||[]).filter(m=>!!m.trainId);
+  // إصلاح: الفلتر كان يقبل أي وحدة لديها trainId بغض النظر عن نسبة الخطر (حتى 0%)، ما يُفسِّر إنذارات لقطارات على بُعد عشرات الكيلومترات — الآن يُشترط فعلياً risk>=80 كما ينص التعليق أعلاه
+  const dangerousModules = (result.modules||[]).filter(m=>!!m.trainId && m.risk>=80);
   // بطلب صريح من المستخدم: الأقرب "نظرياً" (الجدول+التأخير) يُشغِّل الإنذار أيضاً بمفرده حتى بلا أي تأكيد SNCFT Live — لا يُخفى بعد الآن خلف اشتراط التأكيد
-  if(result.theoBest && result.theoBest.trainId){
+  // إصلاح: نفس شرط risk>=80 المستعمل لبقية الوحدات — theoBest.risk محسوب أصلاً بدقة من المسافة الحقيقية (1 - dist/150)×100
+  if(result.theoBest && result.theoBest.trainId && result.theoBest.risk>=80){
     dangerousModules.push(result.theoBest);
   }
   // بطلب صريح من المستخدم: لا تنطلق صفارة الخطر الرئيسية إلا إذا كان المستخدم نفسه أيضاً على بُعد ≤150م من أقرب سكة حديدية فعلية
@@ -7463,8 +7465,12 @@ function stopMainAlarmTicker(){
 }
 function mainAlarmTick(){
   if(!alertActive) return;
+  // إصلاح: إعادة حساب المسافة فوراً كل ثانية (بدل الاكتفاء بقيمة مخزَّنة قد تكون قديمة) لضمان تطابق
+  // الرقم المعروض هنا (📍) مع رقم "🔒 القطار الآن على بعد" في updateAlarmGraceStatusText — كلاهما يجب أن يعكس نفس القطار المقفول في نفس اللحظة
+  if(alarmLockTrain) alarmLockedTrainDistance();
   const dEl = document.getElementById('alertDistance');
   if(dEl) dEl.textContent = isFinite(mainAlarmCurrentDist) ? ('📍 القطار على بعد '+formatDist(mainAlarmCurrentDist)+' منك الآن') : '';
+  if(alarmLockTrain) updateAlarmGraceStatusText(); // نفس اللحظة، نفس المصدر — يمنع أي تباعد بين الرقمين لاحقاً
   const cEl = document.getElementById('alertCountdown');
   const ov = document.getElementById('alertOverlay');
   let remainSec = null;
