@@ -7052,6 +7052,125 @@ function updateTheoHero(theoBest){
   detailEl.textContent = 'بين "'+(theoBest.fromStation||'--')+'" و"'+(theoBest.toStation||'--')+'" — المسافة: '+formatDist(theoBest.dist)+' — '+(theoBest.status||'');
   if(dotEl) dotEl.className = 'theoHero-dot ' + (theoBest.risk>=50 ? 'late' : 'live');
 }
+// ================================================================================================
+// Redendentia — طلب المستخدم بالحرف: تتبّع القطار المُقفَل بشكل دائم عبر خط الزمن (kzLockedTrain — يبقى مقفلاً باستمرار،
+// يتحرر فقط بعد تأكيد SNCFT Live لوصوله ثم مهلة سماح)، وليس عبر قفل الإنذار الرئيسي (alarmLockTrain) الذي لا يُفعَّل إلا
+// أثناء خطر فعلي مؤكَّد — إذ لا توجد عملياً حالة "بلا أي قطار مُتابَع". تُعاد نفس عملية حساب الإنذار
+// (نفس الشرط المزدوج: مسافة ≤150م وزمن وصول تقديري ≤3د) لكن بدل موقعك الحقيقي (lastPos)، على كل محطة/موقف متبقٍّ من مسار
+// هذا القطار بعينه — "استقراء" موقعك افتراضياً على كل محطة تباعاً، محطة محطة. عرض فقط، بلا صوت/اهتزاز إطلاقاً.
+// تُستدعى حيّة في كل دورة recalcAndDisplay (كل ثانيتين).
+// ================================================================================================
+// نفس منطق كل وحدة إنذار مستقلة حقيقية في التطبيق (corr_/theoNC_/theoAny_) مطبَّقاً على القطار المُقفَل بعينه عند نقطة/زمن محطة معيَّنة،
+// بدل البحث عن "الأقرب بين كل القطارات" كما تفعل الوحدات الحقيقية في وقتها الحي — هنا نريد فقط: هل هذا القطار بالذات كان سيُطلق
+// هذه الوحدة تحديداً لو كنت واقفاً عند هذه المحطة في هذه اللحظة؟ نفس عتبة المسافة (150م) ونفس نافذة الزمن (≤3د) المعتمدتين فعلياً
+// في corr_/theoNC_/theoAny_ الحقيقية (انظر CORR_SEUIL_M/THEONC_SEUIL_DEMARRAGE_M/THEOANY_SEUIL_DEMARRAGE_M وTEMPS_MAX_MIN المقابلة)
+function redendentia_evalModulesAtStop(train, stop, dist, estMin){
+  const confirmed = isTrainLiveConfirmed(train);
+  const distOk = isFinite(dist) && dist<=150;
+  const timeOk = estMin!=null && estMin<=3 && estMin>=-1;
+  const mods = [];
+  if(confirmed && distOk && timeOk) mods.push({key:'main', icon:'🔴', label:'الرئيسية/مصحَّح مؤكَّد'});
+  if(!confirmed && distOk && timeOk) mods.push({key:'theoNC', icon:'🟣', label:'نظري غير مؤكَّد'});
+  if(distOk && timeOk) mods.push({key:'theoAny', icon:'🟠', label:'نظري (مؤكَّد أو لا)'});
+  return mods;
+}
+function redendentia_render(){
+  const card = document.getElementById('redendentiaCard');
+  const labelEl = document.getElementById('redendentiaTrainLabel');
+  const lineEl = document.getElementById('redendentiaLine');
+  if(!card || !lineEl) return;
+  if(!kzLockedTrain){ card.style.display='none'; lineEl.innerHTML=''; return; }
+  const train = kzLockedTrain;
+  // طلب المستخدم بالحرف: كل المحطات — بما فيها المحطات الصغيرة/الوسيطة/الموقف البسيط — لا فقط المحطات الرسمية
+  // المذكورة في جدول التوقيت الثابت (stopsText). المصدر الحقيقي الكامل هو نفسه المستعمل في بطاقة "القطارات المارة
+  // بمقطعك" (details.php عبر fetchTrainDetails/trainDetailsCache) — يُرجع كل توقّف فعلي لهذا القطار بعينه، حتى بلا
+  // توقيت مبرمج رسمي. نستعمله إن كان متاحاً، ونعود احتياطياً للجدول الثابت فقط إن لم يتوفر بعد.
+  const liveMatch = (typeof liveTrains!=='undefined') ? liveTrains.find(lt=> lt && lt.id && trainNumberMatches(train.name, lt.num)) : null;
+  if(liveMatch && liveMatch.id) fetchTrainDetails(liveMatch.id); // غير معطِّل — يُسخِّن الذاكرة المؤقتة لدورة العرض القادمة
+  const liveCached = (liveMatch && liveMatch.id) ? trainDetailsCache[liveMatch.id] : null;
+  let allStops;
+  if(liveCached && liveCached.stops && liveCached.stops.length>=2){
+    allStops = liveCached.stops.map(s=>{
+      const coord = coordForStationName(s.name);
+      const timeTxt = s.forecast || s.plan || s.actual;
+      return coord && timeTxt ? {name:s.name, time:timeTxt, lat:coord[0], lon:coord[1], liveTiming:true} : null;
+    }).filter(Boolean);
+  }
+  if(!allStops || allStops.length<2){
+    allStops = parseStops(train.stopsText).filter(s=>!s.unknown && s.time);
+  }
+  if(allStops.length<2){ card.style.display='none'; return; }
+  card.style.display='block';
+  labelEl.textContent = '🚆 '+train.name;
+  const trainPos = trainPositionNow(train); // الموقع الحقيقي الحالي للقطار (مصحَّح بالتأخير الحي إن وُجد)
+  // طلب المستخدم بالحرف: كامل الخط من أول محطة إلى آخر محطة في مسار هذا القطار، دوماً — وليس فقط ما تبقى من الآن
+  const remaining = allStops;
+  const nowMs = Date.now();
+  const n = remaining.length;
+  // توقيت liveCached (forecast/plan) مُحدَّث فعلياً بالتأخير الحقيقي أصلاً — لا داعي لإضافة delayMin يدوياً فوقه؛
+  // الجدول الثابت وحده يحتاج هذه الإضافة اليدوية
+  const delayMin = isTrainLiveConfirmed(train) ? (getLiveDelayForTrain(train)||0) : 0;
+  let curIdx = -1;
+  let html = remaining.map((stop,i)=>{
+    const passageDate = todayAt(stop.time);
+    if(!stop.liveTiming) passageDate.setMinutes(passageDate.getMinutes()+delayMin);
+    const estMin = (passageDate.getTime()-nowMs)/60000;
+    const dist = trainPos ? haversine([stop.lat,stop.lon],[trainPos.lat,trainPos.lon]) : Infinity;
+    const isCurrent = (trainPos && trainPos.toStation===stop.name);
+    if(isCurrent) curIdx = i;
+    const timeTxt = passageDate.toTimeString().slice(0,5);
+    const mods = redendentia_evalModulesAtStop(train, stop, dist, estMin);
+    const posPct = (i/(n-1))*100;
+    const dotColor = isCurrent ? '#ffd700' : (mods.length ? '#ff4444' : '#1e90ff');
+    const badgesHtml = mods.length ? '<div style="font-size:11px;margin-top:1px;">'+mods.map(m=>m.icon).join(' ')+'</div>' : '';
+    return '<div style="position:absolute;top:0;right:'+posPct+'%;transform:translateX(50%);text-align:center;white-space:nowrap;">'
+      + '<div style="width:9px;height:9px;border-radius:50%;margin:0 auto;background:'+dotColor+';'+(isCurrent?'box-shadow:0 0 6px #ffd700;':(mods.length?'box-shadow:0 0 6px #ff4444;':''))+'"></div>'
+      + '<div style="font-size:9px;margin-top:3px;max-width:64px;overflow:hidden;text-overflow:ellipsis;'+(isCurrent?'color:#ffd700;font-weight:800;':'color:#bfe3ff;')+'">'+stop.name+'</div>'
+      + '<div style="font-size:9px;'+(isCurrent?'color:#ffd700;':'color:#8f96b8;')+'">'+timeTxt+'</div>'
+      + badgesHtml
+      + '</div>';
+  }).join('')
+  // الخط المتقطع الأزرق نفسه (نفس شكل segTrCardLineStops)
+  + '<div style="position:absolute;left:0;right:0;top:4px;height:5px;margin-top:-2.5px;background:repeating-linear-gradient(90deg,#1e90ff 0 8px, transparent 8px 14px);border-radius:4px;z-index:-1;"></div>';
+  // موضع القطار الحقيقي الحالي على الخط (استيفاء بين المحطة الحالية والتالية بنسبة الزمن المنقضي فعلياً)
+  if(curIdx>=0 && curIdx<n-1){
+    const curS=remaining[curIdx], nextS=remaining[curIdx+1];
+    const tCurMs = todayAt(curS.time).getTime()+(curS.liveTiming?0:delayMin*60000);
+    let tNextMs = todayAt(nextS.time).getTime()+(nextS.liveTiming?0:delayMin*60000);
+    if(tNextMs<tCurMs) tNextMs += 24*3600000;
+    const span = tNextMs-tCurMs;
+    const frac = span>0 ? Math.min(1,Math.max(0,(nowMs-tCurMs)/span)) : 0;
+    const posA=(curIdx/(n-1))*100, posB=((curIdx+1)/(n-1))*100;
+    const trainPct = posA+frac*(posB-posA);
+    html += '<div style="position:absolute;top:-16px;right:'+trainPct+'%;transform:translateX(50%);font-size:16px;line-height:1;">🚂💨</div>';
+  }
+  lineEl.style.width = '100%'; // الخط كله من أول محطة لآخر محطة يملأ عرض البطاقة كاملاً، بلا تمرير أفقي
+  lineEl.innerHTML = html;
+
+  // طلب المستخدم بالحرف: "compte rendu en continu" — نفس بيانات كل محطة (الاسم/الوقت/الإنذارات) لكن في شكل تقرير
+  // نصي متتابع تحت الخط، محدَّث حيّة في كل دورة عرض (كل ثانيتين)، وليس تقريراً لمرة واحدة
+  const reportEl = document.getElementById('redendentiaReport');
+  if(reportEl){
+    const rows = remaining.map((stop,i)=>{
+      const passageDate = todayAt(stop.time);
+      if(!stop.liveTiming) passageDate.setMinutes(passageDate.getMinutes()+delayMin);
+      const estMin = (passageDate.getTime()-nowMs)/60000;
+      const dist = trainPos ? haversine([stop.lat,stop.lon],[trainPos.lat,trainPos.lon]) : Infinity;
+      const isCurrent = (trainPos && trainPos.toStation===stop.name);
+      const timeTxt = passageDate.toTimeString().slice(0,5);
+      const mods = redendentia_evalModulesAtStop(train, stop, dist, estMin);
+      const distTxt = isFinite(dist) ? Math.round(dist)+' م' : '--';
+      const statusTxt = mods.length ? mods.map(m=>m.icon+' '+m.label).join('، ') : '🟢 لا إنذار';
+      const rowColor = isCurrent ? '#ffd700' : (mods.length ? '#ff8888' : '#bfe3ff');
+      return '<div style="display:flex;justify-content:space-between;gap:8px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.06);color:'+rowColor+';">'
+        + '<span>'+(isCurrent?'📍 ':'')+stop.name+'</span>'
+        + '<span style="color:#8f96b8;">'+timeTxt+' — '+distTxt+'</span>'
+        + '<span>'+statusTxt+'</span>'
+        + '</div>';
+    }).join('');
+    reportEl.innerHTML = '<div style="color:#ffd27f;font-weight:700;margin-bottom:4px;">📋 تقرير حي — آخر تحديث: '+new Date(nowMs).toTimeString().slice(0,8)+'</div>' + rows;
+  }
+}
 function recalcAndDisplay(){
   if(!lastPos) return;
   const result = computeRisk(lastPos);
@@ -7060,6 +7179,7 @@ function recalcAndDisplay(){
   // إلى استدعاء ann_announceUpcomingTrains() في آخر الدالة. الحل: نستدعيها هنا مباشرة وبمعزل تام (try/catch خاص بها)
   // بمجرد حساب النتيجة الأساسية، حتى لا يمنعها أي عطل لاحق في أي وحدة أخرى من التطبيق مهما كان.
   try{ ann_announceUpcomingTrains(); }catch(e){ console.error('ann_announceUpcomingTrains a échoué:', e); }
+  try{ redendentia_render(); }catch(e){ console.error('redendentia_render a échoué:', e); }
   updateTheoHero(result.theoBest);
   // القطار الأقرب (بالاعتماد على موقعه الحقيقي المُقدّر من التوقيت) — لا يُعرض هنا إلا قطار مؤكد عبر SNCFT Live، أبداً قطار شبح مبني على الجدول فقط
   document.getElementById('nearLine').textContent = isFinite(result.dist) ? result.lineName+' — 🕒 آخر تحديث: '+liveRefreshTimeText()
@@ -7451,6 +7571,7 @@ function forceStopAlarm(){
   lockConfirmTrainId=null; lockConfirmCount=0; // تصفير عدّاد تأكيد القفل لحدث الإنذار القادم
   alarmMinDistSeen = Infinity;
   const el = document.getElementById('alertGraceStatus'); if(el) el.textContent='';
+  try{ redendentia_render(); }catch(e){} // إخفاء بطاقة ريدنديا فوراً دون انتظار الدورة القادمة
 }
 // ---------- عدّاد/بيب/تصعيد الإنذار الرئيسي (alertOverlay) — يعمل كل ثانية طالما الإنذار نشط ----------
 // مستقل تماماً عن صفارة الخطر (sirenOsc) وعن عدّاد خط الزمن (kz_/countdownOverlay) — لا يوقف أحدهما الآخر ولا يتأثر به.
@@ -10522,7 +10643,7 @@ function stopKeepAlive(){
 // حتى لو كانت هناك نسخة أحدث متاحة، فيبدو للمستخدم أن أي تعديل/إصلاح "لا يعمل" رغم أنه فعلاً مُطبَّق في الملف.
 if('serviceWorker' in navigator){
   const swCode = `
-    const CACHE_NAME = 'qitari-shell-v3';
+    const CACHE_NAME = 'qitari-shell-v4';
     self.addEventListener('install', e => {
       self.skipWaiting();
       e.waitUntil(
@@ -13550,6 +13671,22 @@ document.getElementById('toggleStationsBtn').click(); // نعرض كل المح�
     <button type="button" class="btn danger" style="max-width:220px;margin:8px auto 0;" onclick="dismissSegTrCardAlarm()">🔇 إيقاف الإنذار (دقيقتان)</button>
   </div>
   <div id="segmentTrainsList" style="margin-top:4px;"></div>
+</div>
+
+<!-- طلب المستخدم بالحرف "Redendentia": طالما هناك قطار مُقفَل عبر خط الزمن (kzLockedTrain — يبقى مقفلاً باستمرار)، هذه البطاقة تعيد نفس حساب
+     الإنذارات المستقلة الحقيقية للتطبيق (الرئيسية/corr_/theoNC_/theoAny_) لكن بدل موقعك الحقيقي، على كل محطة/موقف متبقٍّ من مسار هذا القطار
+     بالذات، محطة محطة — بنفس شكل خط "القطارات المارة بمقطعك" (نقطة لكل محطة، الاسم والتوقيت تحتها). عرض فقط — بلا صوت ولا اهتزاز إطلاقاً. -->
+<div class="card" id="redendentiaCard" style="display:none;border-color:rgba(255,165,0,.4);">
+  <h3>🛡️ ريدنديا — تتبع القطار محطة بمحطة</h3>
+  <div id="redendentiaTrainLabel" style="font-size:13px;color:#ffd27f;margin-bottom:8px;font-weight:700;">--</div>
+  <div id="redendentiaVizBox" style="border-radius:14px;overflow:hidden;background:#03101f;padding:3vh 3vw;overflow-x:auto;">
+    <div id="redendentiaLine" style="position:relative;height:70px;"></div>
+  </div>
+  <div id="redendentiaLegend" style="font-size:11px;color:#8f96b8;margin-top:8px;text-align:center;">
+    🔴 الرئيسية/مصحَّح مؤكَّد — 🟣 نظري غير مؤكَّد — 🟠 نظري (مؤكَّد أو لا)
+  </div>
+  <!-- طلب المستخدم بالحرف: "compte rendu en continu" — تقرير نصي مستمر، يُحدَّث حيّة كل دورة، لكل محطة على حدة -->
+  <div id="redendentiaReport" style="margin-top:10px;font-size:12px;"></div>
 </div>
 
 <script>
