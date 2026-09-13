@@ -2942,8 +2942,13 @@ function terminatorExtrapolatedPosition(lt){
     const dest = destinationPoint(base.lat, base.lon, brg, distM);
     lat = dest[0]; lon = dest[1];
   }
-  const snapped = snapToNearestTrack(lat, lon, 3000);
-  return {lat:snapped.lat, lon:snapped.lon, fromStation:lt.curFr||'?', toStation:lt.nextFr||'?',
+  // بطلب صريح من المستخدم: الاستكمال يجب أن يبقى بالكامل على نظام RAIL_LINES نفسه (لا نظام قديم مختلف) —
+  // نحصل هنا أيضاً على رمز الخط (railCode) لمقارنته لاحقاً بخط المستخدم نفسه في checkTerminatorAlarm
+  const snapped = (typeof kz_nearestOnTrackRLPoint==='function' && typeof RAIL_LINES!=='undefined' && RAIL_LINES.length)
+    ? kz_nearestOnTrackRLPoint(lat, lon, 3000) : null;
+  const finalLat = snapped ? snapped.lat : lat, finalLon = snapped ? snapped.lon : lon;
+  return {lat:finalLat, lon:finalLon, railCode: snapped ? snapped.code : null,
+    fromStation:lt.curFr||'?', toStation:lt.nextFr||'?',
     delayMin:Number(lt.delay)||0, silentMinutes:Math.round(silentMs/60000), extrapolated:true};
 }
 function liveOnlyTrainPosition(lt){
@@ -8432,10 +8437,14 @@ function checkTerminatorAlarm(){
     if(!best || dist<best.dist) best = {lt, pos, dist};
   });
   // طلب صريح من المستخدم: القطار الشبح يجب أن يكون ضمن TERMINATOR_MAX_DIST_M (500م) منك ليُعتبر، بالإضافة لشرط القرب من السكة
-  const distTrackTerm = distanceToNearestTrack(lastPos[0], lastPos[1]);
-  const nearRailForTerminator = isFinite(distTrackTerm) && distTrackTerm<=RISK_THRESHOLD_M;
+  const userRailTerm = (typeof kz_nearestOnTrackRL==='function' && typeof RAIL_LINES!=='undefined' && RAIL_LINES.length)
+    ? kz_nearestOnTrackRL(lastPos) : null;
+  const nearRailForTerminator = !!(userRailTerm && isFinite(userRailTerm.dist) && userRailTerm.dist<=RISK_THRESHOLD_M);
+  // طلب صريح من المستخدم: لا يكفي أن يكون كل من موقعك والقطار الشبح قريبَين من "سكة ما" كل على حدة —
+  // يجب أن يكون كلاهما على نفس خط السكة بالذات (نفس code من RAIL_LINES)، وإلا فالإنذار بلا معنى فيزيائياً
+  const sameRailLineTerm = !!(best && best.pos.railCode && userRailTerm && best.pos.railCode===userRailTerm.code);
   const ghostWithinRange = !!(best && best.dist<=TERMINATOR_MAX_DIST_M);
-  if(ghostWithinRange && nearRailForTerminator){
+  if(ghostWithinRange && nearRailForTerminator && sameRailLineTerm){
     triggerTerminatorAlarm(best.lt, best.pos, best.dist);
   } else if(terminatorAlarmActive){
     forceStopTerminatorAlarm();
@@ -8695,6 +8704,27 @@ function kz_nearestOnTrackRL(userPos){
       }
     }
   });
+  return best;
+}
+// بطلب صريح من المستخدم: نفس kz_nearestOnTrackRL لكن تُرجع أيضاً الإحداثيات الفعلية للنقطة المسقَطة على السكة
+// (lat/lon) + رمز الخط (code) — تُستعمل لاستبدال snapToNearestTrack القديم (النظام القديم SNCFT_OFFICIAL_TRACKS/osmTracks)
+// في استكمال المُبيد/المُبيد الفائق، حتى يبقى الاستكمال بأكمله على نفس نظام RAIL_LINES الموحَّد من أوله لآخره
+function kz_nearestOnTrackRLPoint(lat, lon, maxDistM){
+  const pt = [lat, lon];
+  let best = null;
+  RAIL_LINES.forEach(line=>{
+    const pts = line.pts;
+    for(let i=0;i<pts.length-1;i++){
+      const t = projectT(pt, pts[i], pts[i+1]);
+      const px = pts[i][0] + (pts[i+1][0]-pts[i][0])*t, py = pts[i][1] + (pts[i+1][1]-pts[i][1])*t;
+      const d = haversineTN(pt, [px, py]);
+      if(best===null || d<best.dist){
+        best = {dist:d, lat:px, lon:py, code:line.code, name:line.name};
+      }
+    }
+  });
+  if(!best) return null;
+  if(maxDistM!=null && best.dist>maxDistM) return null;
   return best;
 }
 const KZ_TRACK_MATCH_MAX_ENDPOINT_M = 1500; // أقصى مسافة مقبولة بين المحطة وأقرب نقطة على الخط لاعتماد المطابقة
@@ -12423,8 +12453,12 @@ function checkPeacockHour(){
       const dest = destinationPoint(base.lat, base.lon, brg, distM);
       lat = dest[0]; lon = dest[1];
     }
-    const snapped = snapToNearestTrack(lat, lon, 3000);
-    return {lat:snapped.lat, lon:snapped.lon, fromStation:lt.curFr||'?', toStation:lt.nextFr||'?',
+    // بطلب صريح من المستخدم: نفس تصحيح المُبيد الأصلي — الاستكمال يبقى بالكامل على نظام RAIL_LINES نفسه
+    const snapped = (typeof kz_nearestOnTrackRLPoint==='function' && typeof RAIL_LINES!=='undefined' && RAIL_LINES.length)
+      ? kz_nearestOnTrackRLPoint(lat, lon, 3000) : null;
+    const finalLat = snapped ? snapped.lat : lat, finalLon = snapped ? snapped.lon : lon;
+    return {lat:finalLat, lon:finalLon, railCode: snapped ? snapped.code : null,
+      fromStation:lt.curFr||'?', toStation:lt.nextFr||'?',
       delayMin:Number(lt.delay)||0, silentMinutes:Math.round(silentMs/60000),
       speedUsedKmh:speedKmh, speedMesuree:(vitesseMesureeKmh!==null && vitesseMesureeKmh>0), extrapolated:true};
   }
@@ -12447,10 +12481,13 @@ function checkPeacockHour(){
       if(!best || dist<best.dist) best = {lt, pos, dist};
     });
     // طلب صريح من المستخدم: القطار الشبح يجب أن يكون ضمن TERMINATOR_MAX_DIST_M (500م) منك، بالإضافة لشرط القرب من السكة
-    const distTrackSuperTerm = distanceToNearestTrack(lastPos[0], lastPos[1]);
-    const nearRailForSuperTerminator = isFinite(distTrackSuperTerm) && distTrackSuperTerm<=RISK_THRESHOLD_M;
+    const userRailSuperTerm = (typeof kz_nearestOnTrackRL==='function' && typeof RAIL_LINES!=='undefined' && RAIL_LINES.length)
+      ? kz_nearestOnTrackRL(lastPos) : null;
+    const nearRailForSuperTerminator = !!(userRailSuperTerm && isFinite(userRailSuperTerm.dist) && userRailSuperTerm.dist<=RISK_THRESHOLD_M);
+    // طلب صريح من المستخدم: نفس شرط المُبيد الأصلي — يجب أن يكون كلاهما على نفس خط السكة بالذات (نفس code)
+    const sameRailLineSuperTerm = !!(best && best.pos.railCode && userRailSuperTerm && best.pos.railCode===userRailSuperTerm.code);
     const ghostWithinRangeSuperTerm = !!(best && best.dist<=TERMINATOR_MAX_DIST_M);
-    if(ghostWithinRangeSuperTerm && nearRailForSuperTerminator){
+    if(ghostWithinRangeSuperTerm && nearRailForSuperTerminator && sameRailLineSuperTerm){
       triggerSuperTerminatorAlarm(best.lt, best.pos, best.dist);
     } else if(superTermAlarmActive){
       forceStopSuperTerminatorAlarm();
