@@ -2030,6 +2030,8 @@ const SNCFT_OFFICIAL_TRACKS = [{"id":"sncft_1_0","name":"خط L 1","coords":[[36
 
 let wakeLock=null, audioCtx=null, sirenOsc=null, alertActive=false, lastRisk=0, lastPos=null;
 let statusNextTrainTargetTime=null; // وقت مرور القطار القادم عند أقرب محطة — لعرض عدّاد تنازلي حي بجانب "📡 الحالة"
+let statusAlarmTrain=null, statusAlarmToStation=null; // القطار/المحطة المستهدفان بإنذار "القطار خلال 3 دقائق" — يُحدَّثان مع كل حساب لأقرب قطار
+let statusAlarmConfirmedAt=null; // طلب المستخدم بالحرف: لا تتوقف إلا بعد تأكيد SNCFT Live لوصول القطار للمحطة التالية، ثم 30 دقيقة إضافية
 let kaAudioEl=null, kaWakeLockTimer=null;
 // طلب صريح من المستخدم: الإنذار الرئيسي (صفارة + نافذة الخطر) لا يجوز إيقافه — لا يدوياً ولا تلقائياً —
 // طالما القطار المسبِّب للإنذار لا يزال ضمن نطاق الخطر (150م). يُفكّ القفل ويُسمح بإيقاف الإنذار حين يتحقق
@@ -5290,6 +5292,56 @@ function updateStatusCountdown(){
   const s = remainSec%60;
   const pad = n=>String(n).padStart(2,'0');
   el.textContent = h>0 ? (pad(h)+':'+pad(m)+':'+pad(s)) : (pad(m)+':'+pad(s));
+  // طلب المستخدم بالحرف: يبدأ عند 3 دقائق قبل الوصول، ويستمر باستمرار (صفارة + تذكير صوتي كل 20 ثانية) —
+  // لا يتوقف عند تجاوز الوقت أو عند ظهور قطار تالٍ في العرض، بل فقط عبر checkStatusAlarmPostPassageGrace أدناه
+  if(remainSec<=180 && remainSec>0 && statusAlarmActiveFor===null){
+    statusStartThreeMinAlarm();
+  }
+}
+// إنذار مستقل تماماً لبطاقة "📡 الحالة" — صفارة مستمرة + اهتزاز + نداء صوتي متكرر + إبراز بصري، بلا أي علاقة بمنطق الإنذار الرئيسي
+let statusAlarmActiveFor = null; // القطار (كائن) الذي تعمل الصفارة من أجله حالياً — يمنع إعادة التشغيل كل ثانية ويُجمَّد حتى الإيقاف الكامل
+let statusAlarmReminderTimer = null;
+function statusStartThreeMinAlarm(){
+  const segEl = document.getElementById('segmentSafeInfo');
+  const summaryEl = document.getElementById('statusQuickSummary');
+  statusAlarmActiveFor = statusAlarmTrain || true; // قد يكون بلا قطار محدَّد (قطار شبح/غير مطابَق) — true كحدّ أدنى لمنع التكرار
+  statusAlarmConfirmedAt = null;
+  try{ unlockAudio(); startSiren(); }catch(e){}
+  if(navigator.vibrate) navigator.vibrate([300,150,300,150,300]);
+  try{ window.__qtSpeak('انتباه، القطار سيصل خلال أقل من ثلاث دقائق', {rate:0.9, pitch:0.8, priority:97}); }catch(e){}
+  [segEl, summaryEl].forEach(elx=>{ if(elx){ elx.style.animation = 'kzPulse .8s infinite'; } });
+  if(statusAlarmReminderTimer) clearInterval(statusAlarmReminderTimer);
+  statusAlarmReminderTimer = setInterval(()=>{
+    if(navigator.vibrate) navigator.vibrate([300,150,300]);
+    try{ window.__qtSpeak('القطار يقترب', {rate:0.9, pitch:0.8, priority:97}); }catch(e){}
+  }, 20000);
+}
+function statusStopThreeMinAlarm(){
+  if(statusAlarmActiveFor===null) return;
+  statusAlarmActiveFor = null;
+  statusAlarmConfirmedAt = null;
+  statusAlarmTrain = null; statusAlarmToStation = null;
+  try{ stopSiren(); }catch(e){}
+  if(statusAlarmReminderTimer){ clearInterval(statusAlarmReminderTimer); statusAlarmReminderTimer=null; }
+  const segEl = document.getElementById('segmentSafeInfo');
+  const summaryEl = document.getElementById('statusQuickSummary');
+  [segEl, summaryEl].forEach(elx=>{ if(elx){ elx.style.animation=''; } });
+}
+// طلب المستخدم بالحرف: "تتوقف 30 دقيقة بعد المرور وتأكيد SNCFT Live للمحطة التالية" — نفس مبدأ checkAlarmPostPassageGrace
+// تماماً لكن بمتغيّرات مستقلة خاصة ببطاقة "📡 الحالة". يُستدعى كل دورة recalcAndDisplay (كل ثانيتين)
+function checkStatusAlarmPostPassageGrace(){
+  if(statusAlarmActiveFor===null) return;
+  if(!statusAlarmTrain || !statusAlarmToStation){
+    // لا يوجد قطار محدَّد الهوية لتأكيد مروره (حالة نادرة) — احتياطاً: نوقف تلقائياً بعد وقت الوصول النظري + 30د لتفادي رنين أبدي
+    if(statusNextTrainTargetTime && Date.now()-statusNextTrainTargetTime >= ALARM_POST_PASSAGE_GRACE_MS) statusStopThreeMinAlarm();
+    return;
+  }
+  if(statusAlarmConfirmedAt===null && kz_liveShowsPassedStation(statusAlarmTrain, statusAlarmToStation)){
+    statusAlarmConfirmedAt = Date.now(); // لحظة تأكيد SNCFT Live أن القطار بلغ المحطة التالية فعلاً
+  }
+  if(statusAlarmConfirmedAt!==null && (Date.now()-statusAlarmConfirmedAt)>=ALARM_POST_PASSAGE_GRACE_MS){
+    statusStopThreeMinAlarm();
+  }
 }
 setInterval(updateStatusCountdown, 1000);
 function nearestStation(pos){
@@ -7089,22 +7141,47 @@ function redendentia_render(){
   if(liveMatch && liveMatch.id) fetchTrainDetails(liveMatch.id); // غير معطِّل — يُسخِّن الذاكرة المؤقتة لدورة العرض القادمة
   const liveCached = (liveMatch && liveMatch.id) ? trainDetailsCache[liveMatch.id] : null;
   let allStops;
+  // طلب المستخدم بالحرف: "le GPS de la gare doit se trouver sur les rails" — إحداثيات STATIONS الخام هي غالباً موقع
+  // مبنى المحطة نفسه، وقد ينحرف بضعة أمتار عن مسار السكة الفعلي. نُسقِط (snap) كل نقطة محطة على أقرب سكة حقيقية
+  // معروفة (نفس الدالة المستعملة أصلاً في باقي التطبيق: snapToNearestTrack) قبل أي حساب مسافة.
+  function redendentia_snapStop(s){
+    const snapped = snapToNearestTrack(s.lat, s.lon, 300);
+    return Object.assign({}, s, {lat:snapped.lat, lon:snapped.lon});
+  }
   if(liveCached && liveCached.stops && liveCached.stops.length>=2){
     allStops = liveCached.stops.map(s=>{
       const coord = coordForStationName(s.name);
       const timeTxt = s.forecast || s.plan || s.actual;
-      return coord && timeTxt ? {name:s.name, time:timeTxt, lat:coord[0], lon:coord[1], liveTiming:true} : null;
+      return coord && timeTxt ? redendentia_snapStop({name:s.name, time:timeTxt, lat:coord[0], lon:coord[1], liveTiming:true}) : null;
     }).filter(Boolean);
   }
   if(!allStops || allStops.length<2){
-    allStops = parseStops(train.stopsText).filter(s=>!s.unknown && s.time);
+    allStops = parseStops(train.stopsText).filter(s=>!s.unknown && s.time).map(redendentia_snapStop);
   }
   if(allStops.length<2){ card.style.display='none'; return; }
   card.style.display='block';
   labelEl.textContent = '🚆 '+train.name;
   const trainPos = trainPositionNow(train); // الموقع الحقيقي الحالي للقطار (مصحَّح بالتأخير الحي إن وُجد)
+  // طلب المستخدم بالحرف: "عين النسر" — نقطة تحقّق وسيطة إضافية بين كل محطتين متتاليتين، تُعامَل تماماً كأنها محطة
+  // (نفس فحص GPS-على-السكة، نفس تقييم الإنذارات الثلاثة) — منتصف الوقت والموقع بين المحطتين، مُسقَطة على السكة أيضاً
+  const augmented = [];
+  for(let i=0;i<allStops.length;i++){
+    augmented.push(allStops[i]);
+    if(i<allStops.length-1){
+      const a=allStops[i], b=allStops[i+1];
+      const tA = todayAt(a.time).getTime(), tB = todayAt(b.time).getTime();
+      const midMs = tA + (tB-tA)/2;
+      const midDate = new Date(midMs);
+      const midLatLon = snapToNearestTrack((a.lat+b.lat)/2, (a.lon+b.lon)/2, 300);
+      augmented.push({
+        name:'🦅 عين النسر', time: midDate.toTimeString().slice(0,5),
+        lat: midLatLon.lat, lon: midLatLon.lon,
+        liveTiming: !!(a.liveTiming && b.liveTiming), isEagle:true
+      });
+    }
+  }
   // طلب المستخدم بالحرف: كامل الخط من أول محطة إلى آخر محطة في مسار هذا القطار، دوماً — وليس فقط ما تبقى من الآن
-  const remaining = allStops;
+  const remaining = augmented;
   const nowMs = Date.now();
   const n = remaining.length;
   // توقيت liveCached (forecast/plan) مُحدَّث فعلياً بالتأخير الحقيقي أصلاً — لا داعي لإضافة delayMin يدوياً فوقه؛
@@ -7121,12 +7198,13 @@ function redendentia_render(){
     const timeTxt = passageDate.toTimeString().slice(0,5);
     const mods = redendentia_evalModulesAtStop(train, stop, dist, estMin);
     const posPct = (i/(n-1))*100;
-    const dotColor = isCurrent ? '#ffd700' : (mods.length ? '#ff4444' : '#1e90ff');
+    const dotColor = isCurrent ? '#ffd700' : (mods.length ? '#ff4444' : (stop.isEagle ? '#8f96b8' : '#1e90ff'));
     const badgesHtml = mods.length ? '<div style="font-size:11px;margin-top:1px;">'+mods.map(m=>m.icon).join(' ')+'</div>' : '';
-    return '<div style="position:absolute;top:0;right:'+posPct+'%;transform:translateX(50%);text-align:center;white-space:nowrap;">'
-      + '<div style="width:9px;height:9px;border-radius:50%;margin:0 auto;background:'+dotColor+';'+(isCurrent?'box-shadow:0 0 6px #ffd700;':(mods.length?'box-shadow:0 0 6px #ff4444;':''))+'"></div>'
-      + '<div style="font-size:9px;margin-top:3px;max-width:64px;overflow:hidden;text-overflow:ellipsis;'+(isCurrent?'color:#ffd700;font-weight:800;':'color:#bfe3ff;')+'">'+stop.name+'</div>'
-      + '<div style="font-size:9px;'+(isCurrent?'color:#ffd700;':'color:#8f96b8;')+'">'+timeTxt+'</div>'
+    const dotSize = stop.isEagle ? '6px' : '9px';
+    return '<div style="position:absolute;top:'+(stop.isEagle?'2px':'0')+';right:'+posPct+'%;transform:translateX(50%);text-align:center;white-space:nowrap;">'
+      + '<div style="width:'+dotSize+';height:'+dotSize+';border-radius:50%;margin:0 auto;background:'+dotColor+';'+(isCurrent?'box-shadow:0 0 6px #ffd700;':(mods.length?'box-shadow:0 0 6px #ff4444;':''))+'"></div>'
+      + '<div style="font-size:'+(stop.isEagle?'8px':'9px')+';margin-top:3px;max-width:64px;overflow:hidden;text-overflow:ellipsis;'+(isCurrent?'color:#ffd700;font-weight:800;':(stop.isEagle?'color:#8f96b8;':'color:#bfe3ff;'))+'">'+stop.name+'</div>'
+      + '<div style="font-size:8px;'+(isCurrent?'color:#ffd700;':'color:#8f96b8;')+'">'+timeTxt+'</div>'
       + badgesHtml
       + '</div>';
   }).join('')
@@ -7246,6 +7324,12 @@ function recalcAndDisplay(){
           const dayTxt = isTomorrow ? 'غداً' : 'اليوم';
           const isAlert = minsLeft <= 15;
           statusNextTrainTargetTime = nextSeg.time;
+          // لا نُحدِّث القطار/المحطة المستهدفَين بالإنذار طالما إنذار سابق لا يزال فعّالاً بانتظار تأكيد SNCFT Live —
+          // وإلا يُستبدَل القطار المقصود بآخر بمجرد مرور وقته، فيُفسِد شرط "30 دقيقة بعد التأكيد" الذي طلبه المستخدم
+          if(statusAlarmActiveFor===null){
+            statusAlarmTrain = nextSeg.train;
+            statusAlarmToStation = nextSeg.matchedStation;
+          }
           if(isAlert){
             segEl.style.color='#ff8888'; segEl.style.borderColor='#ff8888';
             segEl.textContent = '⚠️ قطار خلال '+formatHoursMinutes(minsLeft)+' — عند محطة '+nextSeg.matchedStation+' (الساعة '+nextSeg.stationTime+' '+dayTxt+')';
@@ -7491,6 +7575,7 @@ function recalcAndDisplay(){
   // عدم توقّفها أبداً بسبب أي عطل لاحق في هذه الدالة — أُزيل الاستدعاء المكرر من هنا لتفادي إعلانين في نفس الدورة.
   try{ checkAlarmPostPassageGrace(); }catch(e){ console.error('checkAlarmPostPassageGrace a échoué:', e); } // فحص شرط الـ30 دقيقة بعد تأكيد SNCFT Live لوصول القطار المسبِّب للإنذار — لا علاقة له بحساب أقرب قطار
   try{ checkLiveAlarmPostPassageGrace(); }catch(e){ console.error('checkLiveAlarmPostPassageGrace a échoué:', e); } // نفس الفحص لكن للإنذار المستقل الجديد (SNCFT Live فقط) — بمتغيّرات وحالة منفصلة تماماً
+  try{ checkStatusAlarmPostPassageGrace(); }catch(e){ console.error('checkStatusAlarmPostPassageGrace a échoué:', e); } // نفس مبدأ الـ30 دقيقة بعد التأكيد، لإنذار بطاقة "📡 الحالة" (3 دقائق قبل الوصول)
 }
 // يتحقق دورياً هل تجاوز القطار المسبِّب للإنذار محطته التالية فعلياً حسب SNCFT Live، ثم يحتسب 30 دقيقة من تلك اللحظة قبل السماح بإيقاف الإنذار تلقائياً.
 // لا يغيّر أي شيء في حساب "أقرب قطار" لبقية الوحدات — يستعمل فقط دالة الفحص الموجودة أصلاً (kz_liveShowsPassedStation) دون تعديلها.
