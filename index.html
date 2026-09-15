@@ -346,7 +346,9 @@ body{
 
    إن اقترب تقديرياً منك. لافتة سفلية بلون أحمر/أسود معدني مميّز، ونغمة نبضية مختلفة عن كل الإنذارات الأخرى ---------- */
 #terminatorAlarmBanner{
-  position:fixed;left:0;right:0;bottom:0;z-index:10001;
+  /* z-index augmenté (100002) exprès pour passer au-dessus de l'overlay "جدول موحّد" (z-index:100000)
+     et rester visible/cliquable même si l'utilisateur consulte jadwal mouahed au moment du déclenchement */
+  position:fixed;left:0;right:0;bottom:0;z-index:100002;
   background:linear-gradient(180deg,rgba(40,0,0,.97),rgba(10,10,10,.97));
   display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;
   padding:16px 14px calc(16px + env(safe-area-inset-bottom,0px));
@@ -10631,7 +10633,22 @@ function requestNotifPermission(){
     Notification.requestPermission();
   }
 }
+// إصلاح: المتصفح (خاصة على الجوال) يُجمِّد مؤقتات الصفحة عند تصغير التطبيق/قفل الشاشة، فيبدو عند العودة أن كل قطارات
+// SNCFT Live "توقفت عن التغيّر" فجأة (رغم أنها لم تتوقف فعلاً عن الإرسال، فقط لم تُفحص خلال هذه الفترة) فيُطلَق
+// إنذار المُبيد خطأً بمجرد فتح التطبيق. الحل: نتجاهل مدة الغياب هذه من حساب "مدة الصمت" بإزاحة كل الطوابع الزمنية بها
+let __qtHiddenSinceMs = null;
 document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='hidden'){
+    __qtHiddenSinceMs = Date.now();
+  } else if(document.visibilityState==='visible'){
+    if(__qtHiddenSinceMs){
+      const hiddenMs = Date.now() - __qtHiddenSinceMs;
+      if(hiddenMs > 5000){
+        liveOnlyHistory.forEach(v=>{ v.lastChangedAt += hiddenMs; });
+      }
+      __qtHiddenSinceMs = null;
+    }
+  }
   if(document.visibilityState==='visible' && watchId) requestWakeLock();
   if(watchId && kaAudioEl) kaAudioEl.play().catch(()=>{});
 });
@@ -13834,8 +13851,11 @@ window.addEventListener('DOMContentLoaded', function(){
 
   // ---- مراقبة الإنذارات: إن ظهر أي تنبيه خطر بينما المستخدم يشاهد "جدول موحّد"،
   // نرجعه تلقائياً للتطبيق الأصلي حتى لا يفوته أي إنذار حرج (الصوت يستمر دائماً في الخلفية بغض النظر) ----
+  // ملاحظة: أُزيل 'terminatorAlarmBanner' (والمُبيد الفائق) من هذه القائمة عمداً — فهو مبني على موقع "مُقدَّر/مُخمَّن"
+  // لقطار انقطع إرساله (ليس رصداً مباشراً مؤكَّداً)، فقد يُخطئ أحياناً بسبب تأخّر تحديث SNCFT Live، لذا لا يجب أن
+  // يقاطع "جدول موحّد" — فقط الإنذارات المؤكَّدة (الرئيسية/SNCFT Live المباشر) تُرجعك تلقائياً
   var ALARM_IDS = ['alertOverlay','countdownOverlay','liveAlarmBanner','segAlarmBanner',
-                    'segStationAlarmBanner','terminatorAlarmBanner'];
+                    'segStationAlarmBanner'];
 
   function isVisible(el){
     if (!el) return false;
@@ -13850,7 +13870,12 @@ window.addEventListener('DOMContentLoaded', function(){
       var el = document.getElementById(ALARM_IDS[i]);
       if (isVisible(el)){
         switchQitariMode('original');
-        document.getElementById('qitariUnifiedAutoBackNotice').style.display = 'none';
+        // إصلاح: كانت هذه السطر تُخفي التنبيه فوراً فلا يراه المستخدم أبداً؛ الآن يظهر فعلاً، ثم يختفي من تلقاء نفسه
+        var notice = document.getElementById('qitariUnifiedAutoBackNotice');
+        if (notice) {
+          notice.style.display = 'block';
+          setTimeout(function(){ notice.style.display = 'none'; }, 4000);
+        }
         try { if (navigator.vibrate) navigator.vibrate([200,80,200]); } catch(e){}
         break;
       }
