@@ -844,8 +844,37 @@ body{
   100%{opacity:0;}
 }
 </style>
+<style>
+/* الصفحة الأولى: الإشعار القانوني وحدود المسؤولية — تظهر عند كل فتح للتطبيق */
+#legalNoticeOverlay{position:fixed;inset:0;z-index:2147483000;background:var(--navy-deep);color:#fff;
+  overflow-y:auto;-webkit-overflow-scrolling:touch;direction:ltr;text-align:left;
+  padding:calc(24px + env(safe-area-inset-top,0px)) 18px calc(24px + env(safe-area-inset-bottom,0px));}
+#legalNoticeOverlay .ln-box{max-width:680px;margin:0 auto;background:var(--glass);border:1px solid var(--glass-b);
+  border-radius:16px;padding:22px 20px;}
+#legalNoticeOverlay h1{font-size:18px;line-height:1.5;color:var(--gold);text-align:center;margin-bottom:18px;}
+#legalNoticeOverlay h2{font-size:15px;color:var(--gold3);margin:16px 0 6px;}
+#legalNoticeOverlay p{font-size:14px;line-height:1.7;color:#e8ecff;text-align:justify;}
+#legalNoticeOverlay .ln-ar{direction:rtl;unicode-bidi:embed;}
+#legalNoticeOverlay button{display:block;width:100%;max-width:320px;margin:22px auto 0;padding:14px;
+  border:none;border-radius:12px;background:var(--gold);color:#020b2e;font-weight:800;font-size:15px;cursor:pointer;}
+</style>
 </head>
 <body>
+<div id="legalNoticeOverlay" role="dialog" aria-modal="true">
+  <div class="ln-box">
+    <h1>AVIS JURIDIQUE ET LIMITATION DE RESPONSABILITÉ — SYSTÈME DE SÉCURITÉ FERROVIAIRE</h1>
+    <h2>1. Nature informative et d'assistance</h2>
+    <p>L'application <span class="ln-ar">قِطَاري</span> (et l'ensemble des services associés) est un outil d'assistance, de veille et de signalement destiné à renforcer la sensibilisation et la sécurité aux abords des voies ferrées. Les alertes, estimations de distance, indications de position et horodatages sont fournis à titre indicatif sur la base de données algorithmiques et de sources disponibles.</p>
+    <h2>2. Absence de garantie d'infaillibilité et primauté des signaux officiels</h2>
+    <p>En aucun cas, cette application ne se substitue aux systèmes de signalisation officiels, aux barrières de sécurité, aux équipements de contrôle des gestionnaires d'infrastructure (tels que la SNCFT) ni à la vigilance humaine obligatoire. L'éditeur ne peut garantir l'absence totale de défaillance technique, de latence de géolocalisation, d'interruption de réseau ou d'erreur d'estimation des vitesses et des trajectoires des trains.</p>
+    <h2>3. Limitation de responsabilité</h2>
+    <p>L'utilisation de l’application se fait sous la seule et entière responsabilité de l'utilisateur. L’éditeur, les concepteurs et les contributeurs déclinent toute responsabilité, directe ou indirecte, en cas d'accident, de collision, de retard, de dommage corporel, matériel ou financier résultant de l'utilisation, de la non-utilisation, du dysfonctionnement ou de l'interprétation des données et des alertes émises par l'application.</p>
+    <h2>4. Respect des consignes de sécurité</h2>
+    <p>L'utilisateur s'engage en tout temps à respecter les règles de sécurité en vigueur sur le réseau ferroviaire, à ne jamais s'engager sur les voies en cas de doute et à faire primer en toutes circonstances les instructions des autorités compétentes et du personnel ferroviaire.</p>
+    <button type="button" onclick="document.getElementById('legalNoticeOverlay').style.display='none';">J'ai lu et j'accepte</button>
+  </div>
+</div>
+
 <button type="button" id="btnJadwalMouwahed" onclick="switchQitariMode('unified')"
   style="position:fixed;bottom:96px;left:52px;transform:translateX(-50%);z-index:99999;padding:12px 16px;border-radius:30px;
   border:1px solid rgba(255,215,0,.6);background:linear-gradient(135deg,#1a2a6c,#0d1a6e);
