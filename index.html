@@ -7563,10 +7563,12 @@ function recalcAndDisplay(){
   const dist150Candidates = [result.dist, result.theoBest && result.theoBest.dist, result.liveAnyBest && result.liveAnyBest.dist]
     .filter(d=>typeof d==='number' && isFinite(d));
   const dist150Min = dist150Candidates.length ? Math.min(...dist150Candidates) : Infinity;
-  if(dist150Min<=RISK_THRESHOLD_M){
+  // l'annonce "أنت على مسافة ... من السكة" exige aussi d'être réellement ≤150m des rails (trackInfo = RAIL_LINES) et prononce cette distance réelle aux rails
+  const dist150RailDist = (result.trackInfo && isFinite(result.trackInfo.dist)) ? result.trackInfo.dist : Infinity;
+  if(dist150Min<=RISK_THRESHOLD_M && dist150RailDist<=RISK_THRESHOLD_M){
     if(!dist150VoiceAnnounced && !alertActive){
       dist150VoiceAnnounced=true;
-      kz_speakArabic('تنبيه، أنت على مسافة '+kz_distanceSpokenText(dist150Min)+' من السكة الحديدية.', 98);
+      kz_speakArabic('تنبيه، أنت على مسافة '+kz_distanceSpokenText(dist150RailDist)+' من السكة الحديدية.', 98);
     }
   } else {
     dist150VoiceAnnounced=false;
@@ -9192,7 +9194,12 @@ function kz_updateGhostBox(prefix, fromStation, toStation, excludeTrain){
   const vid = document.getElementById(prefix+'GhostVideo');
   if(vid && vid.paused){ vid.play().catch(()=>{}); }
   // نفس شرط الإنذار في الأزرق والأخضر تماماً: مسافة ≤150م + (خلال 3 دقائق من الوصول، أو بلا شرط زمني إن كان شبحاً كاملاً بلا جدول أصلاً)
-  const distanceOk = dist <= RISK_THRESHOLD_M;
+  // l'alarme fantôme suit aussi la vraie distance aux rails (RAIL_LINES via kz_nearestOnTrackRL), comme « 📍 المسافة إلى السكة »
+  const ghostRailGeom = (typeof kz_nearestOnTrackRL==='function' && typeof RAIL_LINES!=='undefined' && RAIL_LINES.length && lastPos) ? kz_nearestOnTrackRL(lastPos) : null;
+  const ghostRailDist = (ghostRailGeom && isFinite(ghostRailGeom.dist)) ? ghostRailGeom.dist : null;
+  const distanceOk = ghost.kind==='live'
+    ? (dist <= RISK_THRESHOLD_M && (ghostRailDist===null || ghostRailDist <= RISK_THRESHOLD_M))
+    : ((ghostRailDist!==null ? ghostRailDist : dist) <= RISK_THRESHOLD_M);
   const withinAlarmWindow = distanceOk && (ghost.kind==='live' || minutesUntilArrival<=3);
   const st = ghostAlarmState[prefix];
   if(st){
@@ -9783,7 +9790,10 @@ function kz_computeAndRender(result){
   if(minutesUntilArrival>720) minutesUntilArrival-=1440;
   const eventKey = next.train.name+'|'+next.toStation+'|'+Math.round(next.effectiveTimeMin);
   globalEtaVoiceMark('kz|'+next.train.name, minutesUntilArrival);
-  const distanceOk = next.dist <= RISK_THRESHOLD_M;
+  // l'alarme suit exactement la distance affichée « 📍 المسافة إلى السكة » (RAIL_LINES via kz_nearestOnTrackRL), au lieu de next.dist (fallback ligne droite)
+  const alarmRailGeom = (typeof kz_nearestOnTrackRL==='function' && typeof RAIL_LINES!=='undefined' && RAIL_LINES.length && lastPos) ? kz_nearestOnTrackRL(lastPos) : null;
+  const alarmDist = (alarmRailGeom && isFinite(alarmRailGeom.dist)) ? alarmRailGeom.dist : next.dist;
+  const distanceOk = alarmDist <= RISK_THRESHOLD_M;
   const withinAlarmWindow = distanceOk && (minutesUntilArrival<=3);
   if(eventKey !== kzCurrentAlarmKey){ kzCurrentAlarmKey = eventKey; kzAlarmDismissed = false; }
   // طلب المستخدم: فرحوم يتكلم بصوت هادئ عند بلوغ دقيقتين، ثم بصوت أكثر جدّية عند بلوغ دقيقة ونصف —
@@ -10043,7 +10053,10 @@ function kzL_computeAndRender(){
   if(minutesUntilArrival>720) minutesUntilArrival-=1440;
   const eventKey = 'L|'+next.train.name+'|'+next.toStation+'|'+Math.round(next.effectiveTimeMin);
   globalEtaVoiceMark('kzL|'+next.train.name, minutesUntilArrival);
-  const distanceOk = next.dist <= RISK_THRESHOLD_M;
+  // l'alarme suit exactement la distance affichée « 📍 المسافة إلى السكة » (RAIL_LINES via kz_nearestOnTrackRL), au lieu de next.dist (fallback ligne droite)
+  const alarmRailGeom = (typeof kz_nearestOnTrackRL==='function' && typeof RAIL_LINES!=='undefined' && RAIL_LINES.length && lastPos) ? kz_nearestOnTrackRL(lastPos) : null;
+  const alarmDist = (alarmRailGeom && isFinite(alarmRailGeom.dist)) ? alarmRailGeom.dist : next.dist;
+  const distanceOk = alarmDist <= RISK_THRESHOLD_M;
   const withinAlarmWindow = distanceOk && (minutesUntilArrival<=3);
   if(eventKey !== kzLCurrentAlarmKey){ kzLCurrentAlarmKey = eventKey; kzLAlarmDismissed = false; }
   if(withinAlarmWindow && !kzLAlarmDismissed){
