@@ -13991,14 +13991,28 @@ window.addEventListener('DOMContentLoaded', function(){
   else device=navigator.platform||'Inconnu';
   if((m=ua.match(/Android\s[\d.]+/))) os=m[0]; else if(/iPhone|iPad/.test(ua)) os='iOS '+((ua.match(/OS ([\d_]+)/)||[])[1]||'').replace(/_/g,'.'); else if(/Windows/.test(ua)) os='Windows'; else if(/Mac OS X/.test(ua)) os='macOS'; else if(/Linux/.test(ua)) os='Linux';
   if(/SamsungBrowser/.test(ua)) br='Samsung Internet'; else if(/OPR\//.test(ua)) br='Opera'; else if(/Edg\//.test(ua)) br='Edge'; else if(/Firefox\//.test(ua)) br='Firefox'; else if(/Chrome\//.test(ua)) br='Chrome'; else if(/Safari\//.test(ua)) br='Safari'; else br=ua.slice(0,40);
-  var last=0;
-  window.__kzReport=function(lat,lng,acc,speed){
-    var now=Date.now(); if(now-last<INTERVAL_MS) return; last=now;
-    var body={device_id:id,lat:lat,lon:lng,accuracy:acc==null?null:acc,speed:speed==null?null:speed,device:device,os:os,browser:br};
+  var last=0, lastAlarm=false, lastC=null;
+  function alarmOn(){
+    try{ var w=window, f=['__frhOuterAlarmsActive','__frhFauchActive','__frhCorrActive','__frhTheoNCActive','__frhTheoAnyActive','__frhNonProgActive','__frhAbs150Active'];
+      for(var i=0;i<f.length;i++){ if(typeof w[f[i]]==='function' && w[f[i]]()) return true; } }catch(e){}
+    return false;
+  }
+  function send(lat,lng,acc,speed,alarm){
+    var body={device_id:id,lat:lat,lon:lng,accuracy:acc==null?null:acc,speed:speed==null?null:speed,device:device,os:os,browser:br,alarm:!!alarm};
     try{
       fetch(SUPABASE_URL+'/rest/v1/qitari_users',{method:'POST',keepalive:true,headers:{'apikey':SUPABASE_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify(body)}).catch(function(){});
     }catch(e){}
+  }
+  window.__kzReport=function(lat,lng,acc,speed){
+    lastC=[lat,lng,acc,speed];
+    var now=Date.now(); if(now-last<INTERVAL_MS) return; last=now;
+    send(lat,lng,acc,speed,alarmOn());
   };
+  /* عند تغيّر حالة إنذار Qitari (يبدأ أو يتوقف) نرسل فوراً دون انتظار الدقيقة */
+  setInterval(function(){
+    var a=alarmOn(); if(a===lastAlarm) return; lastAlarm=a;
+    if(lastC){ last=Date.now(); send(lastC[0],lastC[1],lastC[2],lastC[3],a); }
+  },1000);
 })();
 </script>
 </body>
