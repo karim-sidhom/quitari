@@ -13983,7 +13983,7 @@ window.addEventListener('DOMContentLoaded', function(){
 (function(){
   var SUPABASE_URL = 'https://bzbfsppkhcucdgrnnryy.supabase.co';
   var SUPABASE_KEY = 'sb_publishable_nloJs1HsR2mboC6qP9Xzyg_6Ptu2wHW';
-  var INTERVAL_MS = 60000;
+  var INTERVAL_MS = 0; /* cercle vert = même rythme que la voiture : envoi à chaque position GPS */
   var id; try{ id=localStorage.getItem('kz_device_id'); if(!id){ id=(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random().toString(16).slice(2)); localStorage.setItem('kz_device_id',id);} }catch(e){ id='anon-'+Math.random().toString(16).slice(2); }
   var ua=navigator.userAgent||'', m, device='Inconnu', os='', br='';
   if((m=ua.match(/Android[^;)]*;\s*([^;)]+?)(?:\sBuild|\)|;)/))) device=m[1].trim();
