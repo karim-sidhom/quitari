@@ -15,6 +15,54 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;900&family=Amiri:wght@400;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script id="qtMuteAudioPatch">
+/* كتم صوت الإنذار: كل صفارات وبيبات التطبيق (WebAudio) تمرّ عبر destination — نحوّلها إلى gain رئيسي واحد لكل AudioContext.
+   الكتم يخفض الصوت فقط؛ الإنذار نفسه (الشاشة الحمراء، الاهتزاز، منطق القفل) يستمر كما هو. */
+(function(){
+  var muted=false, items=[];
+  var api=window.__qtAlarmMute={supported:false,isMuted:function(){return muted;},
+    set:function(v){muted=!!v;items=items.filter(function(it){return it.ctx.state!=='closed';});items.forEach(apply);}};
+  function apply(it,instant){try{var p=it.gain.gain,v=muted?0:1;
+    if(instant){p.value=v;}else{var t=it.ctx.currentTime;p.cancelScheduledValues(t);p.setTargetAtTime(v,t,0.01);}}catch(e){}}
+  try{
+    var C=window.AudioContext||window.webkitAudioContext,o=C&&C.prototype,d=null;
+    while(o&&!d){d=Object.getOwnPropertyDescriptor(o,'destination');if(!d)o=Object.getPrototypeOf(o);}
+    if(d&&d.get){
+      var realGet=d.get,map=new WeakMap();
+      Object.defineProperty(o,'destination',{configurable:true,enumerable:d.enumerable,get:function(){
+        var real=realGet.call(this);
+        try{
+          if(typeof this.createGain!=='function'||(window.OfflineAudioContext&&this instanceof OfflineAudioContext))return real;
+          var it=map.get(this);
+          if(!it){var g=this.createGain();g.connect(real);it={ctx:this,gain:g};map.set(this,it);items.push(it);apply(it,true);}
+          return it.gain;
+        }catch(e){return real;}
+      }});
+      api.supported=true;
+    }
+  }catch(e){}
+})();
+</script>
+<style id="qtMuteStyle">
+#qtMuteWidget{position:fixed;z-index:1000001;right:calc(8px + env(safe-area-inset-right,0px));top:50%;transform:translateY(-50%);
+  display:flex;flex-direction:row;align-items:center;gap:8px;direction:rtl;font-family:'Tajawal','Cairo',sans-serif;pointer-events:none;}
+#qtMuteWidget>*{pointer-events:auto;}
+#qtMuteBtn{appearance:none;-webkit-appearance:none;cursor:pointer;margin:0;width:62px;min-height:62px;padding:6px 4px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-radius:18px;
+  border:2px solid rgba(255,215,0,.65);background:rgba(13,26,110,.94);color:#ffe566;font-family:inherit;font-weight:800;
+  font-size:10px;line-height:1.2;text-align:center;box-shadow:0 4px 14px rgba(0,0,0,.5);-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
+#qtMuteBtn .qtm-ico{font-size:22px;line-height:1;}
+#qtMuteBtn:active{transform:scale(.95);}
+#qtMuteBtn.qtm-on{background:#a30014;border-color:#ff6b6b;color:#fff;animation:qtmPulse 1.4s ease-in-out infinite;}
+@keyframes qtmPulse{0%,100%{box-shadow:0 0 0 0 rgba(255,60,60,.7),0 4px 14px rgba(0,0,0,.5);}50%{box-shadow:0 0 0 9px rgba(255,60,60,0),0 4px 14px rgba(0,0,0,.5);}}
+@media (prefers-reduced-motion:reduce){#qtMuteBtn.qtm-on{animation:none;}}
+#qtMuteWarn{display:none;max-width:min(240px,calc(100vw - 96px));background:rgba(120,0,16,.96);color:#fff;border:2px solid #ff6b6b;
+  border-radius:14px;padding:8px 10px;font-size:12px;line-height:1.6;box-shadow:0 4px 16px rgba(0,0,0,.55);cursor:pointer;}
+#qtMuteWidget.qtm-muted #qtMuteWarn{display:block;}
+#qtMuteWarn .qtm-head{font-weight:900;color:#ffd6d6;}
+#qtMuteWarn .qtm-full{display:none;margin-top:4px;font-weight:500;}
+#qtMuteWarn.qtm-open .qtm-full{display:block;}
+</style>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
 :root{
@@ -14013,6 +14061,42 @@ window.addEventListener('DOMContentLoaded', function(){
     var a=alarmOn(); if(a===lastAlarm) return; lastAlarm=a;
     if(lastC){ last=Date.now(); send(lastC[0],lastC[1],lastC[2],lastC[3],a); }
   },1000);
+})();
+</script>
+<div id="qtMuteWidget" style="display:none">
+  <button type="button" id="qtMuteBtn" aria-pressed="false"><span class="qtm-ico" aria-hidden="true">🔊</span><span class="qtm-lbl"></span></button>
+  <div id="qtMuteWarn" role="status" aria-live="assertive"><div class="qtm-head"></div><div class="qtm-full"></div></div>
+</div>
+<script id="qtMuteUI">
+(function(){
+  var api=window.__qtAlarmMute,w=document.getElementById('qtMuteWidget');
+  if(!api||!w)return;
+  if(!api.supported){console.warn('qtMute: WebAudio destination non patchable — bouton masqué');return;}
+  /* ✏️ النصوص قابلة للتعديل هنا */
+  var TXT={
+    btnMute:'كتم الصوت', btnMuted:'تشغيل الصوت',
+    ariaMute:'كتم صوت الإنذار', ariaMuted:'الصوت مكتوم — اضغط لإعادة تشغيل صوت الإنذار',
+    warnHead:'⚠️ الصوت مكتوم — لن تسمع صفارة الإنذار',
+    warnFull:'إذا اقترب قطار فلن تسمع أي تحذير صوتي، وقد يعرّض ذلك حياتك للخطر. ابقَ بعيداً عن السكة، وراقب الشاشة والاهتزاز، وأعد تشغيل الصوت في أقرب وقت.'
+  };
+  var btn=document.getElementById('qtMuteBtn'),warn=document.getElementById('qtMuteWarn'),
+      ico=btn.querySelector('.qtm-ico'),lbl=btn.querySelector('.qtm-lbl'),timer=null;
+  warn.querySelector('.qtm-head').textContent=TXT.warnHead;
+  warn.querySelector('.qtm-full').textContent=TXT.warnFull;
+  function open(o){warn.classList.toggle('qtm-open',!!o);}
+  function render(){var m=api.isMuted();
+    w.classList.toggle('qtm-muted',m);btn.classList.toggle('qtm-on',m);
+    btn.setAttribute('aria-pressed',m?'true':'false');btn.setAttribute('aria-label',m?TXT.ariaMuted:TXT.ariaMute);
+    ico.textContent=m?'🔇':'🔊';lbl.textContent=m?TXT.btnMuted:TXT.btnMute;}
+  btn.addEventListener('click',function(){
+    var m=!api.isMuted();api.set(m);render();clearTimeout(timer);
+    if(m){open(true);timer=setTimeout(function(){open(false);},9000);}else open(false);
+  });
+  warn.addEventListener('click',function(){clearTimeout(timer);open(!warn.classList.contains('qtm-open'));});
+  /* مخفي أثناء شاشة البداية (splash) */
+  function sync(){var s=document.getElementById('qitariSplash');w.style.display=(s&&s.parentNode)?'none':'flex';}
+  sync();var iv=setInterval(function(){sync();if(!document.getElementById('qitariSplash'))clearInterval(iv);},400);
+  render();
 })();
 </script>
 </body>
